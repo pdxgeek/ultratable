@@ -14,6 +14,21 @@ const SCIFI_TEAM_NAMES = [
     'Aurora Borealis', 'Zenith Zephyrs', 'Eclipse Eleven', 'Horizon Hotspurs', 'Vertex Victory',
 ];
 
+// Teams that have actual asset files in public/assets/teams/
+const TEAMS_WITH_ASSETS = new Set([
+    'orbital-united',
+    'void-wanderers',
+    'nebula-fc',
+    'quantuum-city',
+    'stellar-rangers',
+    'cosmic-athletic',
+    'gravity-rovers',
+    'pulsar-united',
+    'quasar-quest',
+    'aurora-borealis',
+    'zenith-zephyrs',
+]);
+
 
 const FANTASY_TEAM_NAMES = [
     'Orbital United', // Shared Team!
@@ -44,10 +59,10 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
     const stadiumSuffix = theme === 'scifi' ? 'Arena' : 'Castle';
     const surface = theme === 'scifi' ? 'AstroTurf' : 'Grass';
 
-    // Use root-relative paths for public assets
-    // Standard handling: If file doesn't exist, frontend will show placeholder
-    const logoUrl = `/assets/teams/${slug}-logo.png`;
-    const stadiumUrl = `/assets/teams/${slug}-stadium.png`;
+    // Only provide URLs for teams that actually have assets
+    const hasAssets = TEAMS_WITH_ASSETS.has(slug);
+    const logoUrl = hasAssets ? `/assets/teams/${slug}-logo.png` : '';
+    const stadiumUrl = hasAssets ? `/assets/teams/${slug}-stadium.png` : '';
 
     return {
         team: {
