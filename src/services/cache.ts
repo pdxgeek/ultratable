@@ -1,116 +1,41 @@
 import type { CacheEntry } from '../types';
+import { database } from './db';
 
+// ─── Generic Cache (Thin wrapper around opinionated DB) ───────────────────
 
-const DB_NAME = 'ultratable';
-const DB_VERSION = 1;
-const LOGO_STORE = 'logos';
+export async function getCache<T>(key: string): Promise<CacheEntry<T> | null> {
+    return await database.getCached<T>(key);
+}
 
-// ─── Persistence cache (LocalStorage) ──────────────────────────────────
+export async function setCache<T>(key: string, data: T): Promise<void> {
+    await database.saveCached(key, data);
+}
 
-export function getCache<T>(key: string): CacheEntry<T> | null {
-    // Check Persistence
-    try {
-        const raw = localStorage.getItem(`ut_${key}`);
-        if (!raw) return null;
-        const entry = JSON.parse(raw) as CacheEntry<T>;
-        return entry;
-    } catch {
-        return null;
+export async function clearCache(prefix?: string): Promise<void> {
+    if (prefix) {
+        // Clear specific prefix - would need to implement in database
+        console.warn('Prefix-based cache clearing not yet implemented in opinionated DB');
+    } else {
+        await database.clearAllCache();
     }
 }
 
-export function setCache<T>(key: string, data: T): void {
-    const entry: CacheEntry<T> = {
-        data,
-        timestamp: Date.now(),
-        key,
-    };
-
-    // Write to Persistence
-    try {
-        localStorage.setItem(`ut_${key}`, JSON.stringify(entry));
-    } catch (e) {
-        console.warn('Cache write failed:', e);
-    }
+export async function getCacheAge(key: string): Promise<number | null> {
+    return await database.getCacheAge(key);
 }
 
-export function clearCache(prefix?: string): void {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith(prefix ? `ut_${prefix}` : 'ut_')) {
-            keysToRemove.push(key);
-        }
-    }
-    keysToRemove.forEach((k) => localStorage.removeItem(k));
-}
-
-export function getCacheAge(key: string): number | null {
-    const entry = getCache(key);
-    if (!entry) return null;
-    return Date.now() - entry.timestamp;
-}
-
-// ─── IndexedDB for logo blobs ──────────────────────────────────────────
-
-function openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(LOGO_STORE)) {
-                db.createObjectStore(LOGO_STORE);
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
+// ─── Image Blobs ───────────────────────────────────────────────────────────
 
 export async function getCachedLogo(url: string): Promise<string | null> {
-    try {
-        const db = await openDB();
-        return new Promise((resolve) => {
-            const tx = db.transaction(LOGO_STORE, 'readonly');
-            const store = tx.objectStore(LOGO_STORE);
-            const req = store.get(url);
-            req.onsuccess = () => {
-                if (req.result) {
-                    resolve(URL.createObjectURL(req.result));
-                } else {
-                    resolve(null);
-                }
-            };
-            req.onerror = () => resolve(null);
-        });
-    } catch {
-        return null;
-    }
+    // Legacy URL-based lookup - deprecated in favor of ID-based
+    console.warn('getCachedLogo(url) is deprecated. Use getCachedImageById(id) instead.');
+    return null;
 }
 
-// New: Get cached image by ID (not URL)
 export async function getCachedImageById(id: string): Promise<string | null> {
-    try {
-        const db = await openDB();
-        return new Promise((resolve) => {
-            const tx = db.transaction(LOGO_STORE, 'readonly');
-            const store = tx.objectStore(LOGO_STORE);
-            const req = store.get(id);
-            req.onsuccess = () => {
-                if (req.result) {
-                    resolve(URL.createObjectURL(req.result));
-                } else {
-                    resolve(null);
-                }
-            };
-            req.onerror = () => resolve(null);
-        });
-    } catch {
-        return null;
-    }
+    return await database.getGraphicBlobUrl(id);
 }
 
-// New: Cache image with ID as key
 export async function cacheImageById(id: string, url: string): Promise<string> {
     // Check cache first
     const cached = await getCachedImageById(id);
@@ -131,18 +56,8 @@ export async function cacheImageById(id: string, url: string): Promise<string> {
         }
 
         const blob = await response.blob();
-        const db = await openDB();
-        return new Promise((resolve) => {
-            const tx = db.transaction(LOGO_STORE, 'readwrite');
-            const store = tx.objectStore(LOGO_STORE);
-            store.put(blob, id);  // Store with ID as key
-            tx.oncomplete = () => {
-                resolve(URL.createObjectURL(blob));
-            };
-            tx.onerror = () => {
-                resolve(url); // Fallback to direct URL
-            };
-        });
+        await database.saveGraphicBlob(id, blob);
+        return URL.createObjectURL(blob);
     } catch (err) {
         // Silently fail - CORS errors are expected for some image sources
         // The UI will show placeholder avatars instead
@@ -152,43 +67,9 @@ export async function cacheImageById(id: string, url: string): Promise<string> {
 }
 
 export async function cacheImage(url: string): Promise<string> {
-    // Check cache first
-    const cached = await getCachedLogo(url);
-    if (cached) return cached;
-
-    // Download and store
-    try {
-        const response = await fetch(url, {
-            mode: 'cors',
-            credentials: 'omit',
-            headers: {
-                'Accept': 'image/*',
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const db = await openDB();
-        return new Promise((resolve) => {
-            const tx = db.transaction(LOGO_STORE, 'readwrite');
-            const store = tx.objectStore(LOGO_STORE);
-            store.put(blob, url);
-            tx.oncomplete = () => {
-                resolve(URL.createObjectURL(blob));
-            };
-            tx.onerror = () => {
-                resolve(url); // Fallback to direct URL
-            };
-        });
-    } catch (err) {
-        // Silently fail - CORS errors are expected for some image sources
-        // The UI will show placeholder avatars instead
-        console.debug('Image caching failed (likely CORS):', url);
-        return url; // Fallback to direct URL (will fail in img tag, triggering onError)
-    }
+    // Legacy URL-based caching - deprecated
+    console.warn('cacheImage(url) is deprecated. Use cacheImageById(id, url) instead.');
+    return url;
 }
 
 export const cacheLogo = cacheImage;

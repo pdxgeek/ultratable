@@ -25,8 +25,7 @@ export async function checkQuota(): Promise<{
     const response = await fetch(`${BASE_URL}/status`, {
         method: 'GET',
         headers: {
-            'x-rapidapi-host': 'v3.football.api-sports.io',
-            'x-rapidapi-key': apiKey,
+            'x-apisports-key': apiKey,
         },
     });
     const json = await response.json();
@@ -47,7 +46,7 @@ export async function apiGet<T>(
 ): Promise<T> {
     // 1. Check Cache
     if (cacheKey && !forceRefresh) {
-        const cached = getCache<T>(cacheKey);
+        const cached = await getCache<T>(cacheKey);
         if (cached) {
             console.log('Cache Hit:', cacheKey);
             return cached.data;
@@ -61,7 +60,8 @@ export async function apiGet<T>(
     }
 
     // 2. Build URL
-    const url = new URL(`${BASE_URL}/${endpoint}`);
+    const baseUrl = BASE_URL.startsWith('http') ? BASE_URL : window.location.origin + BASE_URL;
+    const url = new URL(`${baseUrl}/${endpoint}`);
     Object.keys(params).forEach((key) =>
         url.searchParams.append(key, params[key].toString())
     );
@@ -71,8 +71,7 @@ export async function apiGet<T>(
     const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
-            'x-rapidapi-host': 'v3.football.api-sports.io',
-            'x-rapidapi-key': apiKey,
+            'x-apisports-key': apiKey,
         },
     });
 

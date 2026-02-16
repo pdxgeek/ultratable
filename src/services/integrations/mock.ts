@@ -383,3 +383,6 @@ export class MockProvider implements DataProvider {
         ];
     }
 }
+
+// Export singleton instance
+export const mockProvider = new MockProvider();

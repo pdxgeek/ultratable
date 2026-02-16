@@ -7,7 +7,10 @@ const getStorageItem = (key: string) => {
 };
 
 export const API_KEY = getStorageItem('ut_api_key') || '';
-export const BASE_URL = 'https://v3.football.api-sports.io';
+// Use proxy in development to avoid CORS issues
+export const BASE_URL = import.meta.env.DEV
+    ? '/api/football'
+    : 'https://v3.football.api-sports.io';
 
 // ─── League Configuration ──────────────────────────────────────────────
 

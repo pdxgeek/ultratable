@@ -109,7 +109,9 @@ export default function FormColumn({
                 {form.map((entry, idx) => (
                     <span
                         key={idx}
-                        className={clsx('form-dot', `form-dot--${entry.result}`)}
+                        className={clsx('form-dot', `form-dot--${entry.result}`, {
+                            'form-dot--latest': idx === form.length - 1
+                        })}
                         onMouseEnter={(e) =>
                             handleMouseEnter(entry.fixtureId, e.currentTarget)
                         }

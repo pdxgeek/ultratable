@@ -43,7 +43,7 @@ export default function StandingsTable({
                         <th className="col-stat" title="Goals Against">GA</th>
                         <th className="col-stat col-gd" title="Goal Difference">GD</th>
                         <th className="col-stat col-pts" title="Points">Pts</th>
-                        {settings.showForm && <th className="col-form" title="Last 5 Matches">Form</th>}
+                        {settings.showForm && <th className="col-form" title="Last 5 Matches (oldest → newest)">Form →</th>}
                         <th className="col-next" title="Next Match">Next</th>
                     </tr>
                 </thead>

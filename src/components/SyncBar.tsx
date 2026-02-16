@@ -26,19 +26,24 @@ export default function SyncBar({
     const [quota, setQuota] = useState<{ current: number; limit: number } | null>(
         null
     );
+    const [cacheAge, setCacheAge] = useState<number | null>(null);
 
     useEffect(() => {
         checkQuota().then(setQuota);
     }, [syncing]);
 
     // Construct cache key using the actual ID and Season from the current league config
-    // We can look up the ID/Season from the 'leagues' map using the current key 'leagueId'
     const currentLeague = leagues[leagueId];
     const cacheKey = currentLeague
         ? `fixtures_${currentLeague.id}_${currentLeague.season}`
         : '';
 
-    const cacheAge = cacheKey ? getCacheAge(cacheKey) : null;
+    useEffect(() => {
+        if (cacheKey) {
+            getCacheAge(cacheKey).then(setCacheAge);
+        }
+    }, [cacheKey]);
+
     const lastSyncText = cacheAge
         ? formatAge(cacheAge)
         : 'Never synced';
