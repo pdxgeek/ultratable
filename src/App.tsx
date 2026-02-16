@@ -220,11 +220,13 @@ function App() {
                       element={
                         seasonPack ? (
                           <StandingsTable
+                            key={activeLeagueKey}
                             standings={standings}
                             teams={teamPack}
                             fixtures={fixtures}
                             rules={seasonPack.rules}
                           />
+
                         ) : null
                       }
                     />

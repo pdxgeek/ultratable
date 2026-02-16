@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import type {
     StandingsRow,
     Team,
@@ -9,6 +10,7 @@ import FormColumn from './FormColumn';
 import NextMatchBadge from './NextMatchBadge';
 import TeamCell from './TeamCell';
 import { getTeamFixtures } from '../services/dataCompiler';
+import { useSettings } from '../context/SettingsContext';
 
 interface StandingsTableProps {
     standings: StandingsRow[];
@@ -17,7 +19,8 @@ interface StandingsTableProps {
     rules: SeasonRules;
 }
 
-import { useSettings } from '../context/SettingsContext';
+type SortKey = 'position' | 'team' | 'played' | 'won' | 'drawn' | 'lost' | 'goalsFor' | 'goalsAgainst' | 'goalDifference' | 'points' | 'form';
+type SortDirection = 'asc' | 'desc';
 
 export default function StandingsTable({
     standings,
@@ -25,30 +28,112 @@ export default function StandingsTable({
     fixtures,
     rules,
 }: StandingsTableProps) {
-
     const { settings } = useSettings();
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+        key: 'position',
+        direction: 'asc',
+    });
+
+    const handleSort = (key: SortKey) => {
+        setSortConfig((current) => {
+            if (current.key === key) {
+                return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            // Default desc for stats, asc for text/position
+            const defaultDirection = ['team', 'position'].includes(key) ? 'asc' : 'desc';
+            return { key, direction: defaultDirection };
+        });
+    };
+
+    const sortedStandings = useMemo(() => {
+        const sorted = [...standings];
+        sorted.sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortConfig.key) {
+                case 'team': {
+                    const nameA = teams.get(a.teamId)?.commonName || '';
+                    const nameB = teams.get(b.teamId)?.commonName || '';
+                    comparison = nameA.localeCompare(nameB);
+                    break;
+                }
+                case 'form': {
+                    // Calculate form score based on rules
+                    const getFormScore = (row: StandingsRow) => {
+                        return row.form.reduce((acc, entry) => {
+                            if (entry.result === 'W') return acc + rules.pointsForWin;
+                            if (entry.result === 'D') return acc + rules.pointsForDraw;
+                            return acc + rules.pointsForLoss; // Usually 0
+                        }, 0);
+                    };
+                    comparison = getFormScore(a) - getFormScore(b);
+                    break;
+                }
+                default: {
+                    // Numeric columns
+                    // @ts-ignore - dynamic access to properties that match SortKey
+                    const valA = a[sortConfig.key] as number;
+                    // @ts-ignore
+                    const valB = b[sortConfig.key] as number;
+                    comparison = valA - valB;
+                }
+            }
+
+            return sortConfig.direction === 'asc' ? comparison : -comparison;
+        });
+        return sorted;
+    }, [standings, sortConfig, teams, rules]);
+
+    const SortIcon = ({ column }: { column: SortKey }) => {
+        if (sortConfig.key !== column) return <span className="sort-icon sort-icon--inactive">⇅</span>;
+        return <span className="sort-icon">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+    };
 
     return (
         <div className="standings-wrapper">
             <table className="standings-table">
                 <thead>
                     <tr>
-                        <th className="col-pos" title="Position">#</th>
-                        <th className="col-team" title="Team Name">Team</th>
-                        <th className="col-stat" title="Played">P</th>
-                        <th className="col-stat" title="Won">W</th>
-                        <th className="col-stat" title="Drawn">D</th>
-                        <th className="col-stat" title="Lost">L</th>
-                        <th className="col-stat" title="Goals For">GF</th>
-                        <th className="col-stat" title="Goals Against">GA</th>
-                        <th className="col-stat col-gd" title="Goal Difference">GD</th>
-                        <th className="col-stat col-pts" title="Points">Pts</th>
-                        {settings.showForm && <th className="col-form" title="Last 5 Matches (oldest → newest)">Form →</th>}
+                        <th className="col-pos clickable" title="Position" onClick={() => handleSort('position')}>
+                            # <SortIcon column="position" />
+                        </th>
+                        <th className="col-team clickable" title="Team Name" onClick={() => handleSort('team')}>
+                            Team <SortIcon column="team" />
+                        </th>
+                        <th className="col-stat clickable" title="Played" onClick={() => handleSort('played')}>
+                            P <SortIcon column="played" />
+                        </th>
+                        <th className="col-stat clickable" title="Won" onClick={() => handleSort('won')}>
+                            W <SortIcon column="won" />
+                        </th>
+                        <th className="col-stat clickable" title="Drawn" onClick={() => handleSort('drawn')}>
+                            D <SortIcon column="drawn" />
+                        </th>
+                        <th className="col-stat clickable" title="Lost" onClick={() => handleSort('lost')}>
+                            L <SortIcon column="lost" />
+                        </th>
+                        <th className="col-stat clickable" title="Goals For" onClick={() => handleSort('goalsFor')}>
+                            GF <SortIcon column="goalsFor" />
+                        </th>
+                        <th className="col-stat clickable" title="Goals Against" onClick={() => handleSort('goalsAgainst')}>
+                            GA <SortIcon column="goalsAgainst" />
+                        </th>
+                        <th className="col-stat col-gd clickable" title="Goal Difference" onClick={() => handleSort('goalDifference')}>
+                            GD <SortIcon column="goalDifference" />
+                        </th>
+                        <th className="col-stat col-pts clickable" title="Points" onClick={() => handleSort('points')}>
+                            Pts <SortIcon column="points" />
+                        </th>
+                        {settings.showForm && (
+                            <th className="col-form clickable" title="Last 5 Matches (oldest → newest)" onClick={() => handleSort('form')}>
+                                Form → <SortIcon column="form" />
+                            </th>
+                        )}
                         <th className="col-next" title="Next Match">Next</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {standings.map((row) => {
+                    {sortedStandings.map((row) => {
                         const team = teams.get(row.teamId);
                         if (!team) return null;
 
@@ -128,3 +213,4 @@ function getZoneClass(pos: number, rules: SeasonRules): string {
     }
     return '';
 }
+

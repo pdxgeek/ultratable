@@ -615,9 +615,12 @@ body {
 
 /* Next Match Badge */
 
+/* Next Match Badge */
+
 .col-next {
   width: 50px;
   min-width: 50px;
+  transition: width 0.2s ease;
 }
 
 .next-match {
@@ -654,9 +657,58 @@ body {
   color: var(--text-muted);
 }
 
+.next-match__name-text {
+  display: none;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
 .next-match--empty {
   color: var(--text-muted);
 }
+
+/* Sortable Headers */
+.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.clickable:hover {
+  background: var(--bg-row-hover);
+  color: var(--text-primary);
+}
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+.sort-icon--inactive {
+  opacity: 0.2;
+}
+
+@media (min-width: 768px) {
+  .col-next {
+    width: 180px;
+    min-width: 180px;
+  }
+
+  .next-match {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .next-match__name-text {
+    display: inline-block;
+  }
+}
+
 
 /* ─── Match Popup ────────────────────────────────────────────────────── */
 

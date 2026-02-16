@@ -67,7 +67,11 @@ export default function NextMatchBadge({
                 name={opponent?.commonName}
                 className="next-match__logo"
             />
+            <span className="next-match__name-text">
+                vs {opponent?.commonName || 'Unknown'}
+            </span>
             <span className="next-match__ha">{isHome ? 'H' : 'A'}</span>
+
         </div>
     );
 }
