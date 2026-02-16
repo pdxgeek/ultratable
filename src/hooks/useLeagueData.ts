@@ -10,7 +10,7 @@ export function useLeagueData(league: LeagueConfig) {
     const teamsQuery = useQuery({
         queryKey: ['teams', leagueKey],
         queryFn: async () => {
-            const data = await fetchTeams(id, season);
+            const data = await fetchTeams(league);
             console.log('[useLeagueData] Fetched teams:', data.length, data[0]);
             return data;
         },
@@ -21,10 +21,11 @@ export function useLeagueData(league: LeagueConfig) {
     // Fetch Fixtures
     const fixturesQuery = useQuery({
         queryKey: ['fixtures', leagueKey],
-        queryFn: () => fetchFixtures(id, season),
+        queryFn: () => fetchFixtures(league),
         staleTime: 1000 * 60 * 5, // 5 minutes
         refetchOnWindowFocus: false,
     });
+
 
     return {
         teams: teamsQuery.data,

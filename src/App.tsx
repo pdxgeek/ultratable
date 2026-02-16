@@ -6,7 +6,7 @@ import { DEFAULT_LEAGUE } from './types';
 import {
   hasApiKey,
 } from './services/apiFootball';
-import { getLeagues } from './services/leagueRegistry';
+import { fetchLeagues } from './services/leagueRegistry';
 import {
   generateSeasonPack,
   generateTeamPack,
@@ -62,7 +62,12 @@ function App() {
   }, []);
 
   // Available Leagues (Merged Config + Custom)
-  const [availableLeagues, setAvailableLeagues] = useState(getLeagues());
+  const [availableLeagues, setAvailableLeagues] = useState<Record<string, any>>({});
+
+  // Load leagues on mount
+  useEffect(() => {
+    fetchLeagues().then(setAvailableLeagues).catch(console.error);
+  }, []);
 
   // League State (formatted as "id_season")
   const defaultKey = `${DEFAULT_LEAGUE.id}_${DEFAULT_LEAGUE.season}`;
@@ -85,7 +90,7 @@ function App() {
 
   // Refresh available leagues on mount and when changed
   const refreshLeagues = useCallback(() => {
-    setAvailableLeagues(getLeagues());
+    fetchLeagues().then(setAvailableLeagues);
   }, []);
 
   // Use setHasKey to avoid lint error (logic could be expanded later)

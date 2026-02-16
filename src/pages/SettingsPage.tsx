@@ -1,8 +1,10 @@
 import { useSettings } from '../context/SettingsContext';
 import { useState, useEffect } from 'react';
 import { setApiKey, hasApiKey, fetchStandings, fetchFixtures, checkQuota } from '../services/apiFootball';
-import { addCustomLeague, removeCustomLeague } from '../services/leagueRegistry';
+import { addCustomLeague, removeCustomLeague, resetLeaguesToDefault } from '../services/leagueRegistry';
 import type { LeagueConfig } from '../types';
+import LeagueEditor from '../components/LeagueEditor';
+
 
 interface SettingsPageProps {
     onLeagueAdded?: () => void;
@@ -22,6 +24,11 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
     const [importing, setImporting] = useState(false);
     const [importError, setImportError] = useState<string | null>(null);
     const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
+    // Editor State
+    const [editingLeague, setEditingLeague] = useState<LeagueConfig | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
+
 
     useEffect(() => {
         // Load existing key from localStorage on mount
@@ -64,7 +71,7 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
 
         try {
             // 1. Fetch data to verify and get name
-            await fetchStandings(leagueId, season);
+            await fetchStandings({ id: leagueId, season });
 
             let leagueName = `League ${leagueId}`;
 
@@ -72,7 +79,8 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
             // if (fixtures.length > 0) {
             //    // leagueName = (fixtures[0] as any).league?.name || leagueName;
             // }
-            const fixtures = await fetchFixtures(leagueId, season);
+            const fixtures = await fetchFixtures({ id: leagueId, season });
+
 
             // 2. Default Rules
             const config: LeagueConfig = {
@@ -102,7 +110,8 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
             };
 
             // 3. Save
-            addCustomLeague(config);
+            await addCustomLeague(config);
+
 
             // 4. Notify Parent
             if (onLeagueAdded) onLeagueAdded();
@@ -117,13 +126,31 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
         }
     };
 
-    const handleDelete = (config: LeagueConfig) => {
-        if (confirm(`Are you sure you want to remove ${config.name} (${config.season})?`)) {
-            const leagueKey = `${config.id}_${config.season}`;
-            removeCustomLeague(leagueKey);
+    const handleDelete = async (config: LeagueConfig) => {
+        if (confirm(`Are you sure you want to remove ${config.name} (${config.season})? This cannot be undone.`)) {
+            await removeCustomLeague(config);
             if (onLeagueAdded) onLeagueAdded(); // Trigger refresh
         }
     };
+
+
+
+    const handleSaveLeague = async (config: LeagueConfig) => {
+        await addCustomLeague(config);
+        setEditingLeague(null);
+        setIsCreating(false);
+        if (onLeagueAdded) onLeagueAdded();
+    };
+
+
+    const handleResetDefaults = async () => {
+        if (confirm('Are you sure? This will delete all custom leagues and edits, restoring the original defaults.')) {
+            await resetLeaguesToDefault();
+            if (onLeagueAdded) onLeagueAdded();
+        }
+    };
+
+
 
     return (
         <div className="page settings-page">
@@ -223,6 +250,39 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                         )}
                     </div>
 
+                    {/* League Editor */}
+                    {(editingLeague || isCreating) && (
+                        <div style={{ marginBottom: '20px' }}>
+                            <LeagueEditor
+                                initialConfig={editingLeague || undefined}
+                                onSave={handleSaveLeague}
+                                onCancel={() => {
+                                    setEditingLeague(null);
+                                    setIsCreating(false);
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {!editingLeague && !isCreating && (
+                        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button
+                                className="btn"
+                                onClick={handleResetDefaults}
+                                style={{ fontSize: '0.8rem' }}
+                            >
+                                ↺ Reset to Defaults
+                            </button>
+                            <button
+                                className="btn btn--primary"
+                                onClick={() => setIsCreating(true)}
+                            >
+                                + Create Manual League
+                            </button>
+                        </div>
+                    )}
+
+
                     {/* League List */}
                     <div className="settings-list" style={{ gap: '1px', background: 'var(--border-color)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
                         {Object.values(leagues).length === 0 && (
@@ -238,12 +298,14 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                                         Season {l.season} • ID: {l.id} • {l.matchesPerSeason} Matches
                                     </div>
                                 </div>
-                                {(l.id !== 40 && l.id < 8000) && ( // Don't delete Mock or Configured EFL (unless we want to allow allowing overriding config?)
-                                    // For now, let's assume IDs > 8000 are mock and 40 is built-in. 
-                                    // Actually, users might want to remove "Imported" versions of 40 if they added it effectively as a duplicate or update.
-                                    // But let's allow deleting any "Custom" ones.
-                                    // Since we don't differentiate in props, we'll just show delete for all valid importable IDs that aren't strictly hardcoded "system" ones if we had that concept.
-                                    // For now, let's just let them delete anything that isn't the mock data (9999/8888).
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                        className="btn"
+                                        onClick={() => setEditingLeague(l)}
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        Edit
+                                    </button>
                                     <button
                                         className="btn btn--danger"
                                         onClick={() => handleDelete(l)}
@@ -251,12 +313,7 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                                     >
                                         Remove
                                     </button>
-                                )}
-                                {(l.id === 40 || l.id > 8000) && (
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
-                                        (Built-in)
-                                    </div>
-                                )}
+                                </div>
                             </div>
                         ))}
                     </div>

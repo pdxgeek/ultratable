@@ -1,5 +1,6 @@
 import { LEAGUES, API_KEY, BASE_URL } from '../config';
-import type { Team, Fixture, StandingsRow, MatchLineup, ApiEvent, ApiFixture } from '../types';
+import type { Team, Fixture, StandingsRow, MatchLineup, ApiEvent, ApiFixture, LeagueConfig } from '../types';
+
 
 import { ApiFootballProvider } from './integrations/apiFootball';
 import { MockProvider } from './integrations/mock';
@@ -20,13 +21,21 @@ const providerRegistry: Record<string, DataProvider> = {
     'mock': mockProvider,
 };
 
-function getProvider(leagueId: number, capability: keyof typeof LEAGUES[number]['integrations']): DataProvider {
-    const config = LEAGUES[leagueId];
+function getProvider(leagueOrId: number | LeagueConfig, capability: keyof typeof LEAGUES[number]['integrations']): DataProvider {
+    let config: LeagueConfig | undefined;
+
+    if (typeof leagueOrId === 'number') {
+        config = LEAGUES[leagueOrId];
+    } else {
+        config = leagueOrId;
+    }
+
     if (!config) return apiProvider; // Default
 
     const type = config.integrations?.[capability] || 'api-football';
     return providerRegistry[type] || apiProvider;
 }
+
 
 // Get provider from integrationId (format: "provider:id")
 function getProviderFromIntegrationId(integrationId: string): DataProvider {
@@ -37,28 +46,32 @@ function getProviderFromIntegrationId(integrationId: string): DataProvider {
 // ─── Data Service Methods ──────────────────────────────────────────────
 
 export async function fetchTeams(
-    leagueId: number,
-    season: number
+    league: LeagueConfig | { id: number; season: number }
 ): Promise<Team[]> {
-    const provider = getProvider(leagueId, 'basicTeamInfo');
-    return provider.getTeams(leagueId, season);
+    const config = 'integrations' in league ? (league as LeagueConfig) : LEAGUES[league.id];
+    // Fallback if looking up by ID fails (though it shouldn't for defaults)
+    const provider = getProvider(config || league.id, 'basicTeamInfo');
+    return provider.getTeams(league.id, league.season);
 }
+
 
 export async function fetchStandings(
-    leagueId: number,
-    season: number
+    league: LeagueConfig | { id: number; season: number }
 ): Promise<StandingsRow[]> {
-    const provider = getProvider(leagueId, 'standings');
-    return provider.getStandings(leagueId, season);
+    const config = 'integrations' in league ? (league as LeagueConfig) : LEAGUES[league.id];
+    const provider = getProvider(config || league.id, 'standings');
+    return provider.getStandings(league.id, league.season);
 }
 
+
 export async function fetchFixtures(
-    leagueId: number,
-    season: number
+    league: LeagueConfig | { id: number; season: number }
 ): Promise<Fixture[]> {
-    const provider = getProvider(leagueId, 'fixtures');
-    return provider.getFixtures(leagueId, season);
+    const config = 'integrations' in league ? (league as LeagueConfig) : LEAGUES[league.id];
+    const provider = getProvider(config || league.id, 'fixtures');
+    return provider.getFixtures(league.id, league.season);
 }
+
 
 export async function fetchEvents(
     fixtureId: string | number

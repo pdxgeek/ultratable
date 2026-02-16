@@ -59,7 +59,8 @@ export default function Layout({ syncBar, activeLeagueKey }: LayoutProps) {
                     <UserMenu />
                 </div>
             </header>
-            <div style={{ marginTop: '60px' }}>
+            <div style={{ marginTop: '60px', height: 'calc(100% - 60px)', display: 'flex', flexDirection: 'column' }}>
+
                 {!hideSyncBar && syncBar}
                 <main className="layout__content">
                     <Outlet />

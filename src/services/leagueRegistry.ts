@@ -1,46 +1,51 @@
 import { LEAGUES } from '../config';
 import type { LeagueConfig } from '../types';
+import { database } from './db';
 
-const STORAGE_KEY = 'ultratable_custom_leagues_v2';
+const INITIALIZED_KEY = 'ultratable_leagues_initialized_v1';
 
+export async function fetchLeagues(): Promise<Record<string, LeagueConfig>> {
+    // Check if we need to seed data
+    const isInitialized = localStorage.getItem(INITIALIZED_KEY);
+
+    if (!isInitialized) {
+        // Seed defaults
+        const defaults = Object.values(LEAGUES);
+        for (const l of defaults) {
+            await database.saveLeague(l);
+        }
+        localStorage.setItem(INITIALIZED_KEY, 'true');
+    }
+
+    return database.getAllLeagues();
+}
+
+/**
+ * @deprecated Use fetchLeagues() instead. Kept for temporary compatibility if needed, but should be removed.
+ */
 export function getLeagues(): Record<string, LeagueConfig> {
-    const custom = loadCustomLeagues();
-    // Convert hardcoded LEAGUES to string keys
-    const hardcoded: Record<string, LeagueConfig> = {};
-    Object.values(LEAGUES).forEach(l => {
-        hardcoded[`${l.id}_${l.season}`] = l;
-    });
-    return { ...hardcoded, ...custom };
+    console.warn('getLeagues() is deprecated. Use fetchLeagues()');
+    return {};
 }
 
-export function addCustomLeague(config: LeagueConfig): void {
-    const custom = loadCustomLeagues();
-    const key = `${config.id}_${config.season}`;
-    custom[key] = config;
-    saveCustomLeagues(custom);
+export async function addCustomLeague(config: LeagueConfig): Promise<void> {
+    await database.saveLeague(config);
 }
 
-export function removeCustomLeague(key: string): void {
-    const custom = loadCustomLeagues();
-    delete custom[key];
-    saveCustomLeagues(custom);
+export async function removeCustomLeague(config: LeagueConfig): Promise<void> {
+    await database.deleteLeague(config.id, config.season);
 }
 
-function loadCustomLeagues(): Record<string, LeagueConfig> {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return {};
-        return JSON.parse(raw);
-    } catch (e) {
-        console.error('Failed to load custom leagues', e);
-        return {};
+// Helper to reset to defaults (useful for debugging/recovery)
+export async function resetLeaguesToDefault(): Promise<void> {
+    // Clear all leagues
+    const current = await database.getAllLeagues();
+    for (const key of Object.keys(current)) {
+        const l = current[key];
+        await database.deleteLeague(l.id, l.season);
     }
-}
 
-function saveCustomLeagues(leagues: Record<string, LeagueConfig>): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(leagues));
-    } catch (e) {
-        console.error('Failed to save custom leagues', e);
-    }
+    localStorage.removeItem(INITIALIZED_KEY);
+    // Fetch will re-seed
+    await fetchLeagues();
 }
