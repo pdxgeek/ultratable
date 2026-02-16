@@ -1,9 +1,9 @@
-import { cacheLogo } from './cache';
+import { cacheLogo, cacheImageById, getCachedImageById } from './cache';
 import type { Graphic, GraphicType } from '../types';
 
 export class GfxRegistry {
     private graphics: Map<string, Graphic>; // ID -> Graphic
-    private blobCache: Map<string, string>; // ID -> BlobURL
+    private blobCache: Map<string, string>; // ID -> BlobURL (in-memory cache)
 
     constructor() {
         this.graphics = new Map();
@@ -24,7 +24,15 @@ export class GfxRegistry {
     }
 
     getById(id: string): string | undefined {
-        return this.blobCache.get(id);
+        // First check in-memory cache
+        if (this.blobCache.has(id)) {
+            return this.blobCache.get(id);
+        }
+
+        // If not in memory, try to load from IndexedDB synchronously
+        // This will trigger async load in background
+        this.loadById(id).catch(() => {});
+        return undefined;
     }
 
     // Helper to find a graphic by association (e.g. Team ID) and type
@@ -38,7 +46,17 @@ export class GfxRegistry {
     }
 
     async loadById(id: string): Promise<string | undefined> {
+        // Check in-memory cache first
         if (this.blobCache.has(id)) return this.blobCache.get(id);
+
+        // Try to load from IndexedDB by ID
+        const cachedBlob = await getCachedImageById(id);
+        if (cachedBlob) {
+            this.blobCache.set(id, cachedBlob);
+            return cachedBlob;
+        }
+
+        // Not in IndexedDB, fetch from source
         const graphic = this.graphics.get(id);
         if (!graphic) return undefined;
         await this.loadOne(graphic);
@@ -58,7 +76,8 @@ export class GfxRegistry {
 
     private async loadOne(graphic: Graphic) {
         try {
-            const blobUrl = await cacheLogo(graphic.sourceUrl);
+            // Cache with ID as key (not URL)
+            const blobUrl = await cacheImageById(graphic.id, graphic.sourceUrl);
             this.blobCache.set(graphic.id, blobUrl);
         } catch (e) {
             console.warn(`Failed to cache graphic ${graphic.id} (${graphic.sourceUrl})`, e);

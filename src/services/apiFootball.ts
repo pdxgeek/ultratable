@@ -13,13 +13,25 @@ export { hasApiKey, getApiKey, setApiKey } from './api/client';
 const apiProvider = new ApiFootballProvider();
 const mockProvider = new MockProvider();
 
+const providerRegistry: Record<string, DataProvider> = {
+    'api-football': apiProvider,
+    'mock-scifi': mockProvider,
+    'mock-fantasy': mockProvider,
+    'mock': mockProvider,
+};
+
 function getProvider(leagueId: number, capability: keyof typeof LEAGUES[number]['integrations']): DataProvider {
     const config = LEAGUES[leagueId];
     if (!config) return apiProvider; // Default
 
     const type = config.integrations?.[capability] || 'api-football';
-    if (type.startsWith('mock')) return mockProvider;
-    return apiProvider;
+    return providerRegistry[type] || apiProvider;
+}
+
+// Get provider from integrationId (format: "provider:id")
+function getProviderFromIntegrationId(integrationId: string): DataProvider {
+    const provider = integrationId.split(':')[0];
+    return providerRegistry[provider] || apiProvider;
 }
 
 // ─── Data Service Methods ──────────────────────────────────────────────
@@ -51,9 +63,11 @@ export async function fetchFixtures(
 export async function fetchEvents(
     fixtureId: string | number
 ): Promise<ApiEvent[]> {
+    // If integrationId format (provider:id), use it to get provider
     const idStr = fixtureId.toString();
-    const isMock = idStr.startsWith('mock') || (typeof fixtureId === 'number' && fixtureId > 80000000);
-    const provider = isMock ? mockProvider : apiProvider;
+    const provider = idStr.includes(':')
+        ? getProviderFromIntegrationId(idStr)
+        : apiProvider; // Fallback for legacy numeric IDs
 
     let numericId: number;
     if (typeof fixtureId === 'number') {
@@ -69,16 +83,20 @@ export async function fetchEvents(
 export async function fetchLineups(
     fixtureId: string
 ): Promise<MatchLineup[]> {
-    const isMock = fixtureId.startsWith('mock') || (parseInt(fixtureId.split(':').pop() || '0') > 80000000);
-    const provider = isMock ? mockProvider : apiProvider;
+    // Determine provider from integrationId
+    const provider = fixtureId.includes(':')
+        ? getProviderFromIntegrationId(fixtureId)
+        : apiProvider;
     return provider.getLineups(fixtureId);
 }
 
 export async function fetchFixtureDetails(
     fixtureId: string
 ): Promise<Fixture> {
-    const isMock = fixtureId.startsWith('mock') || (parseInt(fixtureId.split(':').pop() || '0') > 80000000);
-    const provider = isMock ? mockProvider : apiProvider;
+    // Determine provider from integrationId
+    const provider = fixtureId.includes(':')
+        ? getProviderFromIntegrationId(fixtureId)
+        : apiProvider;
     return provider.getFixtureDetails(fixtureId);
 }
 

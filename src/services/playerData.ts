@@ -1,6 +1,7 @@
 import { apiGet } from './api/client';
 import { gfxRegistry } from './gfxRegistry';
 import { quotaTrackers } from './quotaTracker';
+import { generateId } from './idUtils';
 import type { Graphic } from '../types';
 
 // Quota tracker for API-Football player endpoint
@@ -159,7 +160,7 @@ export async function fetchPlayerData(
         // Register photo in graphics registry
         if (playerData.player.photo) {
             const graphic: Graphic = {
-                id: `gfx_player_${playerId}_photo`,
+                id: generateId(), // Pure Base32 NanoID
                 type: 'player_photo',
                 associationId: `player:api-football:${playerId}`,
                 integrationId: `api-football:${playerId}`,

@@ -61,14 +61,13 @@ export default function MatchPopup({
         // Check cache first to prevent redundant API calls
         if (loadedEventsCache.has(fixture.id) || events || fixture.status !== 'played') return;
 
-        // Skip fetch if no API key is present, unless we implement a mock event generator later
+        // Skip fetch if no API key for real providers
+        // Provider will handle whether it needs a key or not
         const hasKey = localStorage.getItem('ut_api_key');
-        if (!hasKey) {
-            // Check if it's a mock fixture
-            if (fixture.id.startsWith('mock') || parseInt(fixture.id) > 80000000) {
-                setLoading(false);
-                return;
-            }
+        const isApiFootball = fixture.integrationId.startsWith('api-football:');
+
+        if (!hasKey && isApiFootball) {
+            // No key for real API
             return;
         }
 
@@ -83,7 +82,7 @@ export default function MatchPopup({
         } finally {
             setLoading(false);
         }
-    }, [fixture.id, fixture.status, events]);
+    }, [fixture.id, fixture.integrationId, fixture.status, events]);
 
     useEffect(() => {
         if (!events && fixture.status === 'played' && !loading) {

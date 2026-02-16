@@ -6,6 +6,7 @@ import type {
     SeasonDataPack
 } from '../types';
 import { transformTeams } from './dataCompiler';
+import { generateId } from './idUtils';
 
 // ─── Generators ────────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
     for (const t of apiTeams) {
         if (t.logo) {
             pack.push({
-                id: `gfx_${t.id}_logo`,
+                id: generateId(), // Pure Base32 NanoID
                 type: 'team_logo',
                 associationId: `team:${t.id}`,
                 integrationId: t.integrationId,
@@ -30,7 +31,7 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
         }
         if (t.venueImage) {
             pack.push({
-                id: `gfx_${t.id}_venue`,
+                id: generateId(), // Pure Base32 NanoID
                 type: 'venue_image',
                 associationId: `team:${t.id}`, // Venue is associated with the team
                 integrationId: t.integrationId,

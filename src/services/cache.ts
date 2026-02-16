@@ -88,6 +88,69 @@ export async function getCachedLogo(url: string): Promise<string | null> {
     }
 }
 
+// New: Get cached image by ID (not URL)
+export async function getCachedImageById(id: string): Promise<string | null> {
+    try {
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(LOGO_STORE, 'readonly');
+            const store = tx.objectStore(LOGO_STORE);
+            const req = store.get(id);
+            req.onsuccess = () => {
+                if (req.result) {
+                    resolve(URL.createObjectURL(req.result));
+                } else {
+                    resolve(null);
+                }
+            };
+            req.onerror = () => resolve(null);
+        });
+    } catch {
+        return null;
+    }
+}
+
+// New: Cache image with ID as key
+export async function cacheImageById(id: string, url: string): Promise<string> {
+    // Check cache first
+    const cached = await getCachedImageById(id);
+    if (cached) return cached;
+
+    // Download and store with ID as key
+    try {
+        const response = await fetch(url, {
+            mode: 'cors',
+            credentials: 'omit',
+            headers: {
+                'Accept': 'image/*',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(LOGO_STORE, 'readwrite');
+            const store = tx.objectStore(LOGO_STORE);
+            store.put(blob, id);  // Store with ID as key
+            tx.oncomplete = () => {
+                resolve(URL.createObjectURL(blob));
+            };
+            tx.onerror = () => {
+                resolve(url); // Fallback to direct URL
+            };
+        });
+    } catch (err) {
+        // Silently fail - CORS errors are expected for some image sources
+        // The UI will show placeholder avatars instead
+        console.debug('Image caching failed (likely CORS):', url);
+        return url; // Fallback to direct URL (will fail in img tag, triggering onError)
+    }
+}
+
 export async function cacheImage(url: string): Promise<string> {
     // Check cache first
     const cached = await getCachedLogo(url);

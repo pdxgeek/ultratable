@@ -80,11 +80,8 @@ function App() {
     console.log('App Render: ActiveKey=', activeLeagueKey, 'League=', league.name, league.id);
   }
 
-  // Determine if we should use mock data based on the league ID
-  // Mock leagues have IDs > 8000 in our config
-  // const useMockData = league.id > 8000;
-  // Better: Check integration config
-  const useMockData = league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false;
+  // Check if league requires API key (non-mock providers need keys)
+  const requiresApiKey = !(league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false);
 
   // React Query Hook
   const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league);
@@ -132,17 +129,12 @@ function App() {
     }
   }, [gfxPack]);
 
-  // Handle API Key check for real data
+  // Handle API Key check for providers that require it
   useEffect(() => {
-    if (hasKey && !useMockData) {
+    if (hasKey && requiresApiKey) {
       refetch();
     }
-  }, [hasKey, useMockData, refetch]);
-
-
-  if (!hasKey && !useMockData) {
-    // Non-blocking warning instead of modal
-  }
+  }, [hasKey, requiresApiKey, refetch]);
 
   const syncBar = (
     <>
@@ -155,9 +147,9 @@ function App() {
         leagues={availableLeagues}
         onLeagueChange={setActiveLeagueKey}
       />
-      {!hasKey && !useMockData && (
+      {!hasKey && requiresApiKey && (
         <div className="warning-banner">
-          <span>⚠️ <strong>API Key Missing:</strong> You are viewing a real league but have not configured an API Key. Data may not load.</span>
+          <span>⚠️ <strong>API Key Missing:</strong> This league requires an API Key. Data may not load.</span>
           <a href="/settings">Go to Settings</a>
         </div>
       )}

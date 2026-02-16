@@ -74,14 +74,29 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
 const mockSciFiTeams = SCIFI_TEAM_NAMES.map((name, i) => generateMockTeam(1000 + i, name, 'scifi'));
 const mockFantasyTeams = FANTASY_TEAM_NAMES.map((name, i) => generateMockTeam(2000 + i, name, 'fantasy'));
 
-function generateMockLineup(teamName: string): MatchLineup {
+function generateMockLineup(teamName: string, provider: string, teamId: number): MatchLineup {
     return {
-        team: { id: 0, name: teamName, logo: '' },
+        team: { id: teamId, name: teamName, logo: '' },
         startXI: Array.from({ length: 11 }, (_, i) => ({
-            player: { commonName: `${teamName} Player ${i + 1}`, id: `p${i}`, integrationId: `p:${i}`, number: i + 1, pos: 'MF' }
+            player: {
+                commonName: `${teamName} Player ${i + 1}`,
+                id: `${provider}:player_${teamId}_${i}`,
+                integrationId: `${provider}:player_${teamId}_${i}`,
+                number: i + 1,
+                pos: (i === 0 ? 'GK' : i < 5 ? 'DF' : i < 9 ? 'MF' : 'FW') as 'GK' | 'DF' | 'MF' | 'FW',
+                // No photos for mock players - will show initials
+            }
         })),
-        substitutes: [],
-        coach: { id: 0, name: 'Head Coach', photo: '' },
+        substitutes: Array.from({ length: 7 }, (_, i) => ({
+            player: {
+                commonName: `${teamName} Sub ${i + 1}`,
+                id: `${provider}:player_${teamId}_sub_${i}`,
+                integrationId: `${provider}:player_${teamId}_sub_${i}`,
+                number: 12 + i,
+                pos: 'MF' as 'MF',
+            }
+        })),
+        coach: { id: teamId + 5000, name: `${teamName} Coach`, photo: '' },
         formation: '4-4-2'
     };
 }
@@ -158,7 +173,7 @@ function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): ApiFixtu
                     country: 'Unknown',
                     logo: '',
                     flag: null,
-                    season: LEAGUES[leagueId]?.season || 2024,
+                    season: LEAGUES[leagueId]?.season || 2025,
                     round: `Regular Season - ${round}`,
                 },
                 teams: {
@@ -240,12 +255,27 @@ function saveMockDB() {
 // Initialize once
 loadMockDB();
 
+// Helper to determine theme from league config
+function getLeagueTheme(leagueId: number): 'scifi' | 'fantasy' {
+    const league = LEAGUES[leagueId];
+    if (!league) return 'scifi'; // Default
+
+    const integrationType = league.integrations?.basicTeamInfo || 'mock-scifi';
+    return integrationType.includes('fantasy') ? 'fantasy' : 'scifi';
+}
+
+// Helper to get provider name from league
+function getProviderName(leagueId: number): string {
+    const league = LEAGUES[leagueId];
+    return league?.integrations?.basicTeamInfo || 'mock-scifi';
+}
+
 function getOrGenerateLeagueData(leagueId: number): LeagueData {
     if (MOCK_DB.has(leagueId)) {
         return MOCK_DB.get(leagueId)!;
     }
 
-    const theme = leagueId === 8888 ? 'fantasy' : 'scifi';
+    const theme = getLeagueTheme(leagueId);
     const names = theme === 'fantasy' ? FANTASY_TEAM_NAMES : SCIFI_TEAM_NAMES;
     const baseId = theme === 'fantasy' ? 2000 : 1000;
 
@@ -268,7 +298,7 @@ export class MockProvider implements DataProvider {
         return new Promise(resolve => {
             setTimeout(() => {
                 const data = getOrGenerateLeagueData(leagueId);
-                const provider = (leagueId === 8888) ? 'mock-fantasy' : 'mock-scifi';
+                const provider = getProviderName(leagueId);
                 resolve(data.teams.map(t => mapTeam(provider, t)));
             }, 300);
         });
@@ -278,7 +308,7 @@ export class MockProvider implements DataProvider {
         return new Promise(resolve => {
             setTimeout(() => {
                 const data = getOrGenerateLeagueData(leagueId);
-                const provider = leagueId === 8888 ? 'mock-fantasy' : 'mock-scifi';
+                const provider = getProviderName(leagueId);
                 resolve(data.fixtures.map(f => mapFixture(provider, f)));
             }, 300);
         });
@@ -297,7 +327,7 @@ export class MockProvider implements DataProvider {
                 // Ensure data exists
                 const data = getOrGenerateLeagueData(leagueId);
                 const cached = data.fixtures.find(f => f.fixture.id === externalId);
-                const provider = leagueId === 8888 ? 'mock-fantasy' : 'mock-scifi';
+                const provider = getProviderName(leagueId);
 
                 if (cached) {
                     resolve(mapFixture(provider, cached));
@@ -310,29 +340,31 @@ export class MockProvider implements DataProvider {
     }
 
     async getEvents(fixtureId: number): Promise<ApiEvent[]> {
+        // Mock provider doesn't generate events
         return [];
     }
 
     async getLineups(fixtureId: string): Promise<MatchLineup[]> {
-        // Deterministic(ish)
+        // Deterministic lineup generation based on fixture
         const externalId = parseInt(fixtureId.split(':').pop() || '0', 10);
         const leagueId = Math.floor(externalId / 10000);
         const data = getOrGenerateLeagueData(leagueId);
+        const provider = getProviderName(leagueId);
 
-        // Use first two teams just for the mock lineup structure, 
-        // in reality we should find the specific teams for this fixture
+        // Find the specific fixture to get correct team names and IDs
         const fixture = data.fixtures.find(f => f.fixture.id === externalId);
         if (fixture) {
             return [
-                generateMockLineup(fixture.teams.home.name),
-                generateMockLineup(fixture.teams.away.name)
+                generateMockLineup(fixture.teams.home.name, provider, fixture.teams.home.id),
+                generateMockLineup(fixture.teams.away.name, provider, fixture.teams.away.id)
             ];
         }
 
+        // Fallback if fixture not found (shouldn't happen)
         const teams = data.teams.slice(0, 2);
         return [
-            generateMockLineup(teams[0]?.team.name || 'Home'),
-            generateMockLineup(teams[1]?.team.name || 'Away')
+            generateMockLineup(teams[0]?.team.name || 'Home', provider, teams[0]?.team.id || 0),
+            generateMockLineup(teams[1]?.team.name || 'Away', provider, teams[1]?.team.id || 0)
         ];
     }
 }
