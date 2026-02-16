@@ -1,10 +1,60 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { fetchFixtureDetails, fetchLineups, fetchEvents } from '../services/apiFootball';
 import type { Fixture } from '../types';
 import { useCachedImage } from '../hooks/useCachedImage';
 import TeamLogo from '../components/TeamLogo';
+import { gfxRegistry } from '../services/gfxRegistry';
+import { fetchPlayersFromLineup } from '../services/playerData';
+
+// Component to handle player photo display
+function PlayerPhoto({ playerId, name }: { playerId: string; name: string }) {
+    // Try to get photo from graphics registry (will be there after fetchPlayersFromLineup completes)
+    // Extract external ID from internal ID (format: "api-football:12345")
+    const externalId = playerId.split(':')[1];
+    const photoUrl = gfxRegistry.getById(`gfx_player_${externalId}_photo`);
+
+    if (!photoUrl) {
+        // Show placeholder with initials
+        const initials = name
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .substring(0, 2)
+            .toUpperCase();
+        return (
+            <div className="player-photo" style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: 'bold',
+                fontSize: '0.7rem'
+            }}>
+                {initials}
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={photoUrl}
+            alt={name}
+            className="player-photo"
+            onError={(e) => {
+                // Show initials fallback on error
+                const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                    parent.innerHTML = `<div class="player-photo" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.7rem;">${initials}</div>`;
+                }
+            }}
+        />
+    );
+}
 
 export default function MatchPage() {
     const { id } = useParams();
@@ -64,7 +114,44 @@ export default function MatchPage() {
         enabled: !!fixtureId,
     });
 
-    const venueImageUrl = useCachedImage(fixture?.venueImage);
+    // For venue images: try fixture.venueImage (for mock leagues with direct URLs),
+    // otherwise get from graphics registry (for real leagues which are already cached as blob URLs)
+    const venueFromRegistry = fixture ? gfxRegistry.getVenue(fixture.homeTeamId) : undefined;
+    const venueDirectUrl = useCachedImage(fixture?.venueImage);
+    const venueImageUrl = venueDirectUrl || venueFromRegistry;
+
+    // Fetch player photos when lineups are loaded
+    const [playerPhotosLoaded, setPlayerPhotosLoaded] = useState(false);
+    useEffect(() => {
+        if (!lineups || lineups.length === 0 || playerPhotosLoaded) return;
+
+        // Extract player IDs from lineup
+        const playerIds: number[] = [];
+        lineups.forEach(lineup => {
+            lineup.startXI.forEach(item => {
+                // Extract external ID from integrationId (format: "api-football:12345")
+                const externalId = parseInt(item.player.integrationId.split(':')[1]);
+                if (!isNaN(externalId)) {
+                    playerIds.push(externalId);
+                }
+            });
+            lineup.substitutes.forEach(item => {
+                const externalId = parseInt(item.player.integrationId.split(':')[1]);
+                if (!isNaN(externalId)) {
+                    playerIds.push(externalId);
+                }
+            });
+        });
+
+        if (playerIds.length > 0 && fixture) {
+            // Extract season from fixture date (year)
+            const season = new Date(fixture.date).getFullYear();
+            fetchPlayersFromLineup(playerIds, season).then(() => {
+                setPlayerPhotosLoaded(true);
+                console.log('Player photos loaded and cached');
+            });
+        }
+    }, [lineups, playerPhotosLoaded, fixture]);
 
     // Only block if we have absolutely no fixture data
     if (loadingFixture && !fixture) return <div className="page loading">Loading Match Details...</div>;
@@ -106,12 +193,7 @@ export default function MatchPage() {
                             <ul className="player-list">
                                 {homeLineup.startXI.map(item => (
                                     <li key={item.player.id} className="player-item">
-                                        <img
-                                            src={item.player.photo || 'https://via.placeholder.com/32'}
-                                            alt={item.player.commonName}
-                                            className="player-photo"
-                                            onError={(e) => (e.currentTarget.style.display = 'none')}
-                                        />
+                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} />
                                         <span className="player-number">{item.player.number}</span>
                                         <span className="player-name">{item.player.commonName}</span>
                                         <span className="player-pos">{item.player.pos}</span>
@@ -124,6 +206,7 @@ export default function MatchPage() {
                                     <li key={item.player.id} className="player-item">
                                         <span className="player-number">{item.player.number}</span>
                                         <span className="player-name">{item.player.commonName}</span>
+                                        <span className="player-pos">{item.player.pos}</span>
                                     </li>
                                 ))}
                             </ul>
@@ -217,12 +300,7 @@ export default function MatchPage() {
                                             <span className="player-name">{item.player.commonName}</span>
                                             <span className="player-number">{item.player.number}</span>
                                         </div>
-                                        <img
-                                            src={item.player.photo || 'https://via.placeholder.com/32'}
-                                            alt={item.player.commonName}
-                                            className="player-photo"
-                                            onError={(e) => (e.currentTarget.style.display = 'none')}
-                                        />
+                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} />
                                     </li>
                                 ))}
                             </ul>
@@ -230,6 +308,7 @@ export default function MatchPage() {
                             <ul className="player-list small">
                                 {awayLineup.substitutes.map(item => (
                                     <li key={item.player.id} className="player-item right-align">
+                                        <span className="player-pos">{item.player.pos}</span>
                                         <span className="player-name">{item.player.commonName}</span>
                                         <span className="player-number">{item.player.number}</span>
                                     </li>

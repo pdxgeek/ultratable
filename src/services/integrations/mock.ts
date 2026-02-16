@@ -14,6 +14,7 @@ const SCIFI_TEAM_NAMES = [
     'Aurora Borealis', 'Zenith Zephyrs', 'Eclipse Eleven', 'Horizon Hotspurs', 'Vertex Victory',
 ];
 
+
 const FANTASY_TEAM_NAMES = [
     'Orbital United', // Shared Team!
     'Baldur\'s Gate Keepers', 'Waterdeep Wizards', 'Neverwinter Nights', 'Ravenloft Reapers',
@@ -43,8 +44,10 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
     const stadiumSuffix = theme === 'scifi' ? 'Arena' : 'Castle';
     const surface = theme === 'scifi' ? 'AstroTurf' : 'Grass';
 
-    const logoUrl = `/src/assets/teams/${slug}-logo.png`;
-    const stadiumUrl = `/src/assets/teams/${slug}-stadium.png`;
+    // Use root-relative paths for public assets
+    // Standard handling: If file doesn't exist, frontend will show placeholder
+    const logoUrl = `/assets/teams/${slug}-logo.png`;
+    const stadiumUrl = `/assets/teams/${slug}-stadium.png`;
 
     return {
         team: {

@@ -95,7 +95,18 @@ export async function cacheImage(url: string): Promise<string> {
 
     // Download and store
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            mode: 'cors',
+            credentials: 'omit',
+            headers: {
+                'Accept': 'image/*',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+
         const blob = await response.blob();
         const db = await openDB();
         return new Promise((resolve) => {
@@ -109,8 +120,11 @@ export async function cacheImage(url: string): Promise<string> {
                 resolve(url); // Fallback to direct URL
             };
         });
-    } catch {
-        return url; // Fallback to direct URL
+    } catch (err) {
+        // Silently fail - CORS errors are expected for some image sources
+        // The UI will show placeholder avatars instead
+        console.debug('Image caching failed (likely CORS):', url);
+        return url; // Fallback to direct URL (will fail in img tag, triggering onError)
     }
 }
 

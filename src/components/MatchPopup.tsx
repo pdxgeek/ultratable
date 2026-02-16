@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Fixture, MatchEvent, Team } from '../types';
 import { fetchEvents } from '../services/apiFootball';
@@ -9,6 +9,9 @@ import TeamLogo from './TeamLogo';
 import { useCachedImage } from '../hooks/useCachedImage';
 
 import { usePopup } from '../context/PopupContext';
+
+// Track which fixtures have had events loaded to prevent redundant API calls
+const loadedEventsCache = new Set<string>();
 
 interface MatchPopupProps {
     fixture: Fixture;
@@ -48,10 +51,15 @@ export default function MatchPopup({
     const homeLogo = homeTeam?.logo || gfxRegistry.getLogo(fixture.homeTeamId);
     const awayLogo = awayTeam?.logo || gfxRegistry.getLogo(fixture.awayTeamId);
 
-    const venueImageUrl = useCachedImage(fixture.venueImage);
+    // For venue images: try fixture.venueImage (for mock leagues with direct URLs),
+    // otherwise get from graphics registry (for real leagues which are already cached as blob URLs)
+    const venueFromRegistry = gfxRegistry.getVenue(fixture.homeTeamId);
+    const venueDirectUrl = useCachedImage(fixture.venueImage);
+    const venueImageUrl = venueDirectUrl || venueFromRegistry;
 
     const loadEvents = useCallback(async () => {
-        if (fixture.eventsLoaded || events || fixture.status !== 'played') return;
+        // Check cache first to prevent redundant API calls
+        if (loadedEventsCache.has(fixture.id) || events || fixture.status !== 'played') return;
 
         // Skip fetch if no API key is present, unless we implement a mock event generator later
         const hasKey = localStorage.getItem('ut_api_key');
@@ -69,18 +77,19 @@ export default function MatchPopup({
             const apiEvents = await fetchEvents(fixture.id);
             const transformed = transformEvents(apiEvents);
             setEvents(transformed);
-            fixture.events = transformed;
-            fixture.eventsLoaded = true;
+            loadedEventsCache.add(fixture.id); // Mark as loaded
         } catch (err) {
             console.warn('Failed to load events:', err);
         } finally {
             setLoading(false);
         }
-    }, [fixture, events]);
+    }, [fixture.id, fixture.status, events]);
 
-    if (!events && fixture.status === 'played' && !loading) {
-        loadEvents();
-    }
+    useEffect(() => {
+        if (!events && fixture.status === 'played' && !loading) {
+            loadEvents();
+        }
+    }, [events, fixture.status, loading, loadEvents]);
 
     const [venueImgError, setVenueImgError] = useState(false);
 
@@ -118,44 +127,38 @@ export default function MatchPopup({
             onMouseLeave={onMouseLeave}
             onClick={handleClick}
         >
-            <div className="match-popup__meta">
-                {fixture.venue && (
-                    <div className="match-popup__venue">
-                        {venueImageUrl && !venueImgError ? (
-                            <img
-                                key={venueImageUrl} // Remount on url change to reset internal load state if any
-                                src={venueImageUrl}
-                                alt={fixture.venue}
-                                className="match-popup__venue-image"
-                                style={{ width: '100%', borderRadius: '4px', marginBottom: '4px', height: '120px', objectFit: 'cover' }}
-                                onError={() => setVenueImgError(true)}
-                            />
-                        ) : (
-                            <div className="match-popup__venue-placeholder" style={{
-                                width: '100%',
-                                height: '120px',
-                                backgroundColor: '#34495e',
-                                borderRadius: '4px',
-                                marginBottom: '4px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#ecf0f1',
-                                flexDirection: 'column',
-                                textAlign: 'center',
-                                padding: '0.5rem'
-                            }}>
-                                <span style={{ fontSize: '2rem' }}>🏟️</span>
-                            </div>
-                        )}
-                        <div>📍 {fixture.venue}{fixture.city ? `, ${fixture.city}` : ''}</div>
-                    </div>
-                )}
-                <div className="match-popup__date">
-                    📅 {formatFullDateTime(fixture.date)}
-                    <span className="match-popup__gameweek"> • Gameweek {fixture.gameweek}</span>
+            {fixture.venue && (
+                <div className="match-popup__venue">
+                    {venueImageUrl && !venueImgError ? (
+                        <img
+                            key={venueImageUrl} // Remount on url change to reset internal load state if any
+                            src={venueImageUrl}
+                            alt={fixture.venue}
+                            className="match-popup__venue-image"
+                            style={{ width: '100%', borderRadius: '4px', marginBottom: '4px', height: '120px', objectFit: 'cover' }}
+                            onError={() => setVenueImgError(true)}
+                        />
+                    ) : (
+                        <div className="match-popup__venue-placeholder" style={{
+                            width: '100%',
+                            height: '120px',
+                            backgroundColor: '#34495e',
+                            borderRadius: '4px',
+                            marginBottom: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ecf0f1',
+                            flexDirection: 'column',
+                            textAlign: 'center',
+                            padding: '0.5rem'
+                        }}>
+                            <span style={{ fontSize: '2rem' }}>🏟️</span>
+                        </div>
+                    )}
+                    <div>📍 {fixture.venue}{fixture.city ? `, ${fixture.city}` : ''}</div>
                 </div>
-            </div>
+            )}
 
             <div className="match-popup__status">
                 {isUpcoming && <span className="badge badge--upcoming">Upcoming</span>}
@@ -236,7 +239,10 @@ export default function MatchPopup({
                 </div>
             )}
 
-            {/* Meta section moved to top */}
+            <div className="match-popup__date">
+                📅 {formatFullDateTime(fixture.date)}
+                <span className="match-popup__gameweek"> • Gameweek {fixture.gameweek}</span>
+            </div>
         </div>
     );
 }

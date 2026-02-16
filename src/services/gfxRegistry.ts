@@ -98,6 +98,20 @@ export class GfxRegistry {
         if (!graphicId) return undefined;
         return this.getById(graphicId);
     }
+
+    // Helper for Venue Images (associated with team)
+    getVenue(teamId: string | number): string | undefined {
+        const idStr = teamId.toString();
+        const graphicId = this.findId(`team:${idStr}`, 'venue_image');
+        if (!graphicId) return undefined;
+        return this.getById(graphicId);
+    }
+
+    // Get image by URL (for backwards compatibility)
+    async getImage(url: string | null | undefined): Promise<string | null> {
+        if (!url) return null;
+        return this.loadUrl(url);
+    }
 }
 
 export const gfxRegistry = new GfxRegistry();

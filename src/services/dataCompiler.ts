@@ -7,6 +7,7 @@ import type {
     MatchEvent,
     StandingsRow,
     SeasonRules,
+    Team,
 } from '../types';
 
 // ─── Status map ────────────────────────────────────────────────────────

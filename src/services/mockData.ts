@@ -31,8 +31,8 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
     const surface = theme === 'scifi' ? 'AstroTurf' : 'Grass';
 
     // Use fallback logic for images if they don't exist, app handles 404s gracefully via TeamLogo
-    const logoUrl = `/src/assets/teams/${slug}-logo.png`;
-    const stadiumUrl = `/src/assets/teams/${slug}-stadium.png`;
+    const logoUrl = `/assets/teams/${slug}-logo.png`;
+    const stadiumUrl = `/assets/teams/${slug}-stadium.png`;
 
     return {
         team: {

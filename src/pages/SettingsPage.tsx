@@ -344,9 +344,9 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                     <h2 className="settings-section__title">Support & Debugging</h2>
                     <div className="settings-card" style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)' }}>
                         <p className="settings-section__desc">
-                            If you are experiencing issues, use the Flight Recorder to export logs.
+                            If you are experiencing issues, use the Flight Recorder to export logs or clear local cache.
                         </p>
-                        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
                             <button
                                 className="btn"
                                 onClick={async () => {
@@ -369,6 +369,41 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                                 }}
                             >
                                 🗑️ Clear Logs
+                            </button>
+                            <button
+                                className="btn btn--danger"
+                                onClick={async () => {
+                                    if (confirm('Clear local cache? This will reset all mock league data, cached images, and require a page refresh.')) {
+                                        // Clear mock DB
+                                        localStorage.removeItem('ultratable_mock_db_v1');
+
+                                        // Clear all ut_* cache entries
+                                        const keysToRemove: string[] = [];
+                                        for (let i = 0; i < localStorage.length; i++) {
+                                            const key = localStorage.key(i);
+                                            if (key?.startsWith('ut_')) {
+                                                keysToRemove.push(key);
+                                            }
+                                        }
+                                        keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+                                        // Clear IndexedDB image cache
+                                        try {
+                                            const dbs = await indexedDB.databases();
+                                            for (const db of dbs) {
+                                                if (db.name === 'ultratable') {
+                                                    indexedDB.deleteDatabase(db.name);
+                                                }
+                                            }
+                                        } catch (e) {
+                                            console.warn('Could not clear IndexedDB', e);
+                                        }
+
+                                        alert('Cache cleared! Please refresh the page.');
+                                    }
+                                }}
+                            >
+                                🧹 Clear Local Cache
                             </button>
                         </div>
                     </div>

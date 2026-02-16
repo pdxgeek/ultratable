@@ -1,7 +1,28 @@
 import type { DataProvider } from './types';
-import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow } from '../../types';
+import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow, Player } from '../../types';
 import { apiGet } from '../../services/api/client';
 import { mapTeam, mapFixture, mapStanding } from './mappers';
+import { getInternalId } from '../idMap';
+
+// API-Football lineup response structure
+interface ApiLineupPlayer {
+    player: {
+        id: number;
+        name: string;
+        number: number;
+        pos: string;
+        grid?: string;
+        photo?: string;
+    };
+}
+
+interface ApiLineupResponse {
+    team: { id: number; name: string; logo: string; colors?: any };
+    coach: { id: number; name: string; photo?: string };
+    formation: string;
+    startXI: ApiLineupPlayer[];
+    substitutes: ApiLineupPlayer[];
+}
 
 export class ApiFootballProvider implements DataProvider {
     async getTeams(leagueId: number, season: number): Promise<Team[]> {
@@ -65,10 +86,36 @@ export class ApiFootballProvider implements DataProvider {
 
     async getLineups(fixtureId: string): Promise<MatchLineup[]> {
         const externalId = parseInt(fixtureId.split(':').pop() || fixtureId, 10);
-        return apiGet<MatchLineup[]>(
+        const raw = await apiGet<ApiLineupResponse[]>(
             'fixtures/lineups',
             { fixture: externalId },
             `lineups_${externalId}`
         );
+
+        // Map API response to our internal structure
+        return raw.map(lineup => {
+            const mapPlayer = (apiPlayer: ApiLineupPlayer): { player: Player } => {
+                const playerId = getInternalId('api-football', 'player', apiPlayer.player.id);
+                return {
+                    player: {
+                        id: playerId,
+                        integrationId: `api-football:${apiPlayer.player.id}`,
+                        commonName: apiPlayer.player.name,
+                        number: apiPlayer.player.number,
+                        pos: apiPlayer.player.pos as 'GK' | 'DF' | 'MF' | 'FW',
+                        grid: apiPlayer.player.grid,
+                        photo: apiPlayer.player.photo,
+                    }
+                };
+            };
+
+            return {
+                team: lineup.team,
+                coach: lineup.coach,
+                formation: lineup.formation,
+                startXI: lineup.startXI.map(mapPlayer),
+                substitutes: lineup.substitutes.map(mapPlayer),
+            };
+        });
     }
 }

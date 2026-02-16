@@ -26,6 +26,7 @@ import { SettingsProvider } from './context/SettingsContext';
 import Layout from './components/Layout';
 import StandingsTable from './components/StandingsTable';
 import SyncBar from './components/SyncBar';
+import PopupManager from './components/PopupManager';
 
 // Pages
 import SettingsPage from './pages/SettingsPage';
@@ -89,13 +90,14 @@ function App() {
   const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league);
 
   // Derived State (Data Packs)
-  const { teamPack, seasonPack, fixtures, standings } = useMemo(() => {
+  const { teamPack, seasonPack, fixtures, standings, gfxPack } = useMemo(() => {
     if (!apiTeams || !apiFixtures) {
       return {
         teamPack: new Map(),
         seasonPack: null,
         fixtures: [],
-        standings: []
+        standings: [],
+        gfxPack: []
       };
     }
 
@@ -110,10 +112,6 @@ function App() {
     );
     const gPack = generateGfxPack(apiTeams);
 
-    // Side Effect: Update GFX Registry (safe to do here as it's idempotent-ish, or move to useEffect)
-    gfxRegistry.registerBatch(gPack);
-    gfxRegistry.loadAll().catch(console.warn);
-
     const fList = apiFixtures; // Already transformed by provider
     const compiled = compileStandings(tPack, fList, sPack.rules);
 
@@ -121,9 +119,18 @@ function App() {
       teamPack: tPack,
       seasonPack: sPack,
       fixtures: fList,
-      standings: compiled
+      standings: compiled,
+      gfxPack: gPack
     };
   }, [apiTeams, apiFixtures, league]);
+
+  // Side Effect: Update GFX Registry (moved from useMemo to avoid side effects in memoization)
+  useEffect(() => {
+    if (gfxPack.length > 0) {
+      gfxRegistry.registerBatch(gfxPack);
+      gfxRegistry.loadAll().catch(console.warn);
+    }
+  }, [gfxPack]);
 
   // Handle API Key check for real data
   useEffect(() => {
@@ -173,6 +180,7 @@ function App() {
       <BrowserRouter>
         <PopupProvider>
           <div className="app">
+            <PopupManager />
             <Routes>
               <Route path="/" element={<Layout syncBar={syncBar} activeLeagueKey={activeLeagueKey} />}>
                 <Route
