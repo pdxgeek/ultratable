@@ -221,6 +221,13 @@ export function compileStandings(
                     f.timestamp * 1000 > now
             ) ?? null;
 
+        const basePoints = s.won * (_rules?.pointsForWin ?? 3) +
+            s.drawn * (_rules?.pointsForDraw ?? 1) +
+            s.lost * (_rules?.pointsForLoss ?? 0);
+
+        const mods = _rules?.pointModifications?.filter(m => m.teamId === teamId) || [];
+        const modifiedPoints = mods.reduce((acc, m) => acc + m.modification, basePoints);
+
         rows.push({
             position: 0,
             teamId: teamId,
@@ -232,9 +239,7 @@ export function compileStandings(
             goalsFor: s.goalsFor,
             goalsAgainst: s.goalsAgainst,
             goalDifference: s.goalsFor - s.goalsAgainst,
-            points: s.won * (_rules?.pointsForWin ?? 3) +
-                s.drawn * (_rules?.pointsForDraw ?? 1) +
-                s.lost * (_rules?.pointsForLoss ?? 0),
+            points: modifiedPoints,
             form,
             recentFixtures,
             nextFixture,

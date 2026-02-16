@@ -130,6 +130,12 @@ export interface ApiStanding {
 
 // ─── Data Packs ────────────────────────────────────────────────────────
 
+export interface PointModification {
+  teamId: string;
+  modification: number;
+  note: string;
+}
+
 export interface SeasonRules {
   promotionSlots: number; // Top N promote automatically
   playoffStart: number;   // e.g. 3
@@ -138,6 +144,7 @@ export interface SeasonRules {
   pointsForWin: number;
   pointsForDraw: number;
   pointsForLoss: number;
+  pointModifications?: PointModification[];
 }
 
 export interface SeasonDataPack {

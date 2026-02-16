@@ -134,7 +134,8 @@ function App() {
     const gPack = generateGfxPack(apiTeams);
 
     const fList = apiFixtures; // Already transformed by provider
-    const compiled = compileStandings(tPack, fList, sPack.rules);
+    const compiled = compileStandings(tPack, fList, sPack.rules, league.deductions);
+
 
     return {
       teamPack: tPack,

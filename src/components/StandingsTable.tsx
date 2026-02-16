@@ -171,7 +171,12 @@ export default function StandingsTable({
                                     </span>
                                 </td>
                                 <td className="col-stat col-pts">
-                                    <span className="pts-value">{row.points}</span>
+                                    <span className="pts-value">
+                                        {row.points}
+                                        {rules.pointModifications?.some(m => m.teamId === row.teamId) && (
+                                            <span style={{ fontSize: '0.7em', verticalAlign: 'top', marginLeft: '2px', color: 'var(--accent-orange)' }}>*</span>
+                                        )}
+                                    </span>
                                 </td>
                                 {settings.showForm && (
                                     <td className="col-form">
@@ -197,6 +202,33 @@ export default function StandingsTable({
                     })}
                 </tbody>
             </table>
+
+            {rules.pointModifications && rules.pointModifications.length > 0 && (
+                <div className="standings-footnotes" style={{
+                    marginTop: '20px',
+                    padding: '16px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>Footnotes:</div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {rules.pointModifications.map((mod, idx) => {
+                            const team = teams.get(mod.teamId);
+                            return (
+                                <li key={idx} style={{ marginBottom: '4px', display: 'flex', gap: '8px' }}>
+                                    <span style={{ color: 'var(--accent-orange)', fontWeight: 600 }}>*</span>
+                                    <span>
+                                        <strong>{team?.commonName || mod.teamId}:</strong> {mod.modification > 0 ? '+' : ''}{mod.modification} points. {mod.note}
+                                    </span>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 }

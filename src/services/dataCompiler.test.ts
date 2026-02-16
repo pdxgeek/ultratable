@@ -303,5 +303,51 @@ describe('Data Compiler', () => {
             expect(teamA?.form[1].result).toBe('D');
             expect(teamA?.form[2].result).toBe('L'); // Most recent last
         });
+
+        it('should apply point modifications from rules', () => {
+            const fixtures: Fixture[] = [
+                {
+                    id: '1',
+                    integrationId: 'test:1',
+                    commonName: 'Match 1',
+                    homeTeamId: '100',
+                    awayTeamId: '101',
+                    homeTeam: { name: 'Team A', logo: '', winner: true },
+                    awayTeam: { name: 'Team B', logo: '', winner: false },
+                    date: '2024-01-01',
+                    timestamp: Date.now(),
+                    status: 'played',
+                    venue: 'Stadium A',
+                    round: 'Round 1',
+                    homeGoals: 2,
+                    awayGoals: 0,
+                    events: [],
+                    lineups: { home: null, away: null },
+                    eventsLoaded: false,
+                },
+            ];
+
+            const rulesWithMods: SeasonRules = {
+                ...rules,
+                pointModifications: [
+                    { teamId: '100', modification: -5, note: 'Deduction' },
+                    { teamId: '101', modification: 2, note: 'Bonus' }
+                ]
+            };
+
+            const standings = compileStandings(teamMap, fixtures, rulesWithMods);
+
+            const teamA = standings.find(s => s.teamId === '100');
+            const teamB = standings.find(s => s.teamId === '101');
+
+            // Team A: 3 (win) - 5 (mod) = -2
+            expect(teamA?.points).toBe(-2);
+            // Team B: 0 (loss) + 2 (mod) = 2
+            expect(teamB?.points).toBe(2);
+
+            // Sorting: Team B (2 pts) should be above Team A (-2 pts)
+            expect(standings[0].teamId).toBe('101');
+            expect(standings[1].teamId).toBe('100');
+        });
     });
 });

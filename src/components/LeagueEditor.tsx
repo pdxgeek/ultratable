@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { LeagueConfig } from '../types';
+import type { LeagueConfig, Team } from '../types';
+import { fetchTeams } from '../services/apiFootball';
 
 interface LeagueEditorProps {
     initialConfig?: LeagueConfig;
@@ -17,6 +18,13 @@ export default function LeagueEditor({ initialConfig, onSave, onCancel }: League
     // JSON fields
     const [rulesJson, setRulesJson] = useState('');
     const [integrationsJson, setIntegrationsJson] = useState('');
+
+    // Point Modification Helper State
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+    const [selectedTeamId, setSelectedTeamId] = useState('');
+    const [modPoints, setModPoints] = useState('');
+    const [modNote, setModNote] = useState('');
 
     const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +55,72 @@ export default function LeagueEditor({ initialConfig, onSave, onCancel }: League
             }, null, 2));
         }
     }, [initialConfig]);
+
+    // Fetch teams when league ID/season changes for the helper dropdown
+    useEffect(() => {
+        if (!id || !season || isNaN(parseInt(id)) || isNaN(parseInt(season))) return;
+
+        let isMounted = true;
+        const loadTeams = async () => {
+            setIsLoadingTeams(true);
+            try {
+                // Construct a temporary config to fetch teams
+                const tempConfig: LeagueConfig = {
+                    id: parseInt(id),
+                    name,
+                    season: parseInt(season),
+                    matchesPerSeason: parseInt(matchesPerSeason) || 38,
+                    rules: JSON.parse(rulesJson || '{}'),
+                    integrations: JSON.parse(integrationsJson || '{}')
+                };
+                const fetchedTeams = await fetchTeams(tempConfig);
+                if (isMounted) {
+                    setTeams(fetchedTeams);
+                    if (fetchedTeams.length > 0 && !selectedTeamId) {
+                        setSelectedTeamId(fetchedTeams[0].id);
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to fetch teams for helper:', err);
+            } finally {
+                if (isMounted) setIsLoadingTeams(false);
+            }
+        };
+
+        loadTeams();
+        return () => { isMounted = false; };
+    }, [id, season, integrationsJson]); // Re-fetch if integration settings change too
+
+    const addModification = () => {
+        try {
+            const points = parseInt(modPoints);
+            if (isNaN(points)) throw new Error('Points must be a number');
+            if (!selectedTeamId) throw new Error('Please select a team');
+            if (!modNote) throw new Error('Please enter a note');
+
+            const currentRules = JSON.parse(rulesJson);
+            const newMod = {
+                teamId: selectedTeamId,
+                modification: points,
+                note: modNote
+            };
+
+            const updatedRules = {
+                ...currentRules,
+                pointModifications: [
+                    ...(currentRules.pointModifications || []),
+                    newMod
+                ]
+            };
+
+            setRulesJson(JSON.stringify(updatedRules, null, 2));
+            // Reset helper
+            setModPoints('');
+            setModNote('');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to add modification');
+        }
+    };
 
     const handleSave = () => {
         try {
@@ -157,6 +231,68 @@ export default function LeagueEditor({ initialConfig, onSave, onCancel }: League
                     onChange={e => setRulesJson(e.target.value)}
                     style={{ width: '100%', height: '150px', fontFamily: 'monospace', fontSize: '0.9rem' }}
                 />
+
+                {/* Point Modification Helper */}
+                <div style={{
+                    marginTop: '12px',
+                    padding: '12px',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '0.9rem'
+                }}>
+                    <div style={{ fontWeight: 600, marginBottom: '8px' }}>Add Point Modification Helper</div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 2, minWidth: '150px' }}>
+                            <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '4px' }}>Team</label>
+                            <select
+                                className="settings-input"
+                                value={selectedTeamId}
+                                onChange={e => setSelectedTeamId(e.target.value)}
+                                style={{ width: '100%' }}
+                                disabled={isLoadingTeams || teams.length === 0}
+                            >
+                                {isLoadingTeams ? (
+                                    <option>Loading teams...</option>
+                                ) : teams.length === 0 ? (
+                                    <option>No teams found</option>
+                                ) : (
+                                    teams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.commonName}</option>
+                                    ))
+                                )}
+                            </select>
+                        </div>
+                        <div style={{ width: '80px' }}>
+                            <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '4px' }}>Points</label>
+                            <input
+                                className="settings-input"
+                                value={modPoints}
+                                onChange={e => setModPoints(e.target.value)}
+                                placeholder="-3"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                        <div style={{ flex: 3, minWidth: '150px' }}>
+                            <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '4px' }}>Note</label>
+                            <input
+                                className="settings-input"
+                                value={modNote}
+                                onChange={e => setModNote(e.target.value)}
+                                placeholder="Federation decision"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                        <button
+                            className="btn btn--secondary"
+                            onClick={addModification}
+                            disabled={isLoadingTeams || teams.length === 0}
+                            style={{ height: '38px', padding: '0 12px' }}
+                        >
+                            Add
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
