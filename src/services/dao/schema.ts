@@ -58,6 +58,79 @@ export interface GraphicRecord {
     timestamp: number;       // When registered
 }
 
+// ─── User & Auth Records ───────────────────────────────────────────────────
+
+export interface UserRecord {
+    id: string;              // Primary key (NanoID) - UltraTable user ID
+    email?: string;          // Primary email
+    displayName?: string;    // User's chosen display name
+    avatar?: string;         // Profile picture URL
+    createdAt: number;
+    lastLogin: number;
+}
+
+export interface OAuthConnectionRecord {
+    id: string;              // Primary key (NanoID)
+    userId: string;          // Links to UserRecord.id
+    provider: 'github' | 'google' | 'discord';
+    providerId: string;      // OAuth provider's user ID
+    providerEmail?: string;  // Email from this provider
+    providerUsername?: string; // Username from this provider
+    accessToken?: string;    // Encrypted token (optional for client-side)
+    refreshToken?: string;   // Encrypted refresh token
+    tokenExpiry?: number;    // Token expiration timestamp
+    scopes?: string[];       // OAuth scopes granted
+    connectedAt: number;     // When linked
+    lastUsed: number;        // Last auth with this provider
+}
+
+// ─── Prediction Records ────────────────────────────────────────────────────
+
+export interface PredictorProfileRecord {
+    id: string;              // Primary key (NanoID)
+    userId?: string;         // Optional - links to user if logged in
+    displayName: string;     // Public display name
+    slug: string;            // URL-friendly name
+    avatar?: string;         // Profile picture
+    bio?: string;            // Profile description
+    stats: {
+        totalPredictions: number;
+        exactScores: number;
+        correctOutcomes: number;
+        wrongPredictions: number;
+        points: number;
+        accuracy: number;    // Percentage
+        currentStreak: number;
+        bestStreak: number;
+    };
+    socialLinks?: string;    // JSON string of social links
+    isPublic: boolean;       // Show on leaderboards
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface PredictionRecord {
+    id: string;              // Primary key (NanoID)
+    profileId: string;       // Links to PredictorProfileRecord.id
+    fixtureId: string;       // Which match
+    leagueId: number;        // Which league
+    season: number;          // Which season
+    homeScore: number;       // Predicted home score
+    awayScore: number;       // Predicted away score
+    confidence?: number;     // 1-5 rating
+    notes?: string;          // Prediction notes
+    isLocked: boolean;       // True after kickoff
+    lockedAt?: number;       // Timestamp when locked
+    result?: {               // Filled in after match
+        actualHomeScore: number;
+        actualAwayScore: number;
+        points: number;      // 0, 1, or 3
+        type: 'exact' | 'outcome' | 'wrong';
+    };
+    createdAt: number;
+    updatedAt: number;
+}
+
 // ─── Database Definition ───────────────────────────────────────────────────
 
 export class UltraTableDB extends Dexie {
@@ -70,6 +143,10 @@ export class UltraTableDB extends Dexie {
     mockData!: Table<MockDataRecord, string>;
     logs!: Table<LogRecord, number>;
     graphics!: Table<GraphicRecord, string>;
+    users!: Table<UserRecord, string>;
+    oauthConnections!: Table<OAuthConnectionRecord, string>;
+    predictorProfiles!: Table<PredictorProfileRecord, string>;
+    predictions!: Table<PredictionRecord, string>;
 
     constructor() {
         super('ultratable');
@@ -95,6 +172,22 @@ export class UltraTableDB extends Dexie {
             mockData: '[leagueId+key], leagueId',
             logs: '++id, timestamp, level',
             graphics: 'id, type, associationId, timestamp',  // Graphics metadata
+        });
+
+        // Add user, auth, and prediction tables in version 3
+        this.version(3).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',
+            users: 'id, email, lastLogin',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
         });
     }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useLeagueData } from './hooks/useLeagueData';
 
 import { DEFAULT_LEAGUE } from './types';
@@ -17,6 +17,7 @@ import { debugLogger } from './services/debugLogger';
 import {
   compileStandings,
 } from './services/dataCompiler';
+import { authService } from './services/auth/authService';
 
 // Contexts
 import { PopupProvider } from './context/PopupContext';
@@ -32,17 +33,31 @@ import PopupManager from './components/PopupManager';
 import SettingsPage from './pages/SettingsPage';
 import DataPage from './pages/DataPage';
 import MatchPage from './pages/MatchPage';
+import { LoginPage } from './pages/LoginPage';
+import { AccountPage } from './pages/AccountPage';
 
 
 
 function App() {
   const [hasKey, setHasKey] = useState(hasApiKey());
+  const [authInitialized, setAuthInitialized] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     debugLogger.init();
+
     // Initialize graphics registry from database
     gfxRegistry.initialize().catch(err => {
       console.error('Failed to initialize graphics registry:', err);
+    });
+
+    // Initialize auth service
+    authService.initialize().then(() => {
+      setIsAuthenticated(authService.isAuthenticated());
+      setAuthInitialized(true);
+    }).catch(err => {
+      console.error('Failed to initialize auth service:', err);
+      setAuthInitialized(true);
     });
   }, []);
 
@@ -171,6 +186,16 @@ function App() {
     </>
   );
 
+  // Show loading while auth initializes
+  if (!authInitialized) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-screen__spinner" />
+        <p className="loading-screen__text">Initializing...</p>
+      </div>
+    );
+  }
+
   return (
     <SettingsProvider>
       <BrowserRouter>
@@ -178,33 +203,45 @@ function App() {
           <div className="app">
             <PopupManager />
             <Routes>
-              <Route path="/" element={<Layout syncBar={syncBar} activeLeagueKey={activeLeagueKey} />}>
-                <Route
-                  index
-                  element={
-                    seasonPack ? (
-                      <StandingsTable
-                        standings={standings}
-                        teams={teamPack}
-                        fixtures={fixtures}
-                        rules={seasonPack.rules}
-                      />
-                    ) : null
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <SettingsPage
-                      onLeagueAdded={refreshLeagues}
-                      onKeySaved={() => setHasKey(true)}
-                      leagues={availableLeagues}
+              {/* Public Routes */}
+              <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+
+              {/* Protected Routes */}
+              {isAuthenticated ? (
+                <>
+                  <Route path="/" element={<Layout syncBar={syncBar} activeLeagueKey={activeLeagueKey} />}>
+                    <Route
+                      index
+                      element={
+                        seasonPack ? (
+                          <StandingsTable
+                            standings={standings}
+                            teams={teamPack}
+                            fixtures={fixtures}
+                            rules={seasonPack.rules}
+                          />
+                        ) : null
+                      }
                     />
-                  }
-                />
-                <Route path="match/:id" element={<MatchPage />} />
-                <Route path="data" element={<DataPage />} />
-              </Route>
+                    <Route
+                      path="settings"
+                      element={
+                        <SettingsPage
+                          onLeagueAdded={refreshLeagues}
+                          onKeySaved={() => setHasKey(true)}
+                          leagues={availableLeagues}
+                        />
+                      }
+                    />
+                    <Route path="match/:id" element={<MatchPage />} />
+                    <Route path="data" element={<DataPage />} />
+                    <Route path="account" element={<AccountPage />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </>
+              ) : (
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              )}
             </Routes>
           </div>
         </PopupProvider>

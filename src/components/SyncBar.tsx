@@ -76,28 +76,19 @@ export default function SyncBar({
                     <span className="sync-bar__last-sync" title="Last data sync">
                         🕐 {lastSyncText}
                     </span>
-                    {quota && (
-                        <span
-                            className={`sync-bar__quota ${quota.current > quota.limit * 0.8
-                                ? 'sync-bar__quota--warn'
-                                : ''
-                                }`}
-                        >
-                            📊 {quota.current}/{quota.limit} requests today
-                        </span>
-                    )}
                 </div>
                 <button
                     className="sync-bar__btn"
                     onClick={onSync}
                     disabled={syncing}
+                    title="Fetch latest data from API"
                 >
                     {syncing ? (
                         <>
                             <span className="sync-bar__spinner" /> Syncing…
                         </>
                     ) : (
-                        <>🔄 Refresh</>
+                        <>🔄 Refresh Data</>
                     )}
                 </button>
             </div>

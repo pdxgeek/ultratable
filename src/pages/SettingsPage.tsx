@@ -1,6 +1,6 @@
 import { useSettings } from '../context/SettingsContext';
 import { useState, useEffect } from 'react';
-import { setApiKey, hasApiKey, fetchStandings, fetchFixtures } from '../services/apiFootball';
+import { setApiKey, hasApiKey, fetchStandings, fetchFixtures, checkQuota } from '../services/apiFootball';
 import { addCustomLeague, removeCustomLeague } from '../services/leagueRegistry';
 import type { LeagueConfig } from '../types';
 
@@ -14,6 +14,7 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
     const { settings, toggleSetting, setTheme } = useSettings();
     const [key, setKey] = useState('');
     const [saved, setSaved] = useState(false);
+    const [quota, setQuota] = useState<{ current: number; limit: number } | null>(null);
 
     // Import State
     const [importId, setImportId] = useState('');
@@ -26,6 +27,9 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
         // Load existing key from localStorage on mount
         const current = localStorage.getItem('ut_api_key');
         if (current) setKey(current);
+
+        // Load quota info
+        checkQuota().then(setQuota).catch(() => setQuota(null));
     }, []);
 
     const handleSaveKey = () => {
@@ -145,6 +149,24 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                             {saved ? 'Saved!' : 'Save Key'}
                         </button>
                     </div>
+                    {quota && (
+                        <div style={{
+                            marginTop: '12px',
+                            padding: '12px',
+                            background: quota.current > quota.limit * 0.8 ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                            border: `1px solid ${quota.current > quota.limit * 0.8 ? 'var(--accent-orange)' : 'var(--border-color)'}`,
+                            borderRadius: '6px',
+                            fontSize: '0.9rem',
+                            color: quota.current > quota.limit * 0.8 ? 'var(--accent-orange)' : 'var(--text-secondary)',
+                        }}>
+                            📊 API Usage: {quota.current}/{quota.limit} requests today
+                            {quota.current > quota.limit * 0.8 && (
+                                <span style={{ marginLeft: '8px', fontWeight: 600 }}>
+                                    (⚠️ {Math.round((quota.current / quota.limit) * 100)}% used)
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 {/* Section: Managed Data */}

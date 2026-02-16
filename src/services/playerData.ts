@@ -130,8 +130,8 @@ export async function fetchPlayerData(
 
             // Only register if not already in registry
             if (!existingGraphicId) {
-                // Use deterministic ID so cache lookup works across sessions
-                const graphicId = `player_photo_${playerId}`;
+                // Generate new unique Base32 NanoID
+                const graphicId = generateId();
                 const graphic: Graphic = {
                     id: graphicId,
                     type: 'player_photo',
@@ -183,8 +183,8 @@ export async function fetchPlayerData(
 
         // Register photo in graphics registry
         if (playerData.player.photo) {
-            // Use deterministic ID so cache lookup works across sessions
-            const graphicId = `player_photo_${playerId}`;
+            // Generate unique Base32 NanoID (will be persisted and reused)
+            const graphicId = generateId();
             const graphic: Graphic = {
                 id: graphicId,
                 type: 'player_photo',

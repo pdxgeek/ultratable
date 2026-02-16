@@ -7,6 +7,7 @@ import type {
 } from '../types';
 import { transformTeams } from './dataCompiler';
 import { generateId } from './idUtils';
+import { gfxRegistry } from './gfxRegistry';
 
 // ─── Generators ────────────────────────────────────────────────────────
 
@@ -21,8 +22,9 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
     for (const t of apiTeams) {
         // Only create graphics for non-empty URLs
         if (t.logo && t.logo.trim() !== '') {
-            // Use deterministic ID so cache works across sessions
-            const logoId = `team_logo_${t.id}`;
+            // Check if graphic already exists in registry (reuse existing ID)
+            const existingLogoId = gfxRegistry.findId(`team:${t.id}`, 'team_logo');
+            const logoId = existingLogoId || generateId();
             pack.push({
                 id: logoId,
                 type: 'team_logo',
@@ -33,8 +35,9 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
             });
         }
         if (t.venueImage && t.venueImage.trim() !== '') {
-            // Use deterministic ID so cache works across sessions
-            const venueId = `venue_image_${t.id}`;
+            // Check if graphic already exists in registry (reuse existing ID)
+            const existingVenueId = gfxRegistry.findId(`team:${t.id}`, 'venue_image');
+            const venueId = existingVenueId || generateId();
             pack.push({
                 id: venueId,
                 type: 'venue_image',

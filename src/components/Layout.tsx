@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-
+import { UserMenu } from './UserMenu';
+import { PageMenu } from './PageMenu';
 
 interface LayoutProps {
     syncBar?: ReactNode;
@@ -22,42 +23,48 @@ export default function Layout({ syncBar, activeLeagueKey }: LayoutProps) {
         }
     }, [activeLeagueKey, navigate, location.pathname]);
 
+    // Hide SyncBar on account/settings pages
+    const hideSyncBar = location.pathname === '/account' || location.pathname === '/settings';
+
     return (
         <div className="layout">
-            <header className="layout__header">
-                <div className="layout__brand">
-                    <Link to="/" className="layout__brand-link">
-                        <span className="layout__logo">⚽</span>
-                        <span className="layout__title">Ultraball</span>
-                    </Link>
+            <header style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1rem 2rem',
+                background: 'var(--bg-secondary)',
+                borderBottom: '1px solid var(--border-color)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                zIndex: 1000,
+            }}>
+                <Link
+                    to="/"
+                    style={{
+                        fontSize: '1.5rem',
+                        fontWeight: '700',
+                        color: 'var(--accent-blue)',
+                        textDecoration: 'none',
+                        letterSpacing: '-0.025em',
+                    }}
+                >
+                    ultratable.io
+                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <PageMenu />
+                    <UserMenu />
                 </div>
             </header>
-            {syncBar}
-            <main className="layout__content">
-                <Outlet />
-            </main>
-            <footer className="layout__footer">
-                <nav className="layout__nav">
-                    <Link
-                        to="/"
-                        className={`layout__link ${location.pathname === '/' ? 'active' : ''}`}
-                    >
-                        Table
-                    </Link>
-                    <Link
-                        to="/settings"
-                        className={`layout__link ${location.pathname === '/settings' ? 'active' : ''}`}
-                    >
-                        Settings
-                    </Link>
-                    <Link
-                        to="/data"
-                        className={`layout__link ${location.pathname === '/data' ? 'active' : ''}`}
-                    >
-                        Data
-                    </Link>
-                </nav>
-            </footer>
+            <div style={{ marginTop: '60px' }}>
+                {!hideSyncBar && syncBar}
+                <main className="layout__content">
+                    <Outlet />
+                </main>
+            </div>
         </div>
     );
 }
