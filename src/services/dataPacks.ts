@@ -19,9 +19,12 @@ export function generateTeamPack(apiTeams: Team[]): TeamDataPack {
 export function generateGfxPack(apiTeams: Team[]): Graphic[] {
     const pack: Graphic[] = [];
     for (const t of apiTeams) {
-        if (t.logo) {
+        // Only create graphics for non-empty URLs
+        if (t.logo && t.logo.trim() !== '') {
+            // Use deterministic ID so cache works across sessions
+            const logoId = `team_logo_${t.id}`;
             pack.push({
-                id: generateId(), // Pure Base32 NanoID
+                id: logoId,
                 type: 'team_logo',
                 associationId: `team:${t.id}`,
                 integrationId: t.integrationId,
@@ -29,9 +32,11 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
                 sourceUrl: t.logo
             });
         }
-        if (t.venueImage) {
+        if (t.venueImage && t.venueImage.trim() !== '') {
+            // Use deterministic ID so cache works across sessions
+            const venueId = `venue_image_${t.id}`;
             pack.push({
-                id: generateId(), // Pure Base32 NanoID
+                id: venueId,
                 type: 'venue_image',
                 associationId: `team:${t.id}`, // Venue is associated with the team
                 integrationId: t.integrationId,

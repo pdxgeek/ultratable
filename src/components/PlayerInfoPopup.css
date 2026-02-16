@@ -1,0 +1,121 @@
+.player-info-popup {
+    position: fixed;
+    z-index: 1000;
+    background: var(--bg-popup, #1a1a1a);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    min-width: 320px;
+    max-width: 360px;
+    pointer-events: none;
+    animation: fadeIn 0.1s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.player-info-popup__content {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem;
+}
+
+.player-info-popup__photo-container {
+    flex-shrink: 0;
+    width: 100px;
+    height: 100px;
+}
+
+.player-info-popup__photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid var(--border-color, rgba(255, 255, 255, 0.2));
+}
+
+.player-info-popup__photo-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 6px;
+    border: 2px solid var(--border-color, rgba(255, 255, 255, 0.2));
+    color: white;
+    font-weight: bold;
+    font-size: 1.75rem;
+}
+
+.player-info-popup__details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+}
+
+.player-info-popup__name {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+
+.player-info-popup__section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.player-info-popup__section h4 {
+    margin: 0 0 0.2rem 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+    padding-bottom: 0.2rem;
+}
+
+.player-info-popup__row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+}
+
+.player-info-popup__row .label {
+    color: var(--text-secondary, #aaa);
+    font-weight: 500;
+}
+
+.player-info-popup__row .value {
+    color: var(--text-primary, #fff);
+    font-weight: 600;
+}
+
+.player-info-popup__note {
+    color: var(--text-muted, #888);
+    font-style: italic;
+    font-size: 0.75rem;
+}
+
+.player-info-popup__injury-notice {
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    border-radius: 4px;
+    padding: 0.4rem;
+    color: #ff9800;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+}

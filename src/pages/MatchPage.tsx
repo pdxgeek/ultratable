@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import clsx from 'clsx';
 import { fetchFixtureDetails, fetchLineups, fetchEvents } from '../services/apiFootball';
 import type { Fixture } from '../types';
@@ -8,51 +8,92 @@ import { useCachedImage } from '../hooks/useCachedImage';
 import TeamLogo from '../components/TeamLogo';
 import { gfxRegistry } from '../services/gfxRegistry';
 import { fetchPlayersFromLineup } from '../services/playerData';
+import PlayerInfoPopup from '../components/PlayerInfoPopup';
 
 // Component to handle player photo display
-function PlayerPhoto({ playerId, name }: { playerId: string; name: string }) {
+function PlayerPhoto({ playerId, name, season }: { playerId: string; name: string; season: number }) {
+    const [showPopup, setShowPopup] = useState(false);
+    const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+    const photoRef = useRef<HTMLDivElement>(null);
+
     // Try to get photo from graphics registry (will be there after fetchPlayersFromLineup completes)
     // Extract external ID from internal ID (format: "api-football:12345")
     const externalId = playerId.split(':')[1];
-    const photoUrl = gfxRegistry.getById(`gfx_player_${externalId}_photo`);
+    const photoUrl = gfxRegistry.getPlayerPhoto(externalId);
 
-    if (!photoUrl) {
-        // Show placeholder with initials
-        const initials = name
-            .split(' ')
-            .map(n => n[0])
-            .join('')
-            .substring(0, 2)
-            .toUpperCase();
-        return (
-            <div className="player-photo" style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontWeight: 'bold',
-                fontSize: '0.7rem'
-            }}>
-                {initials}
-            </div>
-        );
-    }
+    const handleMouseEnter = (e: React.MouseEvent) => {
+        setPopupPosition({
+            x: e.clientX + 15,
+            y: e.clientY + 15
+        });
+        setShowPopup(true);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (showPopup) {
+            setPopupPosition({
+                x: e.clientX + 15,
+                y: e.clientY + 15
+            });
+        }
+    };
+
+    const handleMouseLeave = () => {
+        setShowPopup(false);
+    };
+
+    const initials = name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase();
 
     return (
-        <img
-            src={photoUrl}
-            alt={name}
-            className="player-photo"
-            onError={(e) => {
-                // Show initials fallback on error
-                const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                const parent = e.currentTarget.parentElement;
-                if (parent) {
-                    parent.innerHTML = `<div class="player-photo" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.7rem;">${initials}</div>`;
-                }
-            }}
-        />
+        <div
+            ref={photoRef}
+            className="player-photo-wrapper"
+            onMouseEnter={handleMouseEnter}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            style={{ position: 'relative', display: 'inline-block' }}
+        >
+            {!photoUrl ? (
+                <div className="player-photo" style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    fontSize: '0.7rem',
+                    cursor: 'pointer'
+                }}>
+                    {initials}
+                </div>
+            ) : (
+                <img
+                    src={photoUrl}
+                    alt={name}
+                    className="player-photo"
+                    style={{ cursor: 'pointer' }}
+                    onError={(e) => {
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                            parent.innerHTML = `<div class="player-photo" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.7rem; cursor: pointer;">${initials}</div>`;
+                        }
+                    }}
+                />
+            )}
+            {showPopup && (
+                <PlayerInfoPopup
+                    playerId={playerId}
+                    name={name}
+                    season={season}
+                    position={popupPosition}
+                />
+            )}
+        </div>
     );
 }
 
@@ -193,7 +234,7 @@ export default function MatchPage() {
                             <ul className="player-list">
                                 {homeLineup.startXI.map(item => (
                                     <li key={item.player.id} className="player-item">
-                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} />
+                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
                                         <span className="player-number">{item.player.number}</span>
                                         <span className="player-name">{item.player.commonName}</span>
                                         <span className="player-pos">{item.player.pos}</span>
@@ -300,7 +341,7 @@ export default function MatchPage() {
                                             <span className="player-name">{item.player.commonName}</span>
                                             <span className="player-number">{item.player.number}</span>
                                         </div>
-                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} />
+                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
                                     </li>
                                 ))}
                             </ul>

@@ -122,6 +122,30 @@ export async function fetchPlayerData(
     const cached = await getCachedPlayerData(playerId);
     if (cached) {
         console.log('Player data cache hit:', playerId);
+
+        // Ensure graphics are registered even when loading from cache
+        if (cached.player.photo) {
+            const associationId = `player:api-football:${playerId}`;
+            const existingGraphicId = gfxRegistry.findId(associationId, 'player_photo');
+
+            // Only register if not already in registry
+            if (!existingGraphicId) {
+                // Use deterministic ID so cache lookup works across sessions
+                const graphicId = `player_photo_${playerId}`;
+                const graphic: Graphic = {
+                    id: graphicId,
+                    type: 'player_photo',
+                    associationId,
+                    integrationId: `api-football:${playerId}`,
+                    commonName: `${cached.player.name} Photo`,
+                    sourceUrl: cached.player.photo,
+                };
+                await gfxRegistry.register(graphic);
+                // Load from IndexedDB (blob should already be cached)
+                gfxRegistry.loadById(graphic.id).catch(() => {});
+            }
+        }
+
         return cached;
     }
 
@@ -159,15 +183,17 @@ export async function fetchPlayerData(
 
         // Register photo in graphics registry
         if (playerData.player.photo) {
+            // Use deterministic ID so cache lookup works across sessions
+            const graphicId = `player_photo_${playerId}`;
             const graphic: Graphic = {
-                id: generateId(), // Pure Base32 NanoID
+                id: graphicId,
                 type: 'player_photo',
                 associationId: `player:api-football:${playerId}`,
                 integrationId: `api-football:${playerId}`,
                 commonName: `${playerData.player.name} Photo`,
                 sourceUrl: playerData.player.photo,
             };
-            gfxRegistry.register(graphic);
+            await gfxRegistry.register(graphic);
             // Load it immediately
             await gfxRegistry.loadById(graphic.id);
         }

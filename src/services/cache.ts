@@ -37,6 +37,11 @@ export async function getCachedImageById(id: string): Promise<string | null> {
 }
 
 export async function cacheImageById(id: string, url: string): Promise<string> {
+    // Skip empty URLs
+    if (!url || url.trim() === '') {
+        throw new Error('Empty URL provided');
+    }
+
     // Check cache first
     const cached = await getCachedImageById(id);
     if (cached) return cached;

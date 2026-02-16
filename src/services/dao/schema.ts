@@ -48,6 +48,16 @@ export interface LogRecord {
     context?: any;
 }
 
+export interface GraphicRecord {
+    id: string;              // Primary key (graphic ID)
+    type: string;            // 'team_logo', 'player_photo', 'venue_image', etc.
+    associationId: string;   // e.g., 'team:33', 'player:api-football:306'
+    integrationId: string;   // e.g., 'api-football:33'
+    commonName: string;      // Human-readable name
+    sourceUrl: string;       // Original URL
+    timestamp: number;       // When registered
+}
+
 // ─── Database Definition ───────────────────────────────────────────────────
 
 export class UltraTableDB extends Dexie {
@@ -59,6 +69,7 @@ export class UltraTableDB extends Dexie {
     settings!: Table<SettingRecord, string>;
     mockData!: Table<MockDataRecord, string>;
     logs!: Table<LogRecord, number>;
+    graphics!: Table<GraphicRecord, string>;
 
     constructor() {
         super('ultratable');
@@ -72,6 +83,18 @@ export class UltraTableDB extends Dexie {
             settings: 'key',                            // App settings (single record)
             mockData: '[leagueId+key], leagueId',      // Compound key for mock data
             logs: '++id, timestamp, level',             // Auto-increment ID
+        });
+
+        // Add graphics table in version 2
+        this.version(2).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',  // Graphics metadata
         });
     }
 }

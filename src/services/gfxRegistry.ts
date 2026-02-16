@@ -1,32 +1,130 @@
 import { cacheLogo, cacheImageById, getCachedImageById } from './cache';
 import type { Graphic, GraphicType } from '../types';
+import { db } from './dao/schema';
 
 export class GfxRegistry {
-    private graphics: Map<string, Graphic>; // ID -> Graphic
-    private blobCache: Map<string, string>; // ID -> BlobURL (in-memory cache)
+    private graphics: Map<string, Graphic>; // ID -> Graphic (metadata always in memory)
+    private blobCache: Map<string, { url: string; lastAccessed: number }>; // LRU cache for blob URLs
+    private initialized: boolean = false;
+    private readonly MAX_BLOB_CACHE_SIZE = 100; // Max blobs to keep in memory
 
     constructor() {
         this.graphics = new Map();
         this.blobCache = new Map();
     }
 
+    // Evict least recently used blobs when cache is full
+    private evictOldestBlobs(): void {
+        if (this.blobCache.size <= this.MAX_BLOB_CACHE_SIZE) return;
+
+        // Sort by lastAccessed and remove oldest entries
+        const entries = Array.from(this.blobCache.entries())
+            .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
+
+        const toRemove = entries.slice(0, this.blobCache.size - this.MAX_BLOB_CACHE_SIZE);
+
+        for (const [id, entry] of toRemove) {
+            // Revoke the blob URL to free memory
+            URL.revokeObjectURL(entry.url);
+            this.blobCache.delete(id);
+        }
+
+        console.log(`Evicted ${toRemove.length} blob(s) from cache`);
+    }
+
+    // Initialize by loading all graphics from database
+    async initialize(): Promise<void> {
+        if (this.initialized) return;
+
+        try {
+            const allGraphics = await db.graphics.toArray();
+            const toDelete: string[] = [];
+
+            for (const record of allGraphics) {
+                // Skip and mark for deletion if URL is empty
+                if (!record.sourceUrl || record.sourceUrl.trim() === '') {
+                    toDelete.push(record.id);
+                    continue;
+                }
+
+                const graphic: Graphic = {
+                    id: record.id,
+                    type: record.type as GraphicType,
+                    associationId: record.associationId,
+                    integrationId: record.integrationId,
+                    commonName: record.commonName,
+                    sourceUrl: record.sourceUrl,
+                };
+                this.graphics.set(graphic.id, graphic);
+            }
+
+            // Clean up graphics with empty URLs
+            if (toDelete.length > 0) {
+                await db.graphics.bulkDelete(toDelete);
+                console.log(`Removed ${toDelete.length} graphics with empty URLs`);
+            }
+
+            console.log(`Loaded ${this.graphics.size} graphics from database`);
+            this.initialized = true;
+        } catch (err) {
+            console.error('Failed to initialize graphics registry:', err);
+        }
+    }
+
     // Register a new graphic and return its ID
-    register(graphic: Graphic): string {
+    async register(graphic: Graphic): Promise<string> {
         this.graphics.set(graphic.id, graphic);
+
+        // Persist to database
+        try {
+            await db.graphics.put({
+                id: graphic.id,
+                type: graphic.type,
+                associationId: graphic.associationId,
+                integrationId: graphic.integrationId,
+                commonName: graphic.commonName,
+                sourceUrl: graphic.sourceUrl,
+                timestamp: Date.now(),
+            });
+        } catch (err) {
+            console.error('Failed to persist graphic to database:', err);
+        }
+
         return graphic.id;
     }
 
     // Batch register graphics
-    registerBatch(graphics: Graphic[]) {
+    async registerBatch(graphics: Graphic[]): Promise<void> {
+        const records = graphics.map(g => ({
+            id: g.id,
+            type: g.type,
+            associationId: g.associationId,
+            integrationId: g.integrationId,
+            commonName: g.commonName,
+            sourceUrl: g.sourceUrl,
+            timestamp: Date.now(),
+        }));
+
+        // Add to in-memory map
         for (const g of graphics) {
-            this.register(g);
+            this.graphics.set(g.id, g);
+        }
+
+        // Persist to database in batch
+        try {
+            await db.graphics.bulkPut(records);
+        } catch (err) {
+            console.error('Failed to persist graphics batch to database:', err);
         }
     }
 
     getById(id: string): string | undefined {
         // First check in-memory cache
-        if (this.blobCache.has(id)) {
-            return this.blobCache.get(id);
+        const cached = this.blobCache.get(id);
+        if (cached) {
+            // Update last accessed time for LRU
+            cached.lastAccessed = Date.now();
+            return cached.url;
         }
 
         // If not in memory, try to load from IndexedDB synchronously
@@ -47,12 +145,17 @@ export class GfxRegistry {
 
     async loadById(id: string): Promise<string | undefined> {
         // Check in-memory cache first
-        if (this.blobCache.has(id)) return this.blobCache.get(id);
+        const cached = this.blobCache.get(id);
+        if (cached) {
+            cached.lastAccessed = Date.now();
+            return cached.url;
+        }
 
         // Try to load from IndexedDB by ID
         const cachedBlob = await getCachedImageById(id);
         if (cachedBlob) {
-            this.blobCache.set(id, cachedBlob);
+            this.blobCache.set(id, { url: cachedBlob, lastAccessed: Date.now() });
+            this.evictOldestBlobs();
             return cachedBlob;
         }
 
@@ -60,7 +163,8 @@ export class GfxRegistry {
         const graphic = this.graphics.get(id);
         if (!graphic) return undefined;
         await this.loadOne(graphic);
-        return this.blobCache.get(id);
+        const entry = this.blobCache.get(id);
+        return entry?.url;
     }
 
     // Pre-load all known graphics
@@ -78,7 +182,8 @@ export class GfxRegistry {
         try {
             // Cache with ID as key (not URL)
             const blobUrl = await cacheImageById(graphic.id, graphic.sourceUrl);
-            this.blobCache.set(graphic.id, blobUrl);
+            this.blobCache.set(graphic.id, { url: blobUrl, lastAccessed: Date.now() });
+            this.evictOldestBlobs();
         } catch (e) {
             console.warn(`Failed to cache graphic ${graphic.id} (${graphic.sourceUrl})`, e);
         }
@@ -100,10 +205,15 @@ export class GfxRegistry {
         // Check if this URL matches any registered graphic?
         for (const g of this.graphics.values()) {
             if (g.sourceUrl === url) {
-                if (this.blobCache.has(g.id)) return this.blobCache.get(g.id)!;
+                const cached = this.blobCache.get(g.id);
+                if (cached) {
+                    cached.lastAccessed = Date.now();
+                    return cached.url;
+                }
                 // If not cached, load it using its ID logic
                 await this.loadOne(g);
-                return this.blobCache.get(g.id) || url;
+                const entry = this.blobCache.get(g.id);
+                return entry?.url || url;
             }
         }
 
@@ -122,6 +232,14 @@ export class GfxRegistry {
     getVenue(teamId: string | number): string | undefined {
         const idStr = teamId.toString();
         const graphicId = this.findId(`team:${idStr}`, 'venue_image');
+        if (!graphicId) return undefined;
+        return this.getById(graphicId);
+    }
+
+    // Helper for Player Photos
+    getPlayerPhoto(playerId: string | number): string | undefined {
+        const idStr = playerId.toString();
+        const graphicId = this.findId(`player:api-football:${idStr}`, 'player_photo');
         if (!graphicId) return undefined;
         return this.getById(graphicId);
     }

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API-Football Batch Request Tester</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .endpoint {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-left: 3px solid #2196F3;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error {
+            border-left-color: #f44336;
+            color: #ff6b6b;
+        }
+        .success {
+            border-left-color: #4CAF50;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        input {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px;
+            border-radius: 4px;
+            width: 300px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>API-Football Batch Request Tester</h1>
+
+    <div style="margin-bottom: 20px;">
+        <label>API Key: <input type="text" id="apiKey" placeholder="Enter your API key"></label><br>
+        <small>Your API key will be stored in localStorage</small>
+    </div>
+
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="clearResults()">Clear Results</button>
+
+    <div id="results"></div>
+
+    <script>
+        // Load API key from localStorage
+        const apiKeyInput = document.getElementById('apiKey');
+        apiKeyInput.value = localStorage.getItem('ut_api_key') || '';
+        apiKeyInput.addEventListener('change', (e) => {
+            localStorage.setItem('ut_api_key', e.target.value);
+        });
+
+        const BASE_URL = '/api/football';
+
+        const tests = [
+            {
+                name: 'Single Team',
+                endpoint: 'teams',
+                params: { id: '33' } // Manchester United
+            },
+            {
+                name: 'Multiple Teams (Batch)',
+                endpoint: 'teams',
+                params: { id: '33,34,35' } // Man Utd, Newcastle, Bournemouth
+            },
+            {
+                name: 'Single Fixture',
+                endpoint: 'fixtures',
+                params: { id: '1035086' }
+            },
+            {
+                name: 'Multiple Fixtures (Batch)',
+                endpoint: 'fixtures',
+                params: { id: '1035086,1035087,1035088' }
+            },
+            {
+                name: 'Fixtures by League',
+                endpoint: 'fixtures',
+                params: { league: '39', season: '2024' }
+            },
+            {
+                name: 'Single Player',
+                endpoint: 'players',
+                params: { id: '306', season: '2024' }
+            },
+            {
+                name: 'Multiple Players (Batch)',
+                endpoint: 'players',
+                params: { id: '306,307,308', season: '2024' }
+            },
+            {
+                name: 'Standings',
+                endpoint: 'standings',
+                params: { league: '39', season: '2024' }
+            }
+        ];
+
+        async function testEndpoint(test) {
+            const apiKey = apiKeyInput.value;
+            if (!apiKey) {
+                return { error: 'No API key provided' };
+            }
+
+            const url = new URL(`${window.location.origin}${BASE_URL}/${test.endpoint}`);
+            Object.keys(test.params).forEach(key => {
+                url.searchParams.append(key, test.params[key]);
+            });
+
+            try {
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'x-apisports-key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    return { error: `HTTP ${response.status}: ${JSON.stringify(error)}` };
+                }
+
+                const json = await response.json();
+
+                return {
+                    success: true,
+                    resultCount: json.response?.length || 0,
+                    errors: json.errors,
+                    parameters: json.parameters,
+                    sample: json.response?.[0] || json.response
+                };
+            } catch (err) {
+                return { error: err.message };
+            }
+        }
+
+        async function runTest(test, index) {
+            const resultsDiv = document.getElementById('results');
+            const section = document.createElement('div');
+            section.className = 'test-section';
+            section.id = `test-${index}`;
+
+            const params = new URLSearchParams(test.params).toString();
+            section.innerHTML = `
+                <div><strong>${test.name}</strong></div>
+                <div class="endpoint">GET /${test.endpoint}?${params}</div>
+                <div class="result">Testing...</div>
+            `;
+            resultsDiv.appendChild(section);
+
+            const result = await testEndpoint(test);
+            const resultDiv = section.querySelector('.result');
+
+            if (result.error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Error: ${result.error}`;
+            } else {
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ Success
+Results: ${result.resultCount}
+Errors: ${JSON.stringify(result.errors) || 'none'}
+Parameters: ${JSON.stringify(result.parameters)}
+
+Sample Response:
+${JSON.stringify(result.sample, null, 2)}`;
+            }
+        }
+
+        async function runAllTests() {
+            clearResults();
+            for (let i = 0; i < tests.length; i++) {
+                await runTest(tests[i], i);
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

@@ -40,6 +40,10 @@ function App() {
 
   useEffect(() => {
     debugLogger.init();
+    // Initialize graphics registry from database
+    gfxRegistry.initialize().catch(err => {
+      console.error('Failed to initialize graphics registry:', err);
+    });
   }, []);
 
   // Available Leagues (Merged Config + Custom)
