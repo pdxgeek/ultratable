@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import type { Player } from '../types';
 import { fetchPlayerData, type ApiPlayerData } from '../services/playerData';
 import { gfxRegistry } from '../services/gfxRegistry';
 import './PlayerInfoPopup.css';
 
 interface PlayerInfoPopupProps {
-    playerId: string; // integrationId format: "api-football:12345"
+    player: Player;
     name: string;
     season: number;
     position?: {
@@ -13,16 +14,20 @@ interface PlayerInfoPopupProps {
     };
 }
 
-export default function PlayerInfoPopup({ playerId, name, season, position }: PlayerInfoPopupProps) {
+export default function PlayerInfoPopup({ player, name, season, position }: PlayerInfoPopupProps) {
     const [playerData, setPlayerData] = useState<ApiPlayerData | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Extract external ID from integrationId
-    const externalId = playerId.split(':')[1];
-    const photoUrl = gfxRegistry.getPlayerPhoto(externalId);
+    const photoUrl = gfxRegistry.getPlayerPhoto(player);
 
     useEffect(() => {
-        const externalIdNum = parseInt(externalId);
+        const ref = player.externalReferences.find(r => r.integrationName === 'api-football');
+        if (!ref) {
+            setLoading(false);
+            return;
+        }
+
+        const externalIdNum = parseInt(ref.remoteId);
         if (isNaN(externalIdNum)) {
             setLoading(false);
             return;
@@ -32,7 +37,7 @@ export default function PlayerInfoPopup({ playerId, name, season, position }: Pl
             setPlayerData(data);
             setLoading(false);
         });
-    }, [externalId, season]);
+    }, [player, season]);
 
     if (loading) {
         return (
@@ -81,7 +86,7 @@ export default function PlayerInfoPopup({ playerId, name, season, position }: Pl
         );
     }
 
-    const { player, statistics } = playerData;
+    const { player: rawPlayer, statistics } = playerData;
     const currentStats = statistics[0]; // Most recent season stats
 
     const initials = name
@@ -104,27 +109,27 @@ export default function PlayerInfoPopup({ playerId, name, season, position }: Pl
                     )}
                 </div>
                 <div className="player-info-popup__details">
-                    <h3 className="player-info-popup__name">{player.name}</h3>
+                    <h3 className="player-info-popup__name">{rawPlayer.name}</h3>
 
                     <div className="player-info-popup__section">
                         <div className="player-info-popup__row">
                             <span className="label">Age:</span>
-                            <span className="value">{player.age}</span>
+                            <span className="value">{rawPlayer.age}</span>
                         </div>
                         <div className="player-info-popup__row">
                             <span className="label">Nationality:</span>
-                            <span className="value">{player.nationality}</span>
+                            <span className="value">{rawPlayer.nationality}</span>
                         </div>
-                        {player.height && (
+                        {rawPlayer.height && (
                             <div className="player-info-popup__row">
                                 <span className="label">Height:</span>
-                                <span className="value">{player.height}</span>
+                                <span className="value">{rawPlayer.height}</span>
                             </div>
                         )}
-                        {player.weight && (
+                        {rawPlayer.weight && (
                             <div className="player-info-popup__row">
                                 <span className="label">Weight:</span>
-                                <span className="value">{player.weight}</span>
+                                <span className="value">{rawPlayer.weight}</span>
                             </div>
                         )}
                     </div>
@@ -169,7 +174,7 @@ export default function PlayerInfoPopup({ playerId, name, season, position }: Pl
                         </>
                     )}
 
-                    {player.injured && (
+                    {rawPlayer.injured && (
                         <div className="player-info-popup__injury-notice">
                             ⚠️ Currently injured
                         </div>

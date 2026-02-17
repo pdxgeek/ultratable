@@ -29,8 +29,30 @@ export class AuthService {
     async initialize(): Promise<void> {
         try {
             // Check for dev bypass session first
-            const devUser = await db.users.where('email').equals('dev@ultratable.local').first();
+            let devUser = await db.users.where('email').equals('dev@ultratable.local').first();
+
+            if (!devUser && import.meta.env.DEV) {
+                // Create dev user if missing in dev mode
+                const userId = generateId();
+                const now = Date.now();
+                devUser = {
+                    id: userId,
+                    email: 'dev@ultratable.local',
+                    displayName: 'Dev Admin',
+                    role: 'admin',
+                    createdAt: now,
+                    lastLogin: now,
+                };
+                await db.users.add(devUser);
+            }
+
             if (devUser) {
+                // Ensure dev user is always admin
+                if (devUser.role !== 'admin') {
+                    await db.users.update(devUser.id, { role: 'admin' });
+                    devUser.role = 'admin';
+                }
+
                 const connections = await db.oauthConnections
                     .where('userId')
                     .equals(devUser.id)
@@ -74,6 +96,7 @@ export class AuthService {
                 email: betterAuthUser.email,
                 displayName: betterAuthUser.name,
                 avatar: betterAuthUser.image,
+                role: betterAuthUser.role || 'guest', // Default to guest
                 createdAt: now,
                 lastLogin: now,
             };
@@ -84,6 +107,7 @@ export class AuthService {
                 lastLogin: now,
                 displayName: betterAuthUser.name,
                 avatar: betterAuthUser.image,
+                role: betterAuthUser.role || localUser.role || 'guest',
             });
         }
 
@@ -104,6 +128,19 @@ export class AuthService {
     // Check if user is authenticated
     isAuthenticated(): boolean {
         return this.currentSession !== null;
+    }
+
+    // Role checks
+    isAdmin(): boolean {
+        return this.currentSession?.user.role === 'admin';
+    }
+
+    isGuest(): boolean {
+        return this.currentSession?.user.role === 'guest' || !this.isAuthenticated();
+    }
+
+    getUserRole(): string {
+        return this.currentSession?.user.role || 'guest';
     }
 
     // Sign in with OAuth provider (Better Auth handles the flow)
@@ -134,7 +171,7 @@ export class AuthService {
             });
 
             // Sync the new connection to local DB
-            const now = Date.now();
+            // const now = Date.now();
 
             // Get updated session from Better Auth
             const { data: betterAuthSession } = await authClient.getSession();
@@ -177,6 +214,7 @@ export class AuthService {
         try {
             // Better Auth handles unlinking
             // Note: Check Better Auth docs for exact API
+            // @ts-ignore - Better Auth unlink API may vary by version
             await authClient.unlinkSocial({ provider });
 
             // Remove from local DB

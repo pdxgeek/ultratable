@@ -40,6 +40,14 @@ export function generateDeterministicId(seed: string): string {
     return id;
 }
 
+// SHA-256 hashing for binary deduplication
+export async function calculateHash(data: Blob | ArrayBuffer): Promise<string> {
+    const buffer = data instanceof Blob ? await data.arrayBuffer() : data;
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Legacy support: generate ID with prefix (deprecated - use pure IDs instead)
 export function generateIdWithPrefix(prefix: string): string {
     return `${prefix}_${nanoid()}`;

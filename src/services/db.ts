@@ -1,5 +1,6 @@
 import { db } from './dao/schema';
 import type { Team, Fixture, StandingsRow, LeagueConfig, CacheEntry } from '../types';
+import { calculateHash } from './idUtils';
 
 // ─── Opinionated Database Interface ────────────────────────────────────────
 
@@ -56,7 +57,13 @@ export class UltraTableDatabase {
     // ─── Graphics ──────────────────────────────────────────────────────────
 
     async getGraphicBlob(id: string): Promise<Blob | null> {
-        const record = await db.blobs.get(id);
+        const graphic = await db.graphics.get(id);
+        if (!graphic || !graphic.blobHash) {
+            // Fallback for legacy or unhashed
+            const legacyRecord = await db.blobs.get(id);
+            return legacyRecord?.blob || null;
+        }
+        const record = await db.blobs.get(graphic.blobHash);
         return record?.blob || null;
     }
 
@@ -66,15 +73,29 @@ export class UltraTableDatabase {
     }
 
     async saveGraphicBlob(id: string, blob: Blob): Promise<void> {
-        await db.blobs.put({ id, blob, timestamp: Date.now() });
+        // 1. Calculate content hash
+        const hash = await calculateHash(blob);
+
+        // 2. Store blob indexed by hash (deduplication)
+        await db.blobs.put({
+            id: hash,
+            blob,
+            timestamp: Date.now()
+        });
+
+        // 3. Link graphic record to this hash
+        await db.graphics.where('id').equals(id).modify({ blobHash: hash });
     }
 
     async deleteGraphic(id: string): Promise<void> {
-        await db.blobs.delete(id);
+        // We delete the reference. The blob stays (garbage collection could be added later
+        // by checking if any other graphic points to the same blobHash)
+        await db.graphics.delete(id);
     }
 
     async clearAllGraphics(): Promise<void> {
         await db.blobs.clear();
+        await db.graphics.clear();
     }
 
     // ─── API Quotas ────────────────────────────────────────────────────────

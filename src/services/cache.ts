@@ -1,5 +1,6 @@
 import type { CacheEntry } from '../types';
 import { database } from './db';
+import { fetchQueue } from './api/fetchQueue';
 
 // ─── Generic Cache (Thin wrapper around opinionated DB) ───────────────────
 
@@ -26,7 +27,7 @@ export async function getCacheAge(key: string): Promise<number | null> {
 
 // ─── Image Blobs ───────────────────────────────────────────────────────────
 
-export async function getCachedLogo(url: string): Promise<string | null> {
+export async function getCachedLogo(_url: string): Promise<string | null> {
     // Legacy URL-based lookup - deprecated in favor of ID-based
     console.warn('getCachedLogo(url) is deprecated. Use getCachedImageById(id) instead.');
     return null;
@@ -46,28 +47,33 @@ export async function cacheImageById(id: string, url: string): Promise<string> {
     const cached = await getCachedImageById(id);
     if (cached) return cached;
 
-    // Download and store with ID as key
+    // Download and store with ID as key (routed through queue for retries/backoff)
     try {
-        const response = await fetch(url, {
-            mode: 'cors',
-            credentials: 'omit',
-            headers: {
-                'Accept': 'image/*',
+        const blob = await fetchQueue.enqueue(async () => {
+            const response = await fetch(url, {
+                mode: 'cors',
+                credentials: 'omit',
+                headers: {
+                    'Accept': 'image/*',
+                }
+            });
+
+            if (!response.ok) {
+                const err = new Error(`Failed to fetch image: ${response.status}`);
+                (err as any).status = response.status; // Pass status to queue for 429 detection
+                throw err;
             }
+
+            return await response.blob();
         });
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status}`);
-        }
-
-        const blob = await response.blob();
         await database.saveGraphicBlob(id, blob);
         return URL.createObjectURL(blob);
     } catch (err) {
         // Silently fail - CORS errors are expected for some image sources
         // The UI will show placeholder avatars instead
-        console.debug('Image caching failed (likely CORS):', url);
-        return url; // Fallback to direct URL (will fail in img tag, triggering onError)
+        console.debug('Image caching failed after retries:', url, err);
+        return url; // Fallback to direct URL
     }
 }
 

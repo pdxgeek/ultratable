@@ -1,12 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useLeagueData } from './hooks/useLeagueData';
-
-import { DEFAULT_LEAGUE } from './types';
 import {
   hasApiKey,
 } from './services/apiFootball';
-import { fetchLeagues } from './services/leagueRegistry';
 import {
   generateSeasonPack,
   generateTeamPack,
@@ -22,6 +19,7 @@ import { authService } from './services/auth/authService';
 // Contexts
 import { PopupProvider } from './context/PopupContext';
 import { SettingsProvider } from './context/SettingsContext';
+import { LeagueProvider, useLeague } from './context/LeagueContext';
 
 // Components
 import Layout from './components/Layout';
@@ -39,6 +37,27 @@ import { AccountPage } from './pages/AccountPage';
 
 
 function App() {
+  return (
+    <SettingsProvider>
+      <LeagueProvider>
+        <BrowserRouter>
+          <PopupProvider>
+            <AppContent />
+          </PopupProvider>
+        </BrowserRouter>
+      </LeagueProvider>
+    </SettingsProvider>
+  );
+}
+
+function AppContent() {
+  const {
+    activeLeague: league,
+    activeLeagueKey,
+    availableLeagues,
+    refreshLeagues,
+  } = useLeague();
+
   const [hasKey, setHasKey] = useState(hasApiKey());
   const [authInitialized, setAuthInitialized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -62,36 +81,19 @@ function App() {
   }, []);
 
   // Available Leagues (Merged Config + Custom)
-  const [availableLeagues, setAvailableLeagues] = useState<Record<string, any>>({});
+  // MOVED TO LeagueContext
 
   // Load leagues on mount
-  useEffect(() => {
-    fetchLeagues().then(setAvailableLeagues).catch(console.error);
-  }, []);
+  // MOVED TO LeagueContext
 
   // League State (formatted as "id_season")
-  const defaultKey = `${DEFAULT_LEAGUE.id}_${DEFAULT_LEAGUE.season}`;
-  const [activeLeagueKey, setActiveLeagueKey] = useState(() => {
-    if (typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem('ultratable_active_league');
-      // Verify saved key exists in available leagues (or at least looks valid)
-      // We can't easily check availableLeagues here as it's state, but we can trust it or fallback later
-      if (saved) return saved;
-    }
-    return defaultKey;
-  });
+  // MOVED TO LeagueContext
 
   // Persist active league
-  useEffect(() => {
-    localStorage.setItem('ultratable_active_league', activeLeagueKey);
-  }, [activeLeagueKey]);
-
-  const league = availableLeagues[activeLeagueKey] || DEFAULT_LEAGUE;
+  // MOVED TO LeagueContext
 
   // Refresh available leagues on mount and when changed
-  const refreshLeagues = useCallback(() => {
-    fetchLeagues().then(setAvailableLeagues);
-  }, []);
+  // MOVED TO LeagueContext
 
   // Use setHasKey to avoid lint error (logic could be expanded later)
   useEffect(() => {
@@ -108,7 +110,7 @@ function App() {
   const requiresApiKey = !(league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false);
 
   // React Query Hook
-  const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league);
+  const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league, { enabled: authInitialized });
 
   // Derived State (Data Packs)
   const { teamPack, seasonPack, fixtures, standings, gfxPack } = useMemo(() => {
@@ -150,7 +152,7 @@ function App() {
   useEffect(() => {
     if (gfxPack.length > 0) {
       gfxRegistry.registerBatch(gfxPack);
-      gfxRegistry.loadAll().catch(console.warn);
+      gfxRegistry.loadAll(gfxPack.map(g => g.id)).catch(console.warn);
     }
   }, [gfxPack]);
 
@@ -164,13 +166,8 @@ function App() {
   const syncBar = (
     <>
       <SyncBar
-        leagueName={seasonPack?.name ?? league.name}
-        leagueId={activeLeagueKey}
-        season={league.season}
         syncing={isLoading}
         onSync={() => refetch()}
-        leagues={availableLeagues}
-        onLeagueChange={setActiveLeagueKey}
       />
       {!hasKey && requiresApiKey && (
         <div className="warning-banner">
@@ -203,58 +200,73 @@ function App() {
   }
 
   return (
-    <SettingsProvider>
-      <BrowserRouter>
-        <PopupProvider>
-          <div className="app">
-            <PopupManager />
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+    <div className="app">
+      <PopupManager />
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
 
-              {/* Protected Routes */}
-              {isAuthenticated ? (
-                <>
-                  <Route path="/" element={<Layout syncBar={syncBar} activeLeagueKey={activeLeagueKey} />}>
-                    <Route
-                      index
-                      element={
-                        seasonPack ? (
-                          <StandingsTable
-                            key={activeLeagueKey}
-                            standings={standings}
-                            teams={teamPack}
-                            fixtures={fixtures}
-                            rules={seasonPack.rules}
-                          />
-
-                        ) : null
-                      }
+        {/* Protected Routes */}
+        {isAuthenticated ? (
+          <>
+            <Route path="/" element={<Layout syncBar={syncBar} activeLeagueKey={activeLeagueKey} />}>
+              <Route
+                index
+                element={
+                  seasonPack ? (
+                    <StandingsTable
+                      key={activeLeagueKey}
+                      standings={standings}
+                      teams={teamPack}
+                      fixtures={fixtures}
+                      rules={seasonPack.rules}
                     />
-                    <Route
-                      path="settings"
-                      element={
-                        <SettingsPage
-                          onLeagueAdded={refreshLeagues}
-                          onKeySaved={() => setHasKey(true)}
-                          leagues={availableLeagues}
-                        />
-                      }
+                  ) : null
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  authService.isAdmin() ? (
+                    <SettingsPage
+                      onLeagueAdded={refreshLeagues}
+                      onKeySaved={() => setHasKey(true)}
+                      leagues={availableLeagues}
                     />
-                    <Route path="match/:id" element={<MatchPage />} />
-                    <Route path="data" element={<DataPage />} />
-                    <Route path="account" element={<AccountPage />} />
-                  </Route>
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </>
-              ) : (
-                <Route path="*" element={<Navigate to="/login" replace />} />
-              )}
-            </Routes>
-          </div>
-        </PopupProvider>
-      </BrowserRouter>
-    </SettingsProvider>
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+              <Route path="match/:id" element={<MatchPage />} />
+              <Route
+                path="data"
+                element={
+                  authService.isAdmin() ? (
+                    <DataPage />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+              <Route
+                path="account"
+                element={
+                  authService.isAdmin() ? (
+                    <AccountPage />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : (
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        )}
+      </Routes>
+    </div>
   );
 }
 

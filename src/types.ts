@@ -163,10 +163,16 @@ export type GfxDataPack = Map<string, string>; // TeamID -> Logo Blob URL
 
 // ─── App domain types ──────────────────────────────────────────────────
 
+export interface IntegrationReference {
+  integrationName: IntegrationName;
+  remoteId: string;
+}
+
 export interface BaseEntity {
   id: string; // Internal NanoID
-  integrationId: string; // provider:externalId
+  externalReferences: IntegrationReference[]; // Unified link to provider(s)
   commonName: string; // Unified display name
+  lastRefreshed: string; // ISO UTC timestamp of last update
 }
 
 export type GraphicType = 'team_logo' | 'venue_image' | 'player_photo' | 'league_logo';
@@ -175,6 +181,7 @@ export interface Graphic extends BaseEntity {
   type: GraphicType;
   associationId: string; // ID of the entity it belongs to (Team ID, Player ID)
   sourceUrl: string; // Original URL
+  blobHash?: string; // SHA-256 hash of the content
 }
 
 export type FixtureStatus =
@@ -264,6 +271,7 @@ export interface StandingsRow {
   recentFixtures: Fixture[];
   nextFixture: Fixture | null;
   description: string | null; // Keep for fallback, but rules should take precedence
+  lastRefreshed: string;
 }
 
 // Renaming TeamMetadata to Team and extending BaseEntity
@@ -287,22 +295,22 @@ export interface CacheEntry<T> {
 
 // ─── App state ─────────────────────────────────────────────────────────
 
-export type IntegrationType = 'api-football' | 'mock-scifi' | 'mock-fantasy';
+export type IntegrationName = 'api-football' | 'mock-scifi' | 'mock-fantasy';
 
 export interface IntegrationCapabilities {
   // Core
-  fixtures: IntegrationType;
-  standings: IntegrationType;
-  basicTeamInfo: IntegrationType;
+  fixtures: IntegrationName;
+  standings: IntegrationName;
+  basicTeamInfo: IntegrationName;
 
   // Granular Team Data
-  roster: IntegrationType;
-  playerStats: IntegrationType;
-  teamStats: IntegrationType;
+  roster: IntegrationName;
+  playerStats: IntegrationName;
+  teamStats: IntegrationName;
 
   // Media
-  teamLogos: IntegrationType;
-  playerPhotos: IntegrationType;
+  teamLogos: IntegrationName;
+  playerPhotos: IntegrationName;
 }
 
 export interface LeagueConfig {
@@ -313,6 +321,7 @@ export interface LeagueConfig {
   matchesPerSeason: number;
   rules: SeasonRules;
   integrations: IntegrationCapabilities;
+  deductions?: PointModification[];
 }
 
 export const DEFAULT_LEAGUE: LeagueConfig = {

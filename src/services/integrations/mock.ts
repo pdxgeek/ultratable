@@ -1,7 +1,9 @@
 import type { DataProvider } from './types';
-import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow } from '../../types';
+import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow, IntegrationName } from '../../types';
 import { LEAGUES } from '../../config';
 import { mapTeam, mapFixture, mapStanding } from './mappers';
+import { getInternalId } from '../idMap';
+import { db } from '../dao/schema';
 
 // ─── Constants & Generators ────────────────────────────────────────────
 
@@ -14,41 +16,32 @@ const SCIFI_TEAM_NAMES = [
     'Aurora Borealis', 'Zenith Zephyrs', 'Eclipse Eleven', 'Horizon Hotspurs', 'Vertex Victory',
 ];
 
-// Teams that have actual asset files in public/assets/teams/
-const TEAMS_WITH_ASSETS = new Set([
-    'orbital-united',
-    'void-wanderers',
-    'nebula-fc',
-    'quantuum-city',
-    'stellar-rangers',
-    'cosmic-athletic',
-    'gravity-rovers',
-    'pulsar-united',
-    'quasar-quest',
-    'aurora-borealis',
+const TEAMS_WITH_LOGOS = new Set([
+    'orbital-united', 'void-wanderers', 'nebula-fc', 'quantuum-city', 'stellar-rangers',
+    'cosmic-athletic', 'gravity-rovers', 'pulsar-united', 'quasar-quest', 'aurora-borealis',
     'zenith-zephyrs',
 ]);
 
+const TEAMS_WITH_STADIUMS = new Set([
+    'orbital-united', 'void-wanderers', 'nebula-fc', 'quantuum-city', 'stellar-rangers',
+    'cosmic-athletic', 'gravity-rovers', 'pulsar-united', 'quasar-quest', 'aurora-borealis',
+    'zenith-zephyrs',
+]);
 
 const FANTASY_TEAM_NAMES = [
-    'Orbital United', // Shared Team!
+    'Orbital United',
     'Baldur\'s Gate Keepers', 'Waterdeep Wizards', 'Neverwinter Nights', 'Ravenloft Reapers',
     'Mithral Hall Miners', 'Rivendell Rangers', 'Shire Sheriffs', 'Mordor Marauders', 'Gondor Guards',
     'Rohan Riders', 'Isengard Iron',
 ];
 
-// Simple deterministic random number generator
 class SeededRandom {
     private seed: number;
-    constructor(seed: number) {
-        this.seed = seed;
-    }
-    // LCG
+    constructor(seed: number) { this.seed = seed; }
     next(): number {
         this.seed = (this.seed * 9301 + 49297) % 233280;
         return this.seed / 233280;
     }
-    // Range [min, max)
     range(min: number, max: number): number {
         return Math.floor(this.next() * (max - min) + min);
     }
@@ -58,97 +51,67 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
     const slug = name.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
     const stadiumSuffix = theme === 'scifi' ? 'Arena' : 'Castle';
     const surface = theme === 'scifi' ? 'AstroTurf' : 'Grass';
-
-    // Only provide URLs for teams that actually have assets
-    const hasAssets = TEAMS_WITH_ASSETS.has(slug);
-    const logoUrl = hasAssets ? `/assets/teams/${slug}-logo.png` : '';
-    const stadiumUrl = hasAssets ? `/assets/teams/${slug}-stadium.png` : '';
+    const logoUrl = TEAMS_WITH_LOGOS.has(slug) ? `/assets/teams/${slug}-logo.png` : '';
+    const stadiumUrl = TEAMS_WITH_STADIUMS.has(slug) ? `/assets/teams/${slug}-stadium.png` : '';
 
     return {
-        team: {
-            id: idBase,
-            name,
-            code: name.substring(0, 3).toUpperCase(),
-            country: theme === 'scifi' ? 'Galactic Empire' : 'Middle Earth',
-            founded: theme === 'scifi' ? 2050 : 1250,
-            national: false,
-            logo: logoUrl,
-        },
-        venue: {
-            id: idBase + 1000,
-            name: name === 'Orbital United' ? 'Quantum City Arena' : `${name} ${stadiumSuffix}`,
-            address: 'Unknown',
-            city: name === 'Orbital United' ? 'Quantum City' : 'Unknown',
-            capacity: 50000,
-            surface: surface,
-            image: stadiumUrl,
-        },
+        team: { id: idBase, name, code: name.substring(0, 3).toUpperCase(), country: theme === 'scifi' ? 'Galactic Empire' : 'Middle Earth', founded: theme === 'scifi' ? 2050 : 1250, national: false, logo: logoUrl },
+        venue: { id: idBase + 1000, name: name === 'Orbital United' ? 'Quantum City Arena' : `${name} ${stadiumSuffix}`, address: 'Unknown', city: name === 'Orbital United' ? 'Quantum City' : 'Unknown', capacity: 50000, surface, image: stadiumUrl },
     };
 }
 
-const mockSciFiTeams = SCIFI_TEAM_NAMES.map((name, i) => generateMockTeam(1000 + i, name, 'scifi'));
-const mockFantasyTeams = FANTASY_TEAM_NAMES.map((name, i) => generateMockTeam(2000 + i, name, 'fantasy'));
+async function generateMockLineup(teamName: string, provider: IntegrationName, teamId: number): Promise<MatchLineup> {
+    const mapPlayerItem = async (index: number, isSub: boolean) => {
+        const remoteId = isSub ? `player_${teamId}_sub_${index}` : `player_${teamId}_${index}`;
+        const playerId = await getInternalId(provider, 'player', remoteId);
 
-function generateMockLineup(teamName: string, provider: string, teamId: number): MatchLineup {
+        return {
+            player: {
+                commonName: isSub ? `${teamName} Sub ${index + 1}` : `${teamName} Player ${index + 1}`,
+                id: playerId,
+                externalReferences: [{ integrationName: provider, remoteId }],
+                number: isSub ? 12 + index : index + 1,
+                pos: (isSub ? 'MF' : (index === 0 ? 'GK' : index < 5 ? 'DF' : index < 9 ? 'MF' : 'FW')) as 'GK' | 'DF' | 'MF' | 'FW',
+                lastRefreshed: new Date().toISOString(),
+            }
+        };
+    };
+
+    const [startXI, substitutes] = await Promise.all([
+        Promise.all(Array.from({ length: 11 }, (_, i) => mapPlayerItem(i, false))),
+        Promise.all(Array.from({ length: 7 }, (_, i) => mapPlayerItem(i, true)))
+    ]);
+
     return {
         team: { id: teamId, name: teamName, logo: '' },
-        startXI: Array.from({ length: 11 }, (_, i) => ({
-            player: {
-                commonName: `${teamName} Player ${i + 1}`,
-                id: `${provider}:player_${teamId}_${i}`,
-                integrationId: `${provider}:player_${teamId}_${i}`,
-                number: i + 1,
-                pos: (i === 0 ? 'GK' : i < 5 ? 'DF' : i < 9 ? 'MF' : 'FW') as 'GK' | 'DF' | 'MF' | 'FW',
-                // No photos for mock players - will show initials
-            }
-        })),
-        substitutes: Array.from({ length: 7 }, (_, i) => ({
-            player: {
-                commonName: `${teamName} Sub ${i + 1}`,
-                id: `${provider}:player_${teamId}_sub_${i}`,
-                integrationId: `${provider}:player_${teamId}_sub_${i}`,
-                number: 12 + i,
-                pos: 'MF' as 'MF',
-            }
-        })),
+        startXI,
+        substitutes,
         coach: { id: teamId + 5000, name: `${teamName} Coach`, photo: '' },
         formation: '4-4-2'
     };
 }
 
-function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): ApiFixture[] {
+async function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): Promise<ApiFixture[]> {
     const fixtures: ApiFixture[] = [];
     const teamIds = teams.map((t) => t.team.id);
     const totalRounds = (teams.length - 1) * 2;
     let fixtureIdCounter = leagueId * 10000;
-    const startDate = new Date();
-    // Deterministic Start Date relative to "Now" is bad if "Now" changes.
-    // Should be fixed relative to Season Start (e.g. Jan 1st 2026).
     const seasonStart = new Date('2025-08-01T12:00:00Z');
-
-    // Use a seed based on leagueId
     const rng = new SeededRandom(leagueId);
 
     for (let round = 1; round <= totalRounds; round++) {
         const roundDate = new Date(seasonStart.getTime() + round * 7 * ONE_DAY_MS);
         const isPast = roundDate < new Date();
-        const roundTeamIds = [...teamIds];
-
         const workingIds = [...teamIds];
         const fixed = workingIds.shift()!;
-        // Rotate workingIds by (round-1)
         const rotationCount = round - 1;
-        for (let k = 0; k < rotationCount; k++) {
-            workingIds.unshift(workingIds.pop()!);
-        }
+        for (let k = 0; k < rotationCount; k++) { workingIds.unshift(workingIds.pop()!); }
         const currentRoundIds = [fixed, ...workingIds];
 
         const half = teams.length / 2;
         for (let i = 0; i < half; i++) {
             let actualHome = currentRoundIds[i];
             let actualAway = currentRoundIds[teams.length - 1 - i];
-
-            // Swap home/away based on round parity to balance
             if (round % 2 === 1) [actualHome, actualAway] = [actualAway, actualHome];
 
             const homeTeam = teams.find(t => t.team.id === actualHome)!;
@@ -160,8 +123,6 @@ function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): ApiFixtu
 
             if (isPast) {
                 statusShort = 'FT';
-                // Deterministic scores
-                // Use pair IDs and round to seed the score
                 const matchSeed = actualHome * 1000 + actualAway + round;
                 const matchRng = new SeededRandom(matchSeed);
                 homeGoals = matchRng.range(0, 5);
@@ -170,139 +131,75 @@ function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): ApiFixtu
 
             fixtures.push({
                 fixture: {
-                    id: fixtureIdCounter++,
-                    referee: 'Robot Ref',
-                    timezone: 'UTC',
-                    date: roundDate.toISOString(),
-                    timestamp: Math.floor(roundDate.getTime() / 1000),
-                    status: {
-                        long: isPast ? 'Match Finished' : 'Not Started',
-                        short: statusShort,
-                        elapsed: isPast ? 90 : null,
-                    },
+                    id: fixtureIdCounter++, referee: 'Robot Ref', timezone: 'UTC', date: roundDate.toISOString(), timestamp: Math.floor(roundDate.getTime() / 1000),
+                    status: { long: isPast ? 'Match Finished' : 'Not Started', short: statusShort, elapsed: isPast ? 90 : null },
                     venue: { id: null, name: homeTeam.venue.name, city: homeTeam.venue.city, image: homeTeam.venue.image }
                 },
-                league: {
-                    id: leagueId,
-                    name: LEAGUES[leagueId]?.name || 'Mock League',
-                    country: 'Unknown',
-                    logo: '',
-                    flag: null,
-                    season: LEAGUES[leagueId]?.season || 2025,
-                    round: `Regular Season - ${round}`,
-                },
+                league: { id: leagueId, name: LEAGUES[leagueId]?.name || 'Mock League', country: 'Unknown', logo: '', flag: null, season: LEAGUES[leagueId]?.season || 2025, round: `Regular Season - ${round}` },
                 teams: {
                     home: { id: homeTeam.team.id, name: homeTeam.team.name, logo: homeTeam.team.logo, winner: homeGoals !== null && awayGoals !== null ? homeGoals > awayGoals : null },
                     away: { id: awayTeam.team.id, name: awayTeam.team.name, logo: awayTeam.team.logo, winner: homeGoals !== null && awayGoals !== null ? awayGoals > homeGoals : null },
                 },
                 goals: { home: homeGoals, away: awayGoals },
-                score: {
-                    halftime: { home: null, away: null },
-                    fulltime: { home: homeGoals, away: awayGoals },
-                    extratime: { home: null, away: null },
-                    penalty: { home: null, away: null },
-                },
-                lineups: {
-                    home: { startXI: [], substitutes: [], formation: '4-4-2' },
-                    away: { startXI: [], substitutes: [], formation: '4-4-2' },
-                }
+                score: { halftime: { home: null, away: null }, fulltime: { home: homeGoals, away: awayGoals }, extratime: { home: null, away: null }, penalty: { home: null, away: null } },
+                lineups: { home: { startXI: [], substitutes: [], formation: '4-4-2' }, away: { startXI: [], substitutes: [], formation: '4-4-2' } }
             });
         }
     }
     return fixtures;
 }
 
-
 // ─── Data Store ────────────────────────────────────────────────────────
 
-interface LeagueData {
-    teams: ApiTeam[];
-    fixtures: ApiFixture[];
-}
+interface LeagueData { teams: ApiTeam[]; fixtures: ApiFixture[]; }
 
-// Global in-memory store
 const MOCK_DB = new Map<number, LeagueData>();
-const STORAGE_KEY = 'ultratable_mock_db_v1';
+const STORAGE_KEY = 'ultratable_mock_db_v2';
 
-// Safe Storage Access
 function getStorage(): Storage | null {
-    try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            return window.localStorage;
-        }
-    } catch (e) {
-        console.warn('LocalStorage access failed', e);
-    }
+    try { if (typeof window !== 'undefined' && window.localStorage) return window.localStorage; } catch (e) { console.warn('LocalStorage access failed', e); }
     return null;
 }
 
 function loadMockDB() {
     const storage = getStorage();
     if (!storage) return;
-
     try {
         const raw = storage.getItem(STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-                parsed.forEach(([key, value]) => {
-                    MOCK_DB.set(Number(key), value);
-                });
-            }
+            if (Array.isArray(parsed)) parsed.forEach(([key, value]) => MOCK_DB.set(Number(key), value));
         }
-    } catch (e) {
-        console.warn('Failed to load mock DB', e);
-    }
+    } catch (e) { console.warn('Failed to load mock DB', e); }
 }
 
 function saveMockDB() {
     const storage = getStorage();
     if (!storage) return;
-
-    try {
-        const entries = Array.from(MOCK_DB.entries());
-        storage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch (e) {
-        console.warn('Failed to save mock DB', e);
-    }
+    try { storage.setItem(STORAGE_KEY, JSON.stringify(Array.from(MOCK_DB.entries()))); } catch (e) { console.warn('Failed to save mock DB', e); }
 }
 
-// Initialize once
 loadMockDB();
 
-// Helper to determine theme from league config
 function getLeagueTheme(leagueId: number): 'scifi' | 'fantasy' {
     const league = LEAGUES[leagueId];
-    if (!league) return 'scifi'; // Default
-
-    const integrationType = league.integrations?.basicTeamInfo || 'mock-scifi';
-    return integrationType.includes('fantasy') ? 'fantasy' : 'scifi';
+    return league?.integrations?.basicTeamInfo?.includes('fantasy') ? 'fantasy' : 'scifi';
 }
 
-// Helper to get provider name from league
-function getProviderName(leagueId: number): string {
-    const league = LEAGUES[leagueId];
-    return league?.integrations?.basicTeamInfo || 'mock-scifi';
+function getProviderName(leagueId: number): IntegrationName {
+    return (LEAGUES[leagueId]?.integrations?.basicTeamInfo as IntegrationName) || ('mock-scifi' as IntegrationName);
 }
 
-function getOrGenerateLeagueData(leagueId: number): LeagueData {
-    if (MOCK_DB.has(leagueId)) {
-        return MOCK_DB.get(leagueId)!;
-    }
-
+async function getOrGenerateLeagueData(leagueId: number): Promise<LeagueData> {
+    if (MOCK_DB.has(leagueId)) return MOCK_DB.get(leagueId)!;
     const theme = getLeagueTheme(leagueId);
     const names = theme === 'fantasy' ? FANTASY_TEAM_NAMES : SCIFI_TEAM_NAMES;
     const baseId = theme === 'fantasy' ? 2000 : 1000;
-
-    // Generate Teams
     const teams = names.map((name, i) => generateMockTeam(baseId + i, name, theme));
-
-    // Generate Fixtures
-    const fixtures = generateFixturesForLeague(leagueId, teams);
-
+    const fixtures = await generateFixturesForLeague(leagueId, teams);
     const data = { teams, fixtures };
     MOCK_DB.set(leagueId, data);
-    saveMockDB(); // Persist
+    saveMockDB();
     return data;
 }
 
@@ -310,79 +207,65 @@ function getOrGenerateLeagueData(leagueId: number): LeagueData {
 
 export class MockProvider implements DataProvider {
     async getTeams(leagueId: number, season: number): Promise<Team[]> {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const data = getOrGenerateLeagueData(leagueId);
-                const provider = getProviderName(leagueId);
-                resolve(data.teams.map(t => mapTeam(provider, t)));
-            }, 300);
-        });
+        const data = await getOrGenerateLeagueData(leagueId);
+        const provider = getProviderName(leagueId);
+        return Promise.all(data.teams.map(t => mapTeam(provider, t)));
     }
 
     async getFixtures(leagueId: number, season: number): Promise<Fixture[]> {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const data = getOrGenerateLeagueData(leagueId);
-                const provider = getProviderName(leagueId);
-                resolve(data.fixtures.map(f => mapFixture(provider, f)));
-            }, 300);
-        });
+        const data = await getOrGenerateLeagueData(leagueId);
+        const provider = getProviderName(leagueId);
+        return Promise.all(data.fixtures.map(f => mapFixture(provider, f)));
     }
 
-    async getStandings(leagueId: number, season: number): Promise<StandingsRow[]> {
-        return []; // Handled by DataCompiler
-    }
+    async getStandings(leagueId: number, season: number): Promise<StandingsRow[]> { return []; }
 
     async getFixtureDetails(fixtureId: string): Promise<Fixture> {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                const externalId = parseInt(fixtureId.split(':').pop() || fixtureId, 10);
-                const leagueId = Math.floor(externalId / 10000);
+        let externalIdStr = fixtureId.split(':').pop() || fixtureId;
 
-                // Ensure data exists
-                const data = getOrGenerateLeagueData(leagueId);
-                const cached = data.fixtures.find(f => f.fixture.id === externalId);
-                const provider = getProviderName(leagueId);
-
-                if (cached) {
-                    resolve(mapFixture(provider, cached));
-                } else {
-                    console.error(`Fixture ${fixtureId} not found in mock DB`);
-                    reject(new Error('Fixture not found'));
-                }
-            }, 300);
-        });
-    }
-
-    async getEvents(fixtureId: number): Promise<ApiEvent[]> {
-        // Mock provider doesn't generate events
-        return [];
-    }
-
-    async getLineups(fixtureId: string): Promise<MatchLineup[]> {
-        // Deterministic lineup generation based on fixture
-        const externalId = parseInt(fixtureId.split(':').pop() || '0', 10);
-        const leagueId = Math.floor(externalId / 10000);
-        const data = getOrGenerateLeagueData(leagueId);
-        const provider = getProviderName(leagueId);
-
-        // Find the specific fixture to get correct team names and IDs
-        const fixture = data.fixtures.find(f => f.fixture.id === externalId);
-        if (fixture) {
-            return [
-                generateMockLineup(fixture.teams.home.name, provider, fixture.teams.home.id),
-                generateMockLineup(fixture.teams.away.name, provider, fixture.teams.away.id)
-            ];
+        // Resolve internal NanoID if needed
+        if (!fixtureId.includes(':')) {
+            const record = await db.mappings.where('internalId').equals(fixtureId).first();
+            if (record) externalIdStr = record.externalId;
         }
 
-        // Fallback if fixture not found (shouldn't happen)
+        const externalId = parseInt(externalIdStr, 10);
+        const leagueId = Math.floor(externalId / 10000);
+        const data = await getOrGenerateLeagueData(leagueId);
+        const cached = data.fixtures.find(f => f.fixture.id === externalId);
+        const provider = getProviderName(leagueId);
+        if (cached) return mapFixture(provider, cached);
+        throw new Error('Fixture not found');
+    }
+
+    async getEvents(fixtureId: number): Promise<ApiEvent[]> { return []; }
+
+    async getLineups(fixtureId: string): Promise<MatchLineup[]> {
+        let externalIdStr = fixtureId.split(':').pop() || '0';
+
+        // Resolve internal NanoID if needed
+        if (!fixtureId.includes(':')) {
+            const record = await db.mappings.where('internalId').equals(fixtureId).first();
+            if (record) externalIdStr = record.externalId;
+        }
+
+        const externalId = parseInt(externalIdStr, 10);
+        const leagueId = Math.floor(externalId / 10000);
+        const data = await getOrGenerateLeagueData(leagueId);
+        const provider = getProviderName(leagueId);
+        const fixture = data.fixtures.find(f => f.fixture.id === externalId);
+        if (fixture) {
+            return Promise.all([
+                generateMockLineup(fixture.teams.home.name, provider, fixture.teams.home.id),
+                generateMockLineup(fixture.teams.away.name, provider, fixture.teams.away.id)
+            ]);
+        }
         const teams = data.teams.slice(0, 2);
-        return [
+        return Promise.all([
             generateMockLineup(teams[0]?.team.name || 'Home', provider, teams[0]?.team.id || 0),
             generateMockLineup(teams[1]?.team.name || 'Away', provider, teams[1]?.team.id || 0)
-        ];
+        ]);
     }
 }
 
-// Export singleton instance
 export const mockProvider = new MockProvider();

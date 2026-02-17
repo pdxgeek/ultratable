@@ -1,6 +1,5 @@
 import type {
     ApiFixture,
-    ApiTeam,
     Fixture,
     FixtureStatus,
     FormResult,
@@ -63,7 +62,7 @@ export function transformFixtures(apiFixtures: ApiFixture[]): Fixture[] {
     // We should ensure it returns Fixture with new fields.
     return apiFixtures.map((f) => ({
         id: f.fixture.id.toString(), // Ensure string
-        integrationId: `api-football:${f.fixture.id}`, // Placeholder if used
+        externalReferences: [{ integrationName: 'api-football' as any, remoteId: f.fixture.id.toString() }],
         commonName: `${f.teams.home.name} vs ${f.teams.away.name}`,
         homeTeamId: f.teams.home.id.toString(),
         awayTeamId: f.teams.away.id.toString(),
@@ -72,6 +71,7 @@ export function transformFixtures(apiFixtures: ApiFixture[]): Fixture[] {
         date: f.fixture.date,
         timestamp: f.fixture.timestamp,
         venue: f.fixture.venue?.name ?? null,
+        venueImage: null,
         city: f.fixture.venue?.city ?? null,
         round: f.league.round,
         gameweek: parseInt(f.league.round.replace(/[^0-9]/g, ''), 10) || 0,
@@ -82,6 +82,7 @@ export function transformFixtures(apiFixtures: ApiFixture[]): Fixture[] {
         awayGoals: f.goals.away,
         events: undefined,
         eventsLoaded: false,
+        lastRefreshed: new Date().toISOString(),
     }));
 }
 
@@ -244,6 +245,7 @@ export function compileStandings(
             recentFixtures,
             nextFixture,
             description: null,
+            lastRefreshed: new Date().toISOString(),
         });
     }
 

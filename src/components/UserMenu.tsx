@@ -58,7 +58,7 @@ export function UserMenu() {
                     height: '40px',
                     borderRadius: '50%',
                     border: '2px solid #e2e8f0',
-                    background: user.avatar ? `url(${user.avatar}) center/cover` : '#667eea',
+                    background: authService.isAdmin() && user.avatar ? `url(${user.avatar}) center/cover` : '#667eea',
                     color: 'white',
                     fontSize: '0.875rem',
                     fontWeight: '600',
@@ -78,7 +78,15 @@ export function UserMenu() {
                     e.currentTarget.style.transform = 'scale(1)';
                 }}
             >
-                {!user.avatar && getInitials(user.displayName)}
+                {authService.isAdmin() ? (
+                    user.avatar ? (
+                        <div style={{ width: '100%', height: '100%', background: `url(${user.avatar}) center/cover` }} />
+                    ) : (
+                        getInitials(user.displayName)
+                    )
+                ) : (
+                    <span style={{ fontSize: '1.2rem' }}>👤</span>
+                )}
             </button>
 
             {/* Dropdown Menu */}
@@ -117,59 +125,68 @@ export function UserMenu() {
 
                     {/* Menu Items */}
                     <div style={{ padding: '0.5rem' }}>
-                        <button
-                            onClick={() => {
-                                navigate('/account');
-                                setIsOpen(false);
-                            }}
-                            style={{
-                                width: '100%',
-                                padding: '0.75rem 1rem',
-                                textAlign: 'left',
-                                background: 'transparent',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                color: '#2d3748',
-                                transition: 'background 0.2s',
-                            }}
-                            onMouseOver={(e) => {
-                                e.currentTarget.style.background = '#f7fafc';
-                            }}
-                            onMouseOut={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                            }}
-                        >
-                            Account Settings
-                        </button>
+                        {authService.isAdmin() && (
+                            <>
+                                <button
+                                    onClick={() => {
+                                        navigate('/account');
+                                        setIsOpen(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        textAlign: 'left',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#2d3748',
+                                        transition: 'background 0.2s',
+                                    }}
+                                    onMouseOver={(e) => {
+                                        e.currentTarget.style.background = '#f7fafc';
+                                    }}
+                                    onMouseOut={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                    }}
+                                >
+                                    Account Settings
+                                </button>
 
-                        <button
-                            onClick={() => {
-                                navigate('/settings');
-                                setIsOpen(false);
-                            }}
-                            style={{
-                                width: '100%',
-                                padding: '0.75rem 1rem',
-                                textAlign: 'left',
-                                background: 'transparent',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                color: '#2d3748',
-                                transition: 'background 0.2s',
-                            }}
-                            onMouseOver={(e) => {
-                                e.currentTarget.style.background = '#f7fafc';
-                            }}
-                            onMouseOut={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                            }}
-                        >
-                            App Settings
-                        </button>
+                                <button
+                                    onClick={() => {
+                                        navigate('/settings');
+                                        setIsOpen(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        textAlign: 'left',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#2d3748',
+                                        transition: 'background 0.2s',
+                                    }}
+                                    onMouseOver={(e) => {
+                                        e.currentTarget.style.background = '#f7fafc';
+                                    }}
+                                    onMouseOut={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                    }}
+                                >
+                                    App Settings
+                                </button>
+                            </>
+                        )}
+                        {authService.isGuest() && (
+                            <div style={{ padding: '0.75rem 1rem', fontSize: '0.875rem', color: '#718096' }}>
+                                Sign in to access settings and profile.
+                            </div>
+                        )}
                     </div>
 
                     {/* Logout */}

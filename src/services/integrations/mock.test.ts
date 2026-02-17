@@ -20,12 +20,13 @@ describe('Mock Data Provider', () => {
             expect(teams[0].id).toBeTruthy();
         });
 
-        it('should have valid integrationIds', async () => {
+        it('should have valid integration references', async () => {
             const teams = await mockProvider.getTeams(9999, 2024);
 
             for (const team of teams) {
                 expect(team.id).toBeTruthy();
-                expect(team.integrationId).toMatch(/^mock-scifi:\d+$/);
+                expect(team.externalReferences[0].integrationName).toBe('mock-scifi');
+                expect(team.externalReferences[0].remoteId).toMatch(/^\d+$/);
             }
         });
 
@@ -68,37 +69,27 @@ describe('Mock Data Provider', () => {
             expect(typeof fixture.status).toBe('string');
         });
 
-        it.skip('should have past fixtures with scores', async () => {
+        it('should have past fixtures with scores', async () => {
             const fixtures = await mockProvider.getFixtures(9999, 2024);
-            // Check for various completed status values
-            const pastFixtures = fixtures.filter(f =>
-                f.status === 'FT' || f.status === 'played' || f.status === 'AET' || f.status === 'PEN'
-            );
+            const pastFixtures = fixtures.filter(f => f.status === 'played');
 
-            // Mock league might be old, so allow 0 past fixtures
             if (pastFixtures.length > 0) {
                 for (const fixture of pastFixtures.slice(0, 5)) {
-                    expect(fixture.goalsHome).toBeGreaterThanOrEqual(0);
-                    expect(fixture.goalsAway).toBeGreaterThanOrEqual(0);
+                    expect(fixture.homeGoals).toBeGreaterThanOrEqual(0);
+                    expect(fixture.awayGoals).toBeGreaterThanOrEqual(0);
                 }
-            } else {
-                expect(pastFixtures.length).toBe(0);
             }
         });
 
         it('should have future fixtures without scores', async () => {
             const fixtures = await mockProvider.getFixtures(9999, 2024);
-            const futureFixtures = fixtures.filter(f => f.status === 'NS');
+            const futureFixtures = fixtures.filter(f => f.status === 'scheduled');
 
-            // If there are future fixtures, they should not have scores
             if (futureFixtures.length > 0) {
                 for (const fixture of futureFixtures.slice(0, 5)) {
-                    expect(fixture.goalsHome).toBeNull();
-                    expect(fixture.goalsAway).toBeNull();
+                    expect(fixture.homeGoals).toBeNull();
+                    expect(fixture.awayGoals).toBeNull();
                 }
-            } else {
-                // All fixtures are in the past - this is valid for an old season
-                expect(futureFixtures.length).toBe(0);
             }
         });
     });
@@ -126,9 +117,10 @@ describe('Mock Data Provider', () => {
     describe('getLineups', () => {
         it('should generate lineups for both teams', async () => {
             const fixtures = await mockProvider.getFixtures(9999, 2024);
-            const fixtureId = fixtures[0].integrationId;
+            const ref = fixtures[0].externalReferences[0];
+            const lineupId = `${ref.integrationName}:${ref.remoteId}`;
 
-            const lineups = await mockProvider.getLineups(fixtureId);
+            const lineups = await mockProvider.getLineups(lineupId);
 
             expect(lineups).toBeDefined();
             expect(lineups.length).toBe(2);
@@ -136,8 +128,9 @@ describe('Mock Data Provider', () => {
 
         it('should have valid lineup structure', async () => {
             const fixtures = await mockProvider.getFixtures(9999, 2024);
-            const fixtureId = fixtures[0].integrationId;
-            const lineups = await mockProvider.getLineups(fixtureId);
+            const ref = fixtures[0].externalReferences[0];
+            const lineupId = `${ref.integrationName}:${ref.remoteId}`;
+            const lineups = await mockProvider.getLineups(lineupId);
 
             const lineup = lineups[0];
             expect(lineup.team.name).toBeTruthy();
@@ -148,20 +141,25 @@ describe('Mock Data Provider', () => {
             expect(lineup.formation).toBe('4-4-2');
         });
 
-        it('should have players with valid integrationIds', async () => {
+        it('should have players with valid integration references', async () => {
             const fixtures = await mockProvider.getFixtures(9999, 2024);
-            const fixtureId = fixtures[0].integrationId;
-            const lineups = await mockProvider.getLineups(fixtureId);
+            const ref = fixtures[0].externalReferences[0];
+            const lineupId = `${ref.integrationName}:${ref.remoteId}`;
+            const lineups = await mockProvider.getLineups(lineupId);
 
             for (const lineup of lineups) {
                 for (const starter of lineup.startXI) {
-                    expect(starter.player.integrationId).toMatch(/^mock-scifi:player_\d+_\d+$/);
+                    const playerRef = starter.player.externalReferences[0];
+                    expect(playerRef.integrationName).toBe('mock-scifi');
+                    expect(playerRef.remoteId).toMatch(/^player_\d+_\d+$/);
                     expect(starter.player.number).toBeGreaterThan(0);
                     expect(starter.player.pos).toMatch(/^(GK|DF|MF|FW)$/);
                 }
 
                 for (const sub of lineup.substitutes) {
-                    expect(sub.player.integrationId).toMatch(/^mock-scifi:player_\d+_sub_\d+$/);
+                    const playerRef = sub.player.externalReferences[0];
+                    expect(playerRef.integrationName).toBe('mock-scifi');
+                    expect(playerRef.remoteId).toMatch(/^player_\d+_sub_\d+$/);
                 }
             }
         });

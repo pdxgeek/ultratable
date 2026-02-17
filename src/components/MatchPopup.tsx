@@ -4,6 +4,7 @@ import type { Fixture, MatchEvent, Team } from '../types';
 import { fetchEvents } from '../services/apiFootball';
 import { transformEvents } from '../services/dataCompiler';
 import { gfxRegistry } from '../services/gfxRegistry';
+import { useLeague } from '../context/LeagueContext';
 import { formatFullDateTime } from '../utils/dateUtils';
 import TeamLogo from './TeamLogo';
 import { useCachedImage } from '../hooks/useCachedImage';
@@ -31,6 +32,7 @@ export default function MatchPopup({
 }: MatchPopupProps) {
     const navigate = useNavigate();
     const { hidePopup } = usePopup();
+    const { activeLeague: league } = useLeague();
 
     const [events, setEvents] = useState<MatchEvent[] | null>(
         fixture.events ?? null
@@ -63,8 +65,8 @@ export default function MatchPopup({
 
         // Skip fetch if no API key for real providers
         // Provider will handle whether it needs a key or not
-        const hasKey = localStorage.getItem('ut_api_key');
-        const isApiFootball = fixture.integrationId.startsWith('api-football:');
+        const hasKey = localStorage.getItem('ultratable_api_key');
+        const isApiFootball = fixture.externalReferences.some(r => r.integrationName === 'api-football');
 
         if (!hasKey && isApiFootball) {
             // No key for real API
@@ -73,7 +75,7 @@ export default function MatchPopup({
 
         setLoading(true);
         try {
-            const apiEvents = await fetchEvents(fixture.id);
+            const apiEvents = await fetchEvents(league, fixture.id);
             const transformed = transformEvents(apiEvents);
             setEvents(transformed);
             loadedEventsCache.add(fixture.id); // Mark as loaded
@@ -82,7 +84,7 @@ export default function MatchPopup({
         } finally {
             setLoading(false);
         }
-    }, [fixture.id, fixture.integrationId, fixture.status, events]);
+    }, [fixture.id, fixture.status, events]);
 
     useEffect(() => {
         if (!events && fixture.status === 'played' && !loading) {

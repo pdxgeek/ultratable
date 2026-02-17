@@ -31,7 +31,7 @@ export class ApiFootballProvider implements DataProvider {
             { league: leagueId, season },
             `teams_${leagueId}_${season}`
         );
-        return raw.map(t => mapTeam('api-football', t));
+        return Promise.all(raw.map(t => mapTeam('api-football', t)));
     }
 
     async getFixtures(leagueId: number, season: number): Promise<Fixture[]> {
@@ -40,7 +40,7 @@ export class ApiFootballProvider implements DataProvider {
             { league: leagueId, season },
             `fixtures_${leagueId}_${season}`
         );
-        return raw.map(f => mapFixture('api-football', f));
+        return Promise.all(raw.map(f => mapFixture('api-football', f)));
     }
 
     async getStandings(leagueId: number, season: number): Promise<StandingsRow[]> {
@@ -59,11 +59,11 @@ export class ApiFootballProvider implements DataProvider {
                 standings = raw as unknown as ApiStanding[];
             }
         }
-        return standings.map(s => mapStanding('api-football', s));
+        return Promise.all(standings.map(s => mapStanding('api-football', s)));
     }
 
     async getFixtureDetails(fixtureId: string): Promise<Fixture> {
-        const externalId = parseInt(fixtureId.split(':').pop() || fixtureId, 10);
+        const externalId = parseInt(fixtureId, 10);
         const response = await apiGet<ApiFixture[]>(
             'fixtures',
             { id: externalId },
@@ -85,7 +85,7 @@ export class ApiFootballProvider implements DataProvider {
     }
 
     async getLineups(fixtureId: string): Promise<MatchLineup[]> {
-        const externalId = parseInt(fixtureId.split(':').pop() || fixtureId, 10);
+        const externalId = parseInt(fixtureId, 10);
         const raw = await apiGet<ApiLineupResponse[]>(
             'fixtures/lineups',
             { fixture: externalId },
@@ -93,29 +93,35 @@ export class ApiFootballProvider implements DataProvider {
         );
 
         // Map API response to our internal structure
-        return raw.map(lineup => {
-            const mapPlayer = (apiPlayer: ApiLineupPlayer): { player: Player } => {
-                const playerId = getInternalId('api-football', 'player', apiPlayer.player.id);
+        return Promise.all(raw.map(async lineup => {
+            const mapPlayerItem = async (apiPlayer: ApiLineupPlayer): Promise<{ player: Player }> => {
+                const playerId = await getInternalId('api-football', 'player', apiPlayer.player.id);
                 return {
                     player: {
                         id: playerId,
-                        integrationId: `api-football:${apiPlayer.player.id}`,
+                        externalReferences: [{ integrationName: 'api-football', remoteId: String(apiPlayer.player.id) }],
                         commonName: apiPlayer.player.name,
                         number: apiPlayer.player.number,
                         pos: apiPlayer.player.pos as 'GK' | 'DF' | 'MF' | 'FW',
                         grid: apiPlayer.player.grid,
                         photo: apiPlayer.player.photo,
+                        lastRefreshed: new Date().toISOString(),
                     }
                 };
             };
+
+            const [startXI, substitutes] = await Promise.all([
+                Promise.all(lineup.startXI.map(mapPlayerItem)),
+                Promise.all(lineup.substitutes.map(mapPlayerItem))
+            ]);
 
             return {
                 team: lineup.team,
                 coach: lineup.coach,
                 formation: lineup.formation,
-                startXI: lineup.startXI.map(mapPlayer),
-                substitutes: lineup.substitutes.map(mapPlayer),
+                startXI,
+                substitutes,
             };
-        });
+        }));
     }
 }

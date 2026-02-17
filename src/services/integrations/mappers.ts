@@ -1,13 +1,13 @@
-import type { ApiTeam, ApiFixture, ApiStanding, Team, Fixture, StandingsRow, FormEntry, MatchLineup } from '../../types';
+import type { ApiTeam, ApiFixture, ApiStanding, Team, Fixture, StandingsRow, IntegrationName, MatchLineup, Player } from '../../types';
 import { getInternalId } from '../idMap';
 
-export function mapTeam(provider: string, apiTeam: ApiTeam): Team {
-    const externalId = apiTeam.team.id;
-    const internalId = getInternalId(provider, 'team', externalId);
+export async function mapTeam(provider: IntegrationName, apiTeam: ApiTeam): Promise<Team> {
+    const externalId = String(apiTeam.team.id);
+    const internalId = await getInternalId(provider, 'team', externalId);
 
     return {
         id: internalId,
-        integrationId: `${provider}:${externalId}`,
+        externalReferences: [{ integrationName: provider, remoteId: externalId }],
         commonName: apiTeam.team.name,
         shortCode: apiTeam.team.code,
         venue: apiTeam.venue.name,
@@ -15,7 +15,8 @@ export function mapTeam(provider: string, apiTeam: ApiTeam): Team {
         city: apiTeam.venue.city,
         logo: apiTeam.team.logo,
         founded: apiTeam.team.founded || undefined,
-        colors: [], // API-Football doesn't provide colors in this endpoint usually
+        colors: [],
+        lastRefreshed: new Date().toISOString(),
     };
 }
 
@@ -49,16 +50,16 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'cancelled'
     }
 }
 
-export function mapFixture(provider: string, apiFixture: ApiFixture): Fixture {
-    const externalId = apiFixture.fixture.id;
-    const internalId = getInternalId(provider, 'fixture', externalId);
+export async function mapFixture(provider: IntegrationName, apiFixture: ApiFixture): Promise<Fixture> {
+    const externalId = String(apiFixture.fixture.id);
+    const internalId = await getInternalId(provider, 'fixture', externalId);
 
-    const homeTeamId = getInternalId(provider, 'team', apiFixture.teams.home.id);
-    const awayTeamId = getInternalId(provider, 'team', apiFixture.teams.away.id);
+    const homeTeamId = await getInternalId(provider, 'team', apiFixture.teams.home.id);
+    const awayTeamId = await getInternalId(provider, 'team', apiFixture.teams.away.id);
 
     return {
         id: internalId,
-        integrationId: `${provider}:${externalId}`,
+        externalReferences: [{ integrationName: provider, remoteId: externalId }],
         commonName: `${apiFixture.teams.home.name} vs ${apiFixture.teams.away.name}`,
         homeTeamId,
         awayTeamId,
@@ -78,7 +79,7 @@ export function mapFixture(provider: string, apiFixture: ApiFixture): Fixture {
         venueImage: (apiFixture.fixture.venue as any).image ?? null,
         city: apiFixture.fixture.venue.city,
         round: apiFixture.league.round,
-        gameweek: parseInt(apiFixture.league.round.match(/\d+/)?.pop() || '0', 10), // Heuristic
+        gameweek: parseInt(apiFixture.league.round.match(/\d+/)?.pop() || '0', 10),
         status: mapStatus(apiFixture.fixture.status.short),
         statusShort: apiFixture.fixture.status.short,
         statusLong: apiFixture.fixture.status.long,
@@ -86,11 +87,12 @@ export function mapFixture(provider: string, apiFixture: ApiFixture): Fixture {
         awayGoals: apiFixture.goals.away,
         eventsLoaded: false,
         lineups: apiFixture.lineups,
+        lastRefreshed: new Date().toISOString(),
     };
 }
 
-export function mapStanding(provider: string, apiStanding: ApiStanding): StandingsRow {
-    const teamId = getInternalId(provider, 'team', apiStanding.team.id);
+export async function mapStanding(provider: IntegrationName, apiStanding: ApiStanding): Promise<StandingsRow> {
+    const teamId = await getInternalId(provider, 'team', apiStanding.team.id);
 
     return {
         position: apiStanding.rank,
@@ -108,11 +110,28 @@ export function mapStanding(provider: string, apiStanding: ApiStanding): Standin
         goalDifference: apiStanding.goalsDiff,
         points: apiStanding.points,
         form: (apiStanding.form || '').split('').map(char => ({
-            result: char as any, // W, D, L
-            fixtureId: '', // We don't have fixture IDs in form string
+            result: char as any,
+            fixtureId: '',
         })),
         recentFixtures: [],
         nextFixture: null,
         description: apiStanding.description,
+        lastRefreshed: new Date().toISOString(),
+    };
+}
+
+export async function mapPlayer(provider: IntegrationName, apiPlayer: any): Promise<Player> {
+    const externalId = String(apiPlayer.player.id);
+    const internalId = await getInternalId(provider, 'player', externalId);
+
+    return {
+        id: internalId,
+        externalReferences: [{ integrationName: provider, remoteId: externalId }],
+        commonName: apiPlayer.player.name,
+        number: apiPlayer.player.number,
+        pos: apiPlayer.player.pos as any,
+        grid: apiPlayer.player.grid,
+        photo: apiPlayer.player.photo,
+        lastRefreshed: new Date().toISOString(),
     };
 }

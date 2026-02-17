@@ -1,29 +1,20 @@
 import { useState, useEffect } from 'react';
 import { checkQuota } from '../services/apiFootball';
 import { getCacheAge } from '../services/cache';
+import { useLeague } from '../context/LeagueContext';
 
-import type { LeagueConfig } from '../types';
-
-interface SyncBarProps {
-    leagueName?: string;
-    leagueId: string; // Changed to string key
-    season?: number;
-    syncing: boolean;
-    onSync: () => void;
-    onLeagueChange: (leagueKey: string) => void;
-    leagues?: Record<string, LeagueConfig>;
-}
 
 export default function SyncBar({
-    // leagueName,
-    leagueId,
-    // season,
     syncing,
     onSync,
-    onLeagueChange,
-    leagues = {},
-}: SyncBarProps) {
-    const [quota, setQuota] = useState<{ current: number; limit: number } | null>(
+}: { syncing: boolean; onSync: () => void }) {
+    const {
+        activeLeagueKey: leagueId,
+        availableLeagues: leagues,
+        setActiveLeagueKey: onLeagueChange
+    } = useLeague();
+
+    const [, setQuota] = useState<{ current: number; limit: number } | null>(
         null
     );
     const [cacheAge, setCacheAge] = useState<number | null>(null);

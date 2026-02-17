@@ -3,23 +3,22 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef } from 'react';
 import clsx from 'clsx';
 import { fetchFixtureDetails, fetchLineups, fetchEvents } from '../services/apiFootball';
-import type { Fixture } from '../types';
+import type { Fixture, Player } from '../types';
 import { useCachedImage } from '../hooks/useCachedImage';
 import TeamLogo from '../components/TeamLogo';
 import { gfxRegistry } from '../services/gfxRegistry';
 import { fetchPlayersFromLineup } from '../services/playerData';
 import PlayerInfoPopup from '../components/PlayerInfoPopup';
+import { database } from '../services/db';
 
 // Component to handle player photo display
-function PlayerPhoto({ playerId, name, season }: { playerId: string; name: string; season: number }) {
+function PlayerPhoto({ player, name, season }: { player: Player; name: string; season: number }) {
     const [showPopup, setShowPopup] = useState(false);
     const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
     const photoRef = useRef<HTMLDivElement>(null);
 
-    // Try to get photo from graphics registry (will be there after fetchPlayersFromLineup completes)
-    // Extract external ID from internal ID (format: "api-football:12345")
-    const externalId = playerId.split(':')[1];
-    const photoUrl = gfxRegistry.getPlayerPhoto(externalId);
+    // Get photo from graphics registry using the new entity-based lookup
+    const photoUrl = gfxRegistry.getPlayerPhoto(player);
 
     const handleMouseEnter = (e: React.MouseEvent) => {
         setPopupPosition({
@@ -87,7 +86,7 @@ function PlayerPhoto({ playerId, name, season }: { playerId: string; name: strin
             )}
             {showPopup && (
                 <PlayerInfoPopup
-                    playerId={playerId}
+                    player={player}
                     name={name}
                     season={season}
                     position={popupPosition}
@@ -100,43 +99,31 @@ function PlayerPhoto({ playerId, name, season }: { playerId: string; name: strin
 export default function MatchPage() {
     const { id } = useParams();
     const navigate = useNavigate();
-    // ID handling: URL id is string (maybe integrationId or internalId).
-    // Service expects string.
     const fixtureId = id || '';
-
-    // Hook call must be inside component, but we need fixture data first?
-    // Actually, we can't call hook conditionally. 
-    // We need to call it with null if fixture is not loaded.
-    // access fixture.venueImage safely.
-    // But fixture is loaded via useQuery.
-    // So we need to put this hook call AFTER fixture is loaded? 
-    // NO, hooks cannot be conditional.
-    // We must call it at top level.
-    // But we don't have fixture yet.
-    // We can pass undefined/null to hook.
-    // But we need to get fixture from useQuery state... which is lower down.
-    // Wait, useQuery is at top.
-
-    // Let's look at the file again.
-    // useQuery is line 16.
-    // fixture is available there.
-    // So we can call useCachedImage below that.
-
     const queryClient = useQueryClient();
+
+    // 1. Resolve Active League for context
+    const { data: league, isLoading: loadingLeague } = useQuery({
+        queryKey: ['activeLeague'],
+        queryFn: async () => {
+            const key = localStorage.getItem('ultratable_active_league');
+            if (!key) return null;
+            const [idStr, seasonStr] = key.split('_');
+            return database.getLeague(parseInt(idStr), parseInt(seasonStr));
+        }
+    });
 
     const { data: fixture, isLoading: loadingFixture, error: errorFixture } = useQuery({
         queryKey: ['fixture', fixtureId],
-        queryFn: () => fetchFixtureDetails(fixtureId),
-        enabled: !!fixtureId,
+        queryFn: () => fetchFixtureDetails(league!, fixtureId),
+        enabled: !!fixtureId && !!league,
         initialData: () => {
-            // Attempt to find fixture in existing 'fixtures' queries (which are Fixture[])
             const queries = queryClient.getQueriesData<Fixture[]>({ queryKey: ['fixtures'] });
             for (const [_, data] of queries) {
-                // Determine equality. If internalId, match directly. 
-                // If ID is string in both places, simple match.
-                // If fixtureId from param is 'mock:123', and fixture.id is 'nano_xyz', we can't match easily without map.
-                // But typically navigation comes from list which has the IDs.
-                const found = data?.find(f => f.id === fixtureId || f.integrationId === fixtureId);
+                const found = data?.find(f =>
+                    f.id === fixtureId ||
+                    f.externalReferences.some(r => `${r.integrationName}:${r.remoteId}` === fixtureId)
+                );
                 if (found) return found;
             }
             return undefined;
@@ -145,69 +132,68 @@ export default function MatchPage() {
 
     const { data: events = [] } = useQuery({
         queryKey: ['events', fixtureId],
-        queryFn: () => fetchEvents(fixtureId),
-        enabled: !!fixtureId,
+        queryFn: () => fetchEvents(league!, fixtureId),
+        enabled: !!fixtureId && !!league,
     });
 
     const { data: lineups = [] } = useQuery({
         queryKey: ['lineups', fixtureId],
-        queryFn: () => fetchLineups(fixtureId),
-        enabled: !!fixtureId,
+        queryFn: () => fetchLineups(league!, fixtureId),
+        enabled: !!fixtureId && !!league,
     });
 
-    // For venue images: try fixture.venueImage (for mock leagues with direct URLs),
-    // otherwise get from graphics registry (for real leagues which are already cached as blob URLs)
+    // For venue images
     const venueFromRegistry = fixture ? gfxRegistry.getVenue(fixture.homeTeamId) : undefined;
     const venueDirectUrl = useCachedImage(fixture?.venueImage);
     const venueImageUrl = venueDirectUrl || venueFromRegistry;
 
     // Fetch player photos when lineups are loaded
+    const fetchingFixtureId = useRef<string | null>(null);
     const [playerPhotosLoaded, setPlayerPhotosLoaded] = useState(false);
     useEffect(() => {
-        if (!lineups || lineups.length === 0 || playerPhotosLoaded) return;
+        if (!lineups || lineups.length === 0 || playerPhotosLoaded || !fixture || fetchingFixtureId.current === fixtureId) return;
 
-        // Extract player IDs from lineup
         const playerIds: number[] = [];
+        const isApiFootball = fixture.externalReferences.some(r => r.integrationName === 'api-football');
+
+        if (!isApiFootball) {
+            setPlayerPhotosLoaded(true);
+            return;
+        }
+
         lineups.forEach(lineup => {
             lineup.startXI.forEach(item => {
-                // Extract external ID from integrationId (format: "api-football:12345")
-                const externalId = parseInt(item.player.integrationId.split(':')[1]);
-                if (!isNaN(externalId)) {
-                    playerIds.push(externalId);
-                }
+                const ref = item.player.externalReferences.find(r => r.integrationName === 'api-football');
+                if (ref) playerIds.push(parseInt(ref.remoteId));
             });
             lineup.substitutes.forEach(item => {
-                const externalId = parseInt(item.player.integrationId.split(':')[1]);
-                if (!isNaN(externalId)) {
-                    playerIds.push(externalId);
-                }
+                const ref = item.player.externalReferences.find(r => r.integrationName === 'api-football');
+                if (ref) playerIds.push(parseInt(ref.remoteId));
             });
         });
 
-        if (playerIds.length > 0 && fixture) {
-            // Extract season from fixture date (year)
+        if (playerIds.length > 0) {
+            fetchingFixtureId.current = fixtureId;
             const season = new Date(fixture.date).getFullYear();
             fetchPlayersFromLineup(playerIds, season).then(() => {
                 setPlayerPhotosLoaded(true);
-                console.log('Player photos loaded and cached');
+            }).catch(err => {
+                console.error('Failed to load player photos:', err);
+                fetchingFixtureId.current = null; // Allow retry
             });
         }
-    }, [lineups, playerPhotosLoaded, fixture]);
+    }, [lineups, playerPhotosLoaded, fixture, fixtureId]);
 
-    // Only block if we have absolutely no fixture data
+    if (loadingLeague) return <div className="page loading">Resolving League Context...</div>;
     if (loadingFixture && !fixture) return <div className="page loading">Loading Match Details...</div>;
 
-    // Show error if we have no fixture and an error occurred
     const errorMsg = errorFixture instanceof Error ? errorFixture.message : 'Match not found';
     if (!fixture && errorFixture) return <div className="page error">{errorMsg}</div>;
-
     if (!fixture) return <div className="page error">Match not found</div>;
 
     const homeTeam = fixture.homeTeam;
     const awayTeam = fixture.awayTeam;
-    const homeLineup = lineups.find(l => l.team.name === homeTeam.name); // Heuristic match by name if ID differs or using different ID systems
-    // Ideally match by ID. Lineup team has ID. fixture.homeTeamId is string. Lineup.team.id is number (from API).
-    // This mismatch is painful. We should normalize Lineup too or use loose matching.
+    const homeLineup = lineups.find(l => l.team.name === homeTeam.name);
     const awayLineup = lineups.find(l => l.team.name === awayTeam.name);
 
     return (
@@ -234,7 +220,7 @@ export default function MatchPage() {
                             <ul className="player-list">
                                 {homeLineup.startXI.map(item => (
                                     <li key={item.player.id} className="player-item">
-                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
+                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
                                         <span className="player-number">{item.player.number}</span>
                                         <span className="player-name">{item.player.commonName}</span>
                                         <span className="player-pos">{item.player.pos}</span>
@@ -341,7 +327,7 @@ export default function MatchPage() {
                                             <span className="player-name">{item.player.commonName}</span>
                                             <span className="player-number">{item.player.number}</span>
                                         </div>
-                                        <PlayerPhoto playerId={item.player.integrationId} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
+                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
                                     </li>
                                 ))}
                             </ul>

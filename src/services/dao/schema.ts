@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { IntegrationReference } from '../../types';
 
 // ─── Schema Interfaces ─────────────────────────────────────────────────────
 
@@ -51,11 +52,13 @@ export interface LogRecord {
 export interface GraphicRecord {
     id: string;              // Primary key (graphic ID)
     type: string;            // 'team_logo', 'player_photo', 'venue_image', etc.
-    associationId: string;   // e.g., 'team:33', 'player:api-football:306'
-    integrationId: string;   // e.g., 'api-football:33'
+    associationId: string;   // e.g., NanoID of the team/player
+    blobHash?: string;       // SHA-256 hash of the content (for deduplication)
+    externalReferences: IntegrationReference[];
     commonName: string;      // Human-readable name
     sourceUrl: string;       // Original URL
     timestamp: number;       // When registered
+    lastRefreshed?: string;  // ISO UTC timestamp
 }
 
 // ─── User & Auth Records ───────────────────────────────────────────────────
@@ -65,6 +68,7 @@ export interface UserRecord {
     email?: string;          // Primary email
     displayName?: string;    // User's chosen display name
     avatar?: string;         // Profile picture URL
+    role: 'admin' | 'guest'; // User's role
     createdAt: number;
     lastLogin: number;
 }
@@ -131,6 +135,38 @@ export interface PredictionRecord {
     updatedAt: number;
 }
 
+export interface MappingRecord {
+    key: string;          // Primary key: "{provider}:{type}:{externalId}"
+    internalId: string;   // NanoID
+    externalId: string;   // Original ID from provider
+    type: string;         // 'team', 'fixture', etc.
+    provider: string;     // 'api-football', etc.
+    timestamp: number;
+}
+
+// ─── Domain Entity Records ─────────────────────────────────────────────────
+
+export interface TeamRecord {
+    id: string;              // Primary key (NanoID)
+    referenceKeys: string[]; // ['api-football:123', 'mock:456']
+    data: any;               // Full Team object
+    updatedAt: number;
+}
+
+export interface FixtureRecord {
+    id: string;              // Primary key (NanoID)
+    referenceKeys: string[]; // ['api-football:fixture:33']
+    data: any;               // Full Fixture object
+    updatedAt: number;
+}
+
+export interface PlayerRecord {
+    id: string;              // Primary key (NanoID)
+    referenceKeys: string[]; // ['api-football:player:123']
+    data: any;               // Full Player object
+    updatedAt: number;
+}
+
 // ─── Database Definition ───────────────────────────────────────────────────
 
 export class UltraTableDB extends Dexie {
@@ -147,6 +183,12 @@ export class UltraTableDB extends Dexie {
     oauthConnections!: Table<OAuthConnectionRecord, string>;
     predictorProfiles!: Table<PredictorProfileRecord, string>;
     predictions!: Table<PredictionRecord, string>;
+    mappings!: Table<MappingRecord, string>;
+
+    // Domain Store (v7)
+    teams!: Table<TeamRecord, string>;
+    fixtures!: Table<FixtureRecord, string>;
+    players!: Table<PlayerRecord, string>;
 
     constructor() {
         super('ultratable');
@@ -188,6 +230,137 @@ export class UltraTableDB extends Dexie {
             oauthConnections: 'id, userId, [provider+providerId], lastUsed',
             predictorProfiles: 'id, userId, slug, isPublic, createdAt',
             predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+        });
+
+        // Add roles in version 4
+        this.version(4).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+        });
+
+        // Mapping migration in version 5
+        this.version(5).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+        });
+
+        // ID Persistence in version 6
+        this.version(6).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+        });
+
+        // Domain Store in version 7
+        this.version(7).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+            // Domain Tables
+            teams: 'id, *referenceKeys',
+            fixtures: 'id, *referenceKeys',
+            players: 'id, *referenceKeys',
+        });
+
+        // Version 8: Binary Deduplication & Multi-Photo support
+        this.version(8).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, blobHash, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+            teams: 'id, *referenceKeys',
+            fixtures: 'id, *referenceKeys',
+            players: 'id, *referenceKeys',
+        }).upgrade(async (tx) => {
+            // Migration: Re-index blobs by hash and link graphics
+            const graphics = await tx.table('graphics').toArray();
+            const blobs = await tx.table('blobs').toArray();
+
+            const blobMap = new Map(blobs.map(b => [b.id, b.blob]));
+
+            // Note: In an upgrade hook, we can't easily use async calculateHash 
+            // from idUtils because of transaction constraints and bundle issues.
+            // However, Dexie's upgrade is async. We'll use a local simple hash for migration
+            // or perform a 2-step migration if SHA-256 is slow. 
+            // For now, let's assume we can use subtle crypto here.
+
+            for (const graphic of graphics) {
+                const blob = blobMap.get(graphic.id);
+                if (blob) {
+                    try {
+                        const buffer = await blob.arrayBuffer();
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+                        // Update graphic to point to hash
+                        await tx.table('graphics').where('id').equals(graphic.id).modify({ blobHash: hash });
+
+                        // Ensure blob exists under hash key
+                        await tx.table('blobs').put({
+                            id: hash,
+                            blob: blob,
+                            timestamp: Date.now()
+                        });
+
+                        // Delete old blob if it was keyed by graphic ID
+                        if (graphic.id !== hash) {
+                            await tx.table('blobs').delete(graphic.id);
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to migrate graphic ${graphic.id}:`, e);
+                    }
+                }
+            }
         });
     }
 }

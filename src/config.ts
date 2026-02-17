@@ -6,7 +6,7 @@ const getStorageItem = (key: string) => {
     return localStorage.getItem(key);
 };
 
-export const API_KEY = getStorageItem('ut_api_key') || '';
+export const API_KEY = getStorageItem('ultratable_api_key') || '';
 // Use proxy in development to avoid CORS issues
 export const BASE_URL = import.meta.env.DEV
     ? '/api/football'

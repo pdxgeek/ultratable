@@ -32,7 +32,7 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
 
     useEffect(() => {
         // Load existing key from localStorage on mount
-        const current = localStorage.getItem('ut_api_key');
+        const current = localStorage.getItem('ultratable_api_key');
         if (current) setKey(current);
 
         // Load quota info

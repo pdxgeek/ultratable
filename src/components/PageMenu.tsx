@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { authService } from '../services/auth/authService';
 
 export function PageMenu() {
     const [isOpen, setIsOpen] = useState(false);
@@ -21,10 +22,13 @@ export function PageMenu() {
         }
     }, [isOpen]);
 
+    const isAdmin = authService.isAdmin();
     const pages = [
         { path: '/', label: 'Table' },
-        { path: '/data', label: 'Data' },
-        { path: '/settings', label: 'Settings' },
+        ...(isAdmin ? [
+            { path: '/data', label: 'Data' },
+            { path: '/settings', label: 'Settings' },
+        ] : []),
     ];
 
     const currentPage = pages.find(p => p.path === location.pathname) || pages[0];

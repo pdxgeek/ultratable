@@ -1,5 +1,5 @@
 import { cacheLogo, cacheImageById, getCachedImageById } from './cache';
-import type { Graphic, GraphicType } from '../types';
+import type { Graphic, GraphicType, Player } from '../types';
 import { db } from './dao/schema';
 
 export class GfxRegistry {
@@ -51,9 +51,10 @@ export class GfxRegistry {
                     id: record.id,
                     type: record.type as GraphicType,
                     associationId: record.associationId,
-                    integrationId: record.integrationId,
+                    externalReferences: record.externalReferences,
                     commonName: record.commonName,
                     sourceUrl: record.sourceUrl,
+                    lastRefreshed: record.lastRefreshed || new Date().toISOString(),
                 };
                 this.graphics.set(graphic.id, graphic);
             }
@@ -73,6 +74,15 @@ export class GfxRegistry {
 
     // Register a new graphic and return its ID
     async register(graphic: Graphic): Promise<string> {
+        // Check if already in memory
+        if (this.graphics.has(graphic.id)) {
+            const existing = this.graphics.get(graphic.id)!;
+            // If the URL and association haven't changed, skip DB update
+            if (existing.sourceUrl === graphic.sourceUrl && existing.associationId === graphic.associationId) {
+                return graphic.id;
+            }
+        }
+
         this.graphics.set(graphic.id, graphic);
 
         // Persist to database
@@ -81,10 +91,11 @@ export class GfxRegistry {
                 id: graphic.id,
                 type: graphic.type,
                 associationId: graphic.associationId,
-                integrationId: graphic.integrationId,
+                externalReferences: graphic.externalReferences,
                 commonName: graphic.commonName,
                 sourceUrl: graphic.sourceUrl,
                 timestamp: Date.now(),
+                lastRefreshed: graphic.lastRefreshed,
             });
         } catch (err) {
             console.error('Failed to persist graphic to database:', err);
@@ -93,16 +104,69 @@ export class GfxRegistry {
         return graphic.id;
     }
 
+    // Find all graphic IDs for an association directly from the database
+    async getManyByAssociation(associationId: string, type: GraphicType): Promise<string[]> {
+        // Check memory first
+        const inMem = this.findIds(associationId, type);
+        // Even if found in memory, we might want to sync with DB to be sure we have the full set
+
+        try {
+            const records = await db.graphics
+                .where('associationId')
+                .equals(associationId)
+                .and(r => r.type === type)
+                .toArray();
+
+            const ids: string[] = [];
+            for (const record of records) {
+                // Rehydrate in memory if found
+                this.graphics.set(record.id, {
+                    id: record.id,
+                    type: record.type as GraphicType,
+                    associationId: record.associationId,
+                    externalReferences: record.externalReferences,
+                    commonName: record.commonName,
+                    sourceUrl: record.sourceUrl,
+                    blobHash: record.blobHash,
+                    lastRefreshed: record.lastRefreshed || new Date().toISOString()
+                });
+                ids.push(record.id);
+            }
+            return ids;
+        } catch (err) {
+            console.error('Failed to lookup association in database:', err);
+        }
+        return inMem;
+    }
+
+    // Helper for findId (renamed to findIds and returning array)
+    findIds(associationId: string, type: GraphicType): string[] {
+        const ids: string[] = [];
+        for (const graphic of this.graphics.values()) {
+            if (graphic.associationId === associationId && graphic.type === type) {
+                ids.push(graphic.id);
+            }
+        }
+        return ids;
+    }
+
+    // Individual lookup (returns first match)
+    async getByAssociation(associationId: string, type: GraphicType): Promise<string | undefined> {
+        const ids = await this.getManyByAssociation(associationId, type);
+        return ids.length > 0 ? ids[0] : undefined;
+    }
+
     // Batch register graphics
     async registerBatch(graphics: Graphic[]): Promise<void> {
         const records = graphics.map(g => ({
             id: g.id,
             type: g.type,
             associationId: g.associationId,
-            integrationId: g.integrationId,
+            externalReferences: g.externalReferences,
             commonName: g.commonName,
             sourceUrl: g.sourceUrl,
             timestamp: Date.now(),
+            lastRefreshed: g.lastRefreshed,
         }));
 
         // Add to in-memory map
@@ -129,18 +193,14 @@ export class GfxRegistry {
 
         // If not in memory, try to load from IndexedDB synchronously
         // This will trigger async load in background
-        this.loadById(id).catch(() => {});
+        this.loadById(id).catch(() => { });
         return undefined;
     }
 
-    // Helper to find a graphic by association (e.g. Team ID) and type
+    // Legacy helper (returns first match)
     findId(associationId: string, type: GraphicType): string | undefined {
-        for (const graphic of this.graphics.values()) {
-            if (graphic.associationId === associationId && graphic.type === type) {
-                return graphic.id;
-            }
-        }
-        return undefined;
+        const ids = this.findIds(associationId, type);
+        return ids.length > 0 ? ids[0] : undefined;
     }
 
     async loadById(id: string): Promise<string | undefined> {
@@ -167,10 +227,14 @@ export class GfxRegistry {
         return entry?.url;
     }
 
-    // Pre-load all known graphics
-    async loadAll() {
+    // Pre-load graphics. If IDs are provided, only those are loaded.
+    async loadAll(ids?: string[]) {
         const promises: Promise<void>[] = [];
-        for (const graphic of this.graphics.values()) {
+        const targets = ids
+            ? ids.map(id => this.graphics.get(id)).filter((g): g is Graphic => !!g)
+            : Array.from(this.graphics.values());
+
+        for (const graphic of targets) {
             if (!this.blobCache.has(graphic.id)) {
                 promises.push(this.loadOne(graphic));
             }
@@ -237,9 +301,19 @@ export class GfxRegistry {
     }
 
     // Helper for Player Photos
-    getPlayerPhoto(playerId: string | number): string | undefined {
-        const idStr = playerId.toString();
-        const graphicId = this.findId(`player:api-football:${idStr}`, 'player_photo');
+    getPlayerPhoto(player: Player | string): string | undefined {
+        const id = typeof player === 'string' ? player : player.id;
+        // First try finding by associationId (NanoID)
+        let graphicId = this.findId(id, 'player_photo');
+
+        // Fallback for older data or if associationId was provider-specific
+        if (!graphicId && typeof player !== 'string') {
+            const ref = player.externalReferences?.find(r => r.integrationName === 'api-football');
+            if (ref) {
+                graphicId = this.findId(`player:api-football:${ref.remoteId}`, 'player_photo');
+            }
+        }
+
         if (!graphicId) return undefined;
         return this.getById(graphicId);
     }
