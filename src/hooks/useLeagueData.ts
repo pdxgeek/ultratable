@@ -1,21 +1,28 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchTeams, fetchFixtures } from '../services/apiFootball';
-import type { LeagueConfig } from '../types';
+import type { League, LeagueSeason } from '../types';
 
-export function useLeagueData(league: LeagueConfig, options: { enabled?: boolean } = {}) {
-    const { id, season } = league;
-    const leagueKey = `${id}_${season}`;
-
-    const isEnabled = options.enabled !== false;
+export function useLeagueData(
+    league: League | null,
+    season: LeagueSeason | null,
+    options: { enabled?: boolean } = {}
+) {
+    const isEnabled = options.enabled !== false && !!league && !!season;
 
     // Fetch Teams
     const teamsQuery = useQuery({
-        queryKey: ['teams', leagueKey],
+        queryKey: ['teams', season?.id],
         enabled: isEnabled,
         queryFn: async () => {
-            const data = await fetchTeams(league);
-            console.log('[useLeagueData] Fetched teams:', data.length, data[0]);
+            const config = {
+                id: league?.id || '0',
+                season: season?.season || 0,
+                integrations: league?.integrations,
+                externalReferences: season?.externalReferences || league?.externalReferences
+            } as any;
+
+            const data = await fetchTeams(config);
             return data;
         },
         staleTime: 1000 * 60 * 60, // 1 hour
@@ -24,9 +31,17 @@ export function useLeagueData(league: LeagueConfig, options: { enabled?: boolean
 
     // Fetch Fixtures
     const fixturesQuery = useQuery({
-        queryKey: ['fixtures', leagueKey],
+        queryKey: ['fixtures', season?.id],
         enabled: isEnabled,
-        queryFn: () => fetchFixtures(league),
+        queryFn: () => {
+            const config = {
+                id: league?.id || '0',
+                season: season?.season || 0,
+                integrations: league?.integrations,
+                externalReferences: season?.externalReferences || league?.externalReferences
+            } as any;
+            return fetchFixtures(config);
+        },
         staleTime: 1000 * 60 * 5, // 5 minutes
         refetchOnWindowFocus: false,
     });

@@ -53,9 +53,11 @@ function App() {
 function AppContent() {
   const {
     activeLeague: league,
+    activeSeason: season,
     activeLeagueKey,
     availableLeagues,
     refreshLeagues,
+    isLoading: contextLoading
   } = useLeague();
 
   const [hasKey, setHasKey] = useState(hasApiKey());
@@ -100,21 +102,20 @@ function AppContent() {
     if (hasKey) { /* no-op */ }
   }, [hasKey]);
 
-  if (!league) {
-    console.error('League not found for key:', activeLeagueKey);
+  if (!league || !season) {
+    if (!contextLoading && activeLeagueKey) {
+      console.warn('League or Season not resolved for key:', activeLeagueKey);
+    }
   } else {
-    console.log('App Render: ActiveKey=', activeLeagueKey, 'League=', league.name, league.id);
+    // console.log('App Render: ActiveKey=', activeLeagueKey, 'League=', league.commonName, 'Season=', season.season);
   }
 
-  // Check if league requires API key (non-mock providers need keys)
-  const requiresApiKey = !(league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false);
-
   // React Query Hook
-  const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league, { enabled: authInitialized });
+  const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league, season, { enabled: authInitialized });
 
   // Derived State (Data Packs)
   const { teamPack, seasonPack, fixtures, standings, gfxPack } = useMemo(() => {
-    if (!apiTeams || !apiFixtures) {
+    if (!apiTeams || !apiFixtures || !league || !season) {
       return {
         teamPack: new Map(),
         seasonPack: null,
@@ -124,19 +125,22 @@ function AppContent() {
       };
     }
 
+    const mergedRules = { ...league.rules, ...(season.rules || {}) };
+    const mergedCriteria = season.rankingCriteria || league.rankingCriteria;
+
     const tPack = generateTeamPack(apiTeams);
     const sPack = generateSeasonPack(
-      league.id,
-      league.season,
+      parseInt(league.externalReferences[0]?.remoteId || '0'),
+      season.season,
       apiTeams,
       apiFixtures,
       [],
-      league.rules
+      mergedRules
     );
     const gPack = generateGfxPack(apiTeams);
 
     const fList = apiFixtures; // Already transformed by provider
-    const compiled = compileStandings(tPack, fList, sPack.rules, league.deductions);
+    const compiled = compileStandings(tPack, fList, mergedRules, mergedCriteria);
 
 
     return {
@@ -146,7 +150,7 @@ function AppContent() {
       standings: compiled,
       gfxPack: gPack
     };
-  }, [apiTeams, apiFixtures, league]);
+  }, [apiTeams, apiFixtures, league, season]);
 
   // Side Effect: Update GFX Registry (moved from useMemo to avoid side effects in memoization)
   useEffect(() => {
@@ -157,6 +161,8 @@ function AppContent() {
   }, [gfxPack]);
 
   // Handle API Key check for providers that require it
+  const requiresApiKey = league ? !(league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false) : false;
+
   useEffect(() => {
     if (hasKey && requiresApiKey) {
       refetch();

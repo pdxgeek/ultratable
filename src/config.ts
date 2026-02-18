@@ -15,32 +15,6 @@ export const BASE_URL = import.meta.env.DEV
 // ─── League Configuration ──────────────────────────────────────────────
 
 export const LEAGUES: Record<number, LeagueConfig> = {
-    // ─── Real Leagues ────────────────────────────────────────────────────────
-    40: {
-        id: 40, // API-Football ID for EFL Championship
-        name: 'EFL Championship',
-        season: 2024,
-        matchesPerSeason: 46,
-        rules: {
-            promotionSlots: 2,
-            playoffStart: 3,
-            playoffEnd: 6,
-            relegationStart: 22,
-            pointsForWin: 3,
-            pointsForDraw: 1,
-            pointsForLoss: 0,
-        },
-        integrations: {
-            fixtures: 'api-football',
-            standings: 'api-football',
-            basicTeamInfo: 'api-football',
-            roster: 'api-football',
-            playerStats: 'api-football',
-            teamStats: 'api-football',
-            teamLogos: 'api-football',
-            playerPhotos: 'api-football',
-        }
-    },
     // ─── Mock Leagues ────────────────────────────────────────────────────────
     9999: {
         id: 9999,

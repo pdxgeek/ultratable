@@ -3,6 +3,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { backupService } from '../services/backupService';
 import { useLeague } from '../context/LeagueContext';
+import { database } from '../services/db';
 
 interface SchemaBlockProps {
     title: string;
@@ -42,22 +43,25 @@ function SchemaBlock({ title, description, code, tag = 'Interface' }: SchemaBloc
 }
 
 export default function DataPage() {
-    const { activeLeague, isLoading } = useLeague();
+    const { activeLeague, activeSeason, isLoading } = useLeague();
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [message, setMessage] = useState<{ text: string; mode: 'success' | 'error' | 'info' } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleExport = async () => {
-        if (!activeLeague) return;
+        if (!activeLeague || !activeSeason) return;
         setIsExporting(true);
         setMessage({ text: 'Generating archive...', mode: 'info' });
         try {
-            const blob = await backupService.exportToZip(activeLeague.id, activeLeague.season);
+            // Backup service still expects numeric IDs for some operations, 
+            // but we can pass the NanoID as string and cast if necessary
+            // or better, fix the backup service.
+            const blob = await backupService.exportToZip(activeLeague.id as any, activeSeason.season);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `ultratable_${activeLeague.name.toLowerCase().replace(/\s+/g, '_')}_${activeLeague.season}.ula`;
+            a.download = `ultratable_${activeLeague.commonName.toLowerCase().replace(/\s+/g, '_')}_${activeSeason.season}.ula`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -151,11 +155,53 @@ export default function DataPage() {
                     </div>
                 )}
 
-                {activeLeague && !isLoading && (
+                {activeLeague && activeSeason && !isLoading && (
                     <div style={{ marginTop: '24px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        Target: <strong>{activeLeague.name}</strong> ({activeLeague.season})
+                        Target: <strong>{activeLeague.commonName}</strong> ({activeSeason.season})
                     </div>
                 )}
+            </div>
+
+            {/* System Maintenance */}
+            <div className="card" style={{ marginBottom: '64px', padding: '32px', background: 'var(--card-bg-elevated)', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>System Maintenance</h2>
+                        <p style={{ opacity: 0.7 }}>Repair data associations and clear caches to resolve sync issues.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button
+                            className="btn btn--secondary"
+                            onClick={async () => {
+                                setMessage({ text: 'Repairing associations...', mode: 'info' });
+                                try {
+                                    const count = await database.repairTeamAssociations();
+                                    setMessage({ text: `Successfully repaired associations for ${count} seasons!`, mode: 'success' });
+                                } catch (err: any) {
+                                    setMessage({ text: `Repair failed: ${err.message}`, mode: 'error' });
+                                }
+                            }}
+                        >
+                            Repair Season Team Associations
+                        </button>
+                        <button
+                            className="btn btn--danger"
+                            onClick={async () => {
+                                if (confirm('Are you absolutely sure? This will purge ALL local data including custom leagues and rules.')) {
+                                    setMessage({ text: 'Purging all data...', mode: 'info' });
+                                    try {
+                                        await database.clearAllCache();
+                                        window.location.reload();
+                                    } catch (err: any) {
+                                        setMessage({ text: `Purge failed: ${err.message}`, mode: 'error' });
+                                    }
+                                }
+                            }}
+                        >
+                            Purge All Data
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <h2 style={{ fontSize: '1.5rem', marginBottom: '24px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>Core Domain (Top Level)</h2>

@@ -7,7 +7,9 @@ import type {
     StandingsRow,
     SeasonRules,
     Team,
+    LeagueRankingFormula,
 } from '../types';
+import { compareByFormula } from './formulas';
 
 // ─── Status map ────────────────────────────────────────────────────────
 
@@ -137,7 +139,8 @@ function getFormResult(
 export function compileStandings(
     teams: Map<string, Team>,
     fixtures: Fixture[],
-    _rules?: SeasonRules
+    _rules?: SeasonRules,
+    rankingCriteria: LeagueRankingFormula[] = ['points', 'goalDiff', 'wins']
 ): StandingsRow[] {
     const stats = new Map<string, TeamStats>();
     const teamFixtures = new Map<string, Fixture[]>();
@@ -165,8 +168,6 @@ export function compileStandings(
 
         const homeStats = stats.get(f.homeTeamId);
         const awayStats = stats.get(f.awayTeamId);
-        // Note: fixtures might contain teams not in the current 'teams' map 
-        // (if we filtered teams but not fixtures, or if fixtures refer to unknown teams)
         if (!homeStats || !awayStats) continue;
 
         homeStats.played++;
@@ -232,7 +233,7 @@ export function compileStandings(
         rows.push({
             position: 0,
             teamId: teamId,
-            team: { name: team.commonName, logo: team.logo }, // Denormalize
+            team: { name: team.commonName, logo: team.logo },
             played: s.played,
             won: s.won,
             drawn: s.drawn,
@@ -249,16 +250,8 @@ export function compileStandings(
         });
     }
 
-    // Sort
-    rows.sort((a, b) => {
-        if (b.points !== a.points) return b.points - a.points;
-        if (b.goalDifference !== a.goalDifference)
-            return b.goalDifference - a.goalDifference;
-        if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-        const nameA = teams.get(a.teamId)?.commonName ?? '';
-        const nameB = teams.get(b.teamId)?.commonName ?? '';
-        return nameA.localeCompare(nameB);
-    });
+    // Sort using registry formulas
+    rows.sort((a, b) => compareByFormula(a, b, rankingCriteria, fixtures));
 
     rows.forEach((r, i) => (r.position = i + 1));
 

@@ -313,9 +313,31 @@ export interface IntegrationCapabilities {
   playerPhotos: IntegrationName;
 }
 
+export type LeagueRankingFormula = 'points' | 'goalDiff' | 'headToHead' | 'wins' | 'awayGoalsScored';
+
+export interface League extends BaseEntity {
+  logo: string | null;
+  banner: string | null;
+  rules: SeasonRules;
+  rankingCriteria: LeagueRankingFormula[];
+  integrations: IntegrationCapabilities;
+}
+
+export interface LeagueSeason extends BaseEntity {
+  leagueId: string; // Reference to parent League
+  season: number;
+  matchesPerSeason: number;
+  rules?: Partial<SeasonRules>; // Overrides
+  rankingCriteria?: LeagueRankingFormula[]; // Overrides
+  teamIds?: string[]; // IDs of teams participating in this season
+}
+
+/**
+ * @deprecated Use League and LeagueSeason instead.
+ */
 export interface LeagueConfig {
-  id: number; // Keeping number for now for compatibility, eventual migration to string
-  internalId?: string; // New field
+  id: number;
+  internalId?: string;
   name: string;
   season: number;
   matchesPerSeason: number;

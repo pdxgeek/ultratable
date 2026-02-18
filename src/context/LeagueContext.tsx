@@ -1,13 +1,15 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { DEFAULT_LEAGUE, type LeagueConfig } from '../types';
-import { LEAGUES } from '../config';
-import { fetchLeagues } from '../services/leagueRegistry';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import type { League, LeagueSeason } from '../types';
+import { fetchLeaguesHierarchical } from '../services/leagueRegistry';
+import { database } from '../services/db';
 
 interface LeagueContextType {
-    activeLeague: LeagueConfig;
-    availableLeagues: Record<string, LeagueConfig>;
+    activeLeague: League | null;
+    activeSeason: LeagueSeason | null;
+    availableLeagues: League[];
+    availableSeasons: LeagueSeason[];
+    activeLeagueKey: string; // This will now represent the Season ID
     setActiveLeagueKey: (key: string) => void;
-    activeLeagueKey: string;
     refreshLeagues: () => void;
     isLoading: boolean;
 }
@@ -15,52 +17,67 @@ interface LeagueContextType {
 const LeagueContext = createContext<LeagueContextType | undefined>(undefined);
 
 export function LeagueProvider({ children }: { children: ReactNode }) {
-    const defaultKey = `${DEFAULT_LEAGUE.id}_${DEFAULT_LEAGUE.season}`;
-
-    const [availableLeagues, setAvailableLeagues] = useState<Record<string, LeagueConfig>>(() => {
-        const initial: Record<string, LeagueConfig> = {};
-        Object.values(LEAGUES).forEach(l => {
-            initial[`${l.id}_${l.season}`] = l as LeagueConfig;
-        });
-        return initial;
-    });
-
+    const [availableLeagues, setAvailableLeagues] = useState<League[]>([]);
+    const [availableSeasons, setAvailableSeasons] = useState<LeagueSeason[]>([]);
     const [activeLeagueKey, setActiveLeagueKeyState] = useState<string>(() => {
         if (typeof localStorage !== 'undefined') {
-            const saved = localStorage.getItem('ultratable_active_league');
-            if (saved) return saved;
+            return localStorage.getItem('ultratable_active_season') || '';
         }
-        return defaultKey;
+        return '';
     });
 
     const [isLoading, setIsLoading] = useState(true);
 
     const refreshLeagues = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const leagues = await fetchLeagues();
-            setAvailableLeagues(leagues);
+            const leagueList = await fetchLeaguesHierarchical();
+            setAvailableLeagues(leagueList);
+
+            const allSeasons: LeagueSeason[] = [];
+            for (const l of leagueList) {
+                const seasons = await database.getSeasonsForLeague(l.id);
+                allSeasons.push(...seasons);
+            }
+            setAvailableSeasons(allSeasons);
+
+            // Handle initial selection if empty
+            if (activeLeagueKey === '' && allSeasons.length > 0) {
+                const firstId = allSeasons[0].id;
+                setActiveLeagueKeyState(firstId);
+                localStorage.setItem('ultratable_active_season', firstId);
+            }
         } catch (err) {
             console.error('Failed to fetch leagues:', err);
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeLeagueKey]); // activeLeagueKey only used for initial selection check
 
     useEffect(() => {
         refreshLeagues();
-    }, [refreshLeagues]);
+    }, []);
+
+    // Derive active objects based on key and available data
+    const activeSeason = useMemo(() =>
+        availableSeasons.find(s => s.id === activeLeagueKey) || null
+        , [availableSeasons, activeLeagueKey]);
+
+    const activeLeague = useMemo(() =>
+        activeSeason ? availableLeagues.find(l => l.id === activeSeason.leagueId) || null : null
+        , [availableLeagues, activeSeason]);
 
     const setActiveLeagueKey = useCallback((key: string) => {
         setActiveLeagueKeyState(key);
-        localStorage.setItem('ultratable_active_league', key);
+        localStorage.setItem('ultratable_active_season', key);
     }, []);
-
-    const activeLeague = availableLeagues[activeLeagueKey] || DEFAULT_LEAGUE;
 
     return (
         <LeagueContext.Provider value={{
             activeLeague,
+            activeSeason,
             availableLeagues,
+            availableSeasons,
             setActiveLeagueKey,
             activeLeagueKey,
             refreshLeagues,

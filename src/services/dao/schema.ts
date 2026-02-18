@@ -175,6 +175,8 @@ export class UltraTableDB extends Dexie {
     blobs!: Table<BlobRecord, string>;
     quotas!: Table<QuotaRecord, string>;
     leagues!: Table<LeagueRecord, string>;
+    leagues_v2!: Table<LeagueRecordV2, string>;
+    league_seasons!: Table<LeagueSeasonRecord, string>;
     settings!: Table<SettingRecord, string>;
     mockData!: Table<MockDataRecord, string>;
     logs!: Table<LogRecord, number>;
@@ -302,12 +304,14 @@ export class UltraTableDB extends Dexie {
             players: 'id, *referenceKeys',
         });
 
-        // Version 8: Binary Deduplication & Multi-Photo support
-        this.version(8).stores({
+        // Version 9: Hierarchical Leagues
+        this.version(9).stores({
             cache: 'key, timestamp',
             blobs: 'id, timestamp',
             quotas: 'key, resetAt',
-            leagues: 'key, id, season',
+            leagues: 'key, id, season', // Keep for backward compatibility/migration
+            leagues_v2: 'id, commonName',
+            league_seasons: 'id, leagueId, season',
             settings: 'key',
             mockData: '[leagueId+key], leagueId',
             logs: '++id, timestamp, level',
@@ -320,49 +324,21 @@ export class UltraTableDB extends Dexie {
             teams: 'id, *referenceKeys',
             fixtures: 'id, *referenceKeys',
             players: 'id, *referenceKeys',
-        }).upgrade(async (tx) => {
-            // Migration: Re-index blobs by hash and link graphics
-            const graphics = await tx.table('graphics').toArray();
-            const blobs = await tx.table('blobs').toArray();
-
-            const blobMap = new Map(blobs.map(b => [b.id, b.blob]));
-
-            // Note: In an upgrade hook, we can't easily use async calculateHash 
-            // from idUtils because of transaction constraints and bundle issues.
-            // However, Dexie's upgrade is async. We'll use a local simple hash for migration
-            // or perform a 2-step migration if SHA-256 is slow. 
-            // For now, let's assume we can use subtle crypto here.
-
-            for (const graphic of graphics) {
-                const blob = blobMap.get(graphic.id);
-                if (blob) {
-                    try {
-                        const buffer = await blob.arrayBuffer();
-                        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-                        const hashArray = Array.from(new Uint8Array(hashBuffer));
-                        const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-                        // Update graphic to point to hash
-                        await tx.table('graphics').where('id').equals(graphic.id).modify({ blobHash: hash });
-
-                        // Ensure blob exists under hash key
-                        await tx.table('blobs').put({
-                            id: hash,
-                            blob: blob,
-                            timestamp: Date.now()
-                        });
-
-                        // Delete old blob if it was keyed by graphic ID
-                        if (graphic.id !== hash) {
-                            await tx.table('blobs').delete(graphic.id);
-                        }
-                    } catch (e) {
-                        console.warn(`Failed to migrate graphic ${graphic.id}:`, e);
-                    }
-                }
-            }
         });
     }
+}
+
+export interface LeagueRecordV2 {
+    id: string; // NanoID
+    commonName: string;
+    data: any; // Full League object
+}
+
+export interface LeagueSeasonRecord {
+    id: string; // NanoID
+    leagueId: string;
+    season: number;
+    data: any; // Full LeagueSeason object
 }
 
 // Singleton instance

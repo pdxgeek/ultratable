@@ -1,18 +1,19 @@
 import { useSettings } from '../context/SettingsContext';
 import { useState, useEffect } from 'react';
-import { setApiKey, hasApiKey, fetchStandings, fetchFixtures, checkQuota } from '../services/apiFootball';
-import { addCustomLeague, removeCustomLeague, resetLeaguesToDefault } from '../services/leagueRegistry';
-import type { LeagueConfig } from '../types';
+import { setApiKey, fetchStandings, fetchFixtures, checkQuota } from '../services/apiFootball';
+import { addCustomLeague, addCustomSeason, resetLeaguesToDefault, removeCustomLeague, removeCustomSeason } from '../services/leagueRegistry';
+import type { League, LeagueSeason } from '../types';
 import LeagueEditor from '../components/LeagueEditor';
-
+import { database } from '../services/db';
+import { nanoid } from 'nanoid';
 
 interface SettingsPageProps {
     onLeagueAdded?: () => void;
     onKeySaved?: () => void;
-    leagues?: Record<string, LeagueConfig>;
+    leagues?: League[];
 }
 
-export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }: SettingsPageProps) {
+export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = [] }: SettingsPageProps) {
     const { settings, toggleSetting, setTheme } = useSettings();
     const [key, setKey] = useState('');
     const [saved, setSaved] = useState(false);
@@ -21,23 +22,35 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
     // Import State
     const [importId, setImportId] = useState('');
     const [importSeason, setImportSeason] = useState('2024');
+    const [selectedLeagueId, setSelectedLeagueId] = useState<string>('');
     const [importing, setImporting] = useState(false);
     const [importError, setImportError] = useState<string | null>(null);
     const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
     // Editor State
-    const [editingLeague, setEditingLeague] = useState<LeagueConfig | null>(null);
-    const [isCreating, setIsCreating] = useState(false);
+    const [editingLeague, setEditingLeague] = useState<League | null>(null);
+    const [editingSeason, setEditingSeason] = useState<LeagueSeason | null>(null);
+    const [isCreatingLeague, setIsCreatingLeague] = useState(false);
 
+    // Season list cache for the UI
+    const [seasonsMap, setSeasonsMap] = useState<Record<string, LeagueSeason[]>>({});
 
     useEffect(() => {
-        // Load existing key from localStorage on mount
         const current = localStorage.getItem('ultratable_api_key');
         if (current) setKey(current);
-
-        // Load quota info
         checkQuota().then(setQuota).catch(() => setQuota(null));
     }, []);
+
+    useEffect(() => {
+        const loadSeasons = async () => {
+            const map: Record<string, LeagueSeason[]> = {};
+            for (const l of leagues) {
+                map[l.id] = await database.getSeasonsForLeague(l.id);
+            }
+            setSeasonsMap(map);
+        };
+        loadSeasons();
+    }, [leagues]);
 
     const handleSaveKey = () => {
         setApiKey(key);
@@ -47,21 +60,19 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
     };
 
     const handleImport = async () => {
-        if (!key && !hasApiKey()) {
-            setImportError('Please save an API Key first.');
+        if (!selectedLeagueId) {
+            setImportError('Please select a League first.');
             return;
         }
 
-        const leagueId = parseInt(importId);
-        const season = parseInt(importSeason);
+        const league = leagues.find(l => l.id === selectedLeagueId);
+        if (!league) return;
 
-        if (isNaN(leagueId) || isNaN(season)) {
-            setImportError('Invalid League ID or Season');
-            return;
-        }
+        const apiLeagueId = parseInt(importId);
+        const seasonYear = parseInt(importSeason);
 
-        if (season < 2000 || season > 2100) {
-            setImportError('Season must be a 4-digit year (e.g. 2024)');
+        if (isNaN(apiLeagueId) || isNaN(seasonYear)) {
+            setImportError('Invalid ID or Season');
             return;
         }
 
@@ -70,87 +81,65 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
         setImportSuccess(null);
 
         try {
-            // 1. Fetch data to verify and get name
-            await fetchStandings({ id: leagueId, season });
+            // Reconstruct config for API verification
+            const verifyConfig = {
+                id: apiLeagueId,
+                season: seasonYear,
+                integrations: league.integrations
+            } as any;
 
-            let leagueName = `League ${leagueId}`;
+            await fetchStandings(verifyConfig);
+            const fixtures = await fetchFixtures(verifyConfig);
 
-            // const fixtures = await fetchFixtures(leagueId, season);
-            // if (fixtures.length > 0) {
-            //    // leagueName = (fixtures[0] as any).league?.name || leagueName;
-            // }
-            const fixtures = await fetchFixtures({ id: leagueId, season });
-
-
-            // 2. Default Rules
-            const config: LeagueConfig = {
-                id: leagueId,
-                name: leagueName,
-                season: season,
+            const newSeason: LeagueSeason = {
+                id: nanoid(),
+                leagueId: league.id,
+                commonName: `${league.commonName} ${seasonYear}`,
+                season: seasonYear,
                 matchesPerSeason: fixtures.length,
-                rules: {
-                    promotionSlots: 2,
-                    playoffStart: 3,
-                    playoffEnd: 6,
-                    relegationStart: 18,
-                    pointsForWin: 3,
-                    pointsForDraw: 1,
-                    pointsForLoss: 0,
-                },
-                integrations: {
-                    fixtures: 'api-football',
-                    standings: 'api-football',
-                    basicTeamInfo: 'api-football',
-                    roster: 'api-football',
-                    playerStats: 'api-football',
-                    teamStats: 'api-football',
-                    teamLogos: 'api-football',
-                    playerPhotos: 'api-football',
-                }
+                externalReferences: [{ integrationName: 'api-football', remoteId: String(apiLeagueId) }],
+                lastRefreshed: new Date().toISOString()
             };
 
-            // 3. Save
-            await addCustomLeague(config);
-
-
-            // 4. Notify Parent
+            await addCustomSeason(newSeason);
             if (onLeagueAdded) onLeagueAdded();
-
-            setImportSuccess(`Successfully imported ${leagueName} (${season})`);
+            setImportSuccess(`Successfully imported ${seasonYear} for ${league.commonName}`);
             setImportId('');
         } catch (err) {
             console.error(err);
-            setImportError(err instanceof Error ? err.message : 'Failed to import league');
+            setImportError(err instanceof Error ? err.message : 'Failed to import season');
         } finally {
             setImporting(false);
         }
     };
 
-    const handleDelete = async (config: LeagueConfig) => {
-        if (confirm(`Are you sure you want to remove ${config.name} (${config.season})? This cannot be undone.`)) {
-            await removeCustomLeague(config);
-            if (onLeagueAdded) onLeagueAdded(); // Trigger refresh
-        }
-    };
-
-
-
-    const handleSaveLeague = async (config: LeagueConfig) => {
-        await addCustomLeague(config);
+    const handleSaveLeague = async (league: League) => {
+        await addCustomLeague(league);
         setEditingLeague(null);
-        setIsCreating(false);
+        setIsCreatingLeague(false);
         if (onLeagueAdded) onLeagueAdded();
     };
 
+    const handleRemoveLeague = async (id: string, name: string) => {
+        if (confirm(`Are you sure you want to remove the entire "${name}" league? This will delete all its seasons and data.`)) {
+            await removeCustomLeague(id);
+            if (onLeagueAdded) onLeagueAdded();
+        }
+    };
 
-    const handleResetDefaults = async () => {
-        if (confirm('Are you sure? This will delete all custom leagues and edits, restoring the original defaults.')) {
+    const handleReset = async () => {
+        if (confirm('This will delete all custom leagues and reset to defaults. Continue?')) {
             await resetLeaguesToDefault();
             if (onLeagueAdded) onLeagueAdded();
         }
     };
 
-
+    const handleRemoveSeason = async (id: string, name: string) => {
+        if (confirm(`Remove the ${name} season?`)) {
+            await removeCustomSeason(id);
+            if (onLeagueAdded) onLeagueAdded();
+        }
+    };
 
     return (
         <div className="page settings-page">
@@ -160,10 +149,6 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                 {/* Section: API Configuration */}
                 <section className="settings-section">
                     <h2 className="settings-section__title">API Configuration</h2>
-                    <p className="settings-section__desc">
-                        Required for real-world data.
-                        Get a free key at <a href="https://dashboard.api-football.com" target="_blank" rel="noreferrer">api-football.com</a>.
-                    </p>
                     <div className="api-key-input-group">
                         <input
                             type="text"
@@ -177,53 +162,77 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                         </button>
                     </div>
                     {quota && (
-                        <div style={{
-                            marginTop: '12px',
-                            padding: '12px',
-                            background: quota.current > quota.limit * 0.8 ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
-                            border: `1px solid ${quota.current > quota.limit * 0.8 ? 'var(--accent-orange)' : 'var(--border-color)'}`,
-                            borderRadius: '6px',
-                            fontSize: '0.9rem',
-                            color: quota.current > quota.limit * 0.8 ? 'var(--accent-orange)' : 'var(--text-secondary)',
-                        }}>
-                            📊 API Usage: {quota.current}/{quota.limit} requests today
-                            {quota.current > quota.limit * 0.8 && (
-                                <span style={{ marginLeft: '8px', fontWeight: 600 }}>
-                                    (⚠️ {Math.round((quota.current / quota.limit) * 100)}% used)
-                                </span>
-                            )}
+                        <div style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            API Quota: <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>{quota.current} / {quota.limit}</span> requests used today.
                         </div>
                     )}
                 </section>
 
-                {/* Section: Managed Data */}
+                {/* Section: Leagues & Seasons */}
                 <section className="settings-section">
-                    <h2 className="settings-section__title">Managed Data</h2>
-                    <p className="settings-section__desc">
-                        Manage your imported leagues and seasons.
-                    </p>
+                    <h2 className="settings-section__title">League Hierarchy</h2>
 
-                    {/* Import Form */}
+                    {/* Create League Flow */}
+                    {!isCreatingLeague && !editingLeague && (
+                        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button className="btn" onClick={handleReset}>↺ Reset Defaults & Repair</button>
+                            <button className="btn btn--primary" onClick={() => setIsCreatingLeague(true)}>+ Create Root League</button>
+                        </div>
+                    )}
+
+                    {(isCreatingLeague || editingLeague || editingSeason) && (
+                        <div style={{ marginBottom: '20px' }}>
+                            <LeagueEditor
+                                initialLeague={editingLeague || undefined}
+                                initialSeason={editingSeason || undefined}
+                                onSaveLeague={handleSaveLeague}
+                                onSaveSeason={async (s) => {
+                                    await addCustomSeason(s);
+                                    setEditingSeason(null);
+                                    if (onLeagueAdded) onLeagueAdded();
+                                }}
+                                onCancel={() => {
+                                    setEditingLeague(null);
+                                    setEditingSeason(null);
+                                    setIsCreatingLeague(false);
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Import Season into League */}
                     <div className="settings-card" style={{ padding: '20px', marginBottom: '20px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
-                        <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Import New Season</h3>
+                        <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Import Season to League</h3>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                            <div style={{ flex: 1, minWidth: '140px' }}>
-                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>League ID</label>
+                            <div style={{ flex: 2, minWidth: '180px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 600 }}>Target League</label>
+                                <select
+                                    className="settings-input"
+                                    value={selectedLeagueId}
+                                    onChange={e => setSelectedLeagueId(e.target.value)}
+                                    style={{ width: '100%' }}
+                                >
+                                    <option value="">Select a league...</option>
+                                    {leagues.map(l => (
+                                        <option key={l.id} value={l.id}>{l.commonName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div style={{ flex: 1, minWidth: '120px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 600 }}>API-Football ID</label>
                                 <input
                                     type="text"
                                     className="settings-input"
-                                    placeholder="e.g. 39 (Premier League)"
                                     value={importId}
                                     onChange={(e) => setImportId(e.target.value)}
                                     style={{ width: '100%' }}
                                 />
                             </div>
-                            <div style={{ width: '100px' }}>
-                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Season</label>
+                            <div style={{ width: '90px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 600 }}>Year</label>
                                 <input
                                     type="text"
                                     className="settings-input"
-                                    placeholder="YYYY"
                                     value={importSeason}
                                     onChange={(e) => setImportSeason(e.target.value)}
                                     style={{ width: '100%' }}
@@ -232,87 +241,50 @@ export default function SettingsPage({ onLeagueAdded, onKeySaved, leagues = {} }
                             <button
                                 className="btn btn--primary"
                                 onClick={handleImport}
-                                disabled={importing || !importId}
+                                disabled={importing || !importId || !selectedLeagueId}
                                 style={{ height: '42px' }}
                             >
-                                {importing ? 'Importing...' : 'Import'}
+                                {importing ? '...' : 'Import'}
                             </button>
                         </div>
-                        {importError && (
-                            <div style={{ marginTop: '12px', color: 'var(--accent-red)', fontSize: '0.9rem' }}>
-                                ⚠️ {importError}
-                            </div>
-                        )}
-                        {importSuccess && (
-                            <div style={{ marginTop: '12px', color: 'var(--accent-green)', fontSize: '0.9rem' }}>
-                                ✅ {importSuccess}
-                            </div>
-                        )}
+                        {importError && <div style={{ marginTop: '12px', color: 'var(--accent-red)', fontSize: '0.85rem' }}>⚠️ {importError}</div>}
+                        {importSuccess && <div style={{ marginTop: '12px', color: 'var(--accent-green)', fontSize: '0.85rem' }}>✅ {importSuccess}</div>}
                     </div>
 
-                    {/* League Editor */}
-                    {(editingLeague || isCreating) && (
-                        <div style={{ marginBottom: '20px' }}>
-                            <LeagueEditor
-                                initialConfig={editingLeague || undefined}
-                                onSave={handleSaveLeague}
-                                onCancel={() => {
-                                    setEditingLeague(null);
-                                    setIsCreating(false);
-                                }}
-                            />
-                        </div>
-                    )}
-
-                    {!editingLeague && !isCreating && (
-                        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                            <button
-                                className="btn"
-                                onClick={handleResetDefaults}
-                                style={{ fontSize: '0.8rem' }}
-                            >
-                                ↺ Reset to Defaults
-                            </button>
-                            <button
-                                className="btn btn--primary"
-                                onClick={() => setIsCreating(true)}
-                            >
-                                + Create Manual League
-                            </button>
-                        </div>
-                    )}
-
-
-                    {/* League List */}
-                    <div className="settings-list" style={{ gap: '1px', background: 'var(--border-color)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-                        {Object.values(leagues).length === 0 && (
-                            <div style={{ padding: '20px', background: 'var(--bg-surface)', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                No leagues imported yet.
-                            </div>
+                    {/* Hierarchical List */}
+                    <div className="league-hierarchy-list" style={{ background: 'var(--border-color)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        {leagues.length === 0 && (
+                            <div style={{ padding: '30px', background: 'var(--bg-surface)', textAlign: 'center', color: 'var(--text-secondary)' }}>No leagues defined.</div>
                         )}
-                        {Object.values(leagues).map((l) => (
-                            <div key={`${l.id}_${l.season}`} style={{ padding: '16px 20px', background: 'var(--bg-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{l.name}</div>
-                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                        Season {l.season} • ID: {l.id} • {l.matchesPerSeason} Matches
+                        {leagues.map(l => (
+                            <div key={l.id} style={{ background: 'var(--bg-surface)' }}>
+                                <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bg-tertiary)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        {l.logo && <img src={l.logo} style={{ width: '32px', height: '32px', objectFit: 'contain' }} alt="" />}
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{l.commonName}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Root Entity • ID: {l.id}</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button className="btn btn--secondary" onClick={() => setEditingLeague(l)} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>Edit League</button>
+                                        <button className="btn btn--danger" onClick={() => handleRemoveLeague(l.id, l.commonName)} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>Remove</button>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button
-                                        className="btn"
-                                        onClick={() => setEditingLeague(l)}
-                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        className="btn btn--danger"
-                                        onClick={() => handleDelete(l)}
-                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                                    >
-                                        Remove
-                                    </button>
+                                <div style={{ padding: '10px 20px 20px 64px' }}>
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seasons</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {seasonsMap[l.id]?.length === 0 && <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No seasons imported.</div>}
+                                        {seasonsMap[l.id]?.map(s => (
+                                            <div key={s.id} style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
+                                                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{s.season} Season <span style={{ color: 'var(--text-secondary)', fontWeight: 400, marginLeft: '8px' }}>({s.matchesPerSeason} matches)</span></div>
+                                                <div style={{ display: 'flex', gap: '4px' }}>
+                                                    <button className="btn" onClick={() => setEditingSeason(s)} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>Config</button>
+                                                    <button className="btn btn--danger" onClick={() => handleRemoveSeason(s.id, s.commonName)} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>Remove</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         ))}

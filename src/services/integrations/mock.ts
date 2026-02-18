@@ -2,7 +2,7 @@ import type { DataProvider } from './types';
 import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow, IntegrationName } from '../../types';
 import { LEAGUES } from '../../config';
 import { mapTeam, mapFixture, mapStanding } from './mappers';
-import { getInternalId } from '../idMap';
+import { database } from '../db';
 import { db } from '../dao/schema';
 
 // ─── Constants & Generators ────────────────────────────────────────────
@@ -63,7 +63,7 @@ function generateMockTeam(idBase: number, name: string, theme: 'scifi' | 'fantas
 async function generateMockLineup(teamName: string, provider: IntegrationName, teamId: number): Promise<MatchLineup> {
     const mapPlayerItem = async (index: number, isSub: boolean) => {
         const remoteId = isSub ? `player_${teamId}_sub_${index}` : `player_${teamId}_${index}`;
-        const playerId = await getInternalId(provider, 'player', remoteId);
+        const playerId = await database.getInternalId(provider, 'player', remoteId);
 
         return {
             player: {
@@ -91,13 +91,31 @@ async function generateMockLineup(teamName: string, provider: IntegrationName, t
     };
 }
 
-async function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): Promise<ApiFixture[]> {
+async function generateFixturesForLeague(leagueId: string | number, teams: ApiTeam[]): Promise<ApiFixture[]> {
     const fixtures: ApiFixture[] = [];
     const teamIds = teams.map((t) => t.team.id);
     const totalRounds = (teams.length - 1) * 2;
-    let fixtureIdCounter = leagueId * 10000;
+
+    // Use the remote ID (numeric) as the base for stable seeds if available, 
+    // otherwise fallback to a better hash than just sum
+    let numericLeagueId = 0;
+    if (typeof leagueId === 'number') {
+        numericLeagueId = leagueId;
+    } else {
+        // Try to get numeric ID from DB if it's a seeded hierarchical ID
+        const league = await db.leagues_v2.get(leagueId);
+        const remoteId = league?.data?.externalReferences?.[0]?.remoteId;
+        if (remoteId && !isNaN(parseInt(remoteId))) {
+            numericLeagueId = parseInt(remoteId);
+        } else {
+            // Failsafe hash (position-weighted to avoid "backwards" swaps)
+            numericLeagueId = leagueId.split('').reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0) % 10000;
+        }
+    }
+
+    let fixtureIdCounter = (numericLeagueId || 1) * 10000;
     const seasonStart = new Date('2025-08-01T12:00:00Z');
-    const rng = new SeededRandom(leagueId);
+    const rng = new SeededRandom(numericLeagueId);
 
     for (let round = 1; round <= totalRounds; round++) {
         const roundDate = new Date(seasonStart.getTime() + round * 7 * ONE_DAY_MS);
@@ -135,7 +153,7 @@ async function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): Pr
                     status: { long: isPast ? 'Match Finished' : 'Not Started', short: statusShort, elapsed: isPast ? 90 : null },
                     venue: { id: null, name: homeTeam.venue.name, city: homeTeam.venue.city, image: homeTeam.venue.image }
                 },
-                league: { id: leagueId, name: LEAGUES[leagueId]?.name || 'Mock League', country: 'Unknown', logo: '', flag: null, season: LEAGUES[leagueId]?.season || 2025, round: `Regular Season - ${round}` },
+                league: { id: typeof leagueId === 'number' ? leagueId : 0, name: LEAGUES[typeof leagueId === 'number' ? leagueId : 0]?.name || 'Mock League', country: 'Unknown', logo: '', flag: null, season: LEAGUES[typeof leagueId === 'number' ? leagueId : 0]?.season || 2025, round: `Regular Season - ${round}` },
                 teams: {
                     home: { id: homeTeam.team.id, name: homeTeam.team.name, logo: homeTeam.team.logo, winner: homeGoals !== null && awayGoals !== null ? homeGoals > awayGoals : null },
                     away: { id: awayTeam.team.id, name: awayTeam.team.name, logo: awayTeam.team.logo, winner: homeGoals !== null && awayGoals !== null ? awayGoals > homeGoals : null },
@@ -153,7 +171,7 @@ async function generateFixturesForLeague(leagueId: number, teams: ApiTeam[]): Pr
 
 interface LeagueData { teams: ApiTeam[]; fixtures: ApiFixture[]; }
 
-const MOCK_DB = new Map<number, LeagueData>();
+const MOCK_DB = new Map<string, LeagueData>();
 const STORAGE_KEY = 'ultratable_mock_db_v2';
 
 function getStorage(): Storage | null {
@@ -168,7 +186,7 @@ function loadMockDB() {
         const raw = storage.getItem(STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) parsed.forEach(([key, value]) => MOCK_DB.set(Number(key), value));
+            if (Array.isArray(parsed)) parsed.forEach(([key, value]) => MOCK_DB.set(String(key), value));
         }
     } catch (e) { console.warn('Failed to load mock DB', e); }
 }
@@ -179,26 +197,60 @@ function saveMockDB() {
     try { storage.setItem(STORAGE_KEY, JSON.stringify(Array.from(MOCK_DB.entries()))); } catch (e) { console.warn('Failed to save mock DB', e); }
 }
 
+export function clearMockData() {
+    MOCK_DB.clear();
+    const storage = getStorage();
+    if (storage) storage.removeItem(STORAGE_KEY);
+}
+
 loadMockDB();
 
-function getLeagueTheme(leagueId: number): 'scifi' | 'fantasy' {
-    const league = LEAGUES[leagueId];
-    return league?.integrations?.basicTeamInfo?.includes('fantasy') ? 'fantasy' : 'scifi';
+async function getProviderName(leagueId: string | number): Promise<IntegrationName> {
+    if (typeof leagueId === 'number') {
+        return (LEAGUES[leagueId]?.integrations?.basicTeamInfo as IntegrationName) || ('mock-scifi' as IntegrationName);
+    }
+    const league = await db.leagues_v2.get(leagueId);
+    return (league?.data?.integrations?.basicTeamInfo as IntegrationName) || ('mock-scifi' as IntegrationName);
 }
 
-function getProviderName(leagueId: number): IntegrationName {
-    return (LEAGUES[leagueId]?.integrations?.basicTeamInfo as IntegrationName) || ('mock-scifi' as IntegrationName);
-}
+async function getOrGenerateLeagueData(leagueId: string | number): Promise<LeagueData> {
+    const key = String(leagueId);
+    if (MOCK_DB.has(key)) return MOCK_DB.get(key)!;
 
-async function getOrGenerateLeagueData(leagueId: number): Promise<LeagueData> {
-    if (MOCK_DB.has(leagueId)) return MOCK_DB.get(leagueId)!;
-    const theme = getLeagueTheme(leagueId);
+    // Resolve hierarchical context
+    let rootLeague: any = null;
+    if (typeof leagueId === 'string') {
+        rootLeague = await db.leagues_v2.get(leagueId);
+    }
+
+    // Resolve theme
+    let theme: 'scifi' | 'fantasy' = 'scifi';
+    if (rootLeague) {
+        if (rootLeague.data?.integrations?.basicTeamInfo?.includes('fantasy')) theme = 'fantasy';
+    } else if (typeof leagueId === 'number') {
+        const league = LEAGUES[leagueId];
+        if (league?.integrations?.basicTeamInfo?.includes('fantasy')) theme = 'fantasy';
+    }
+
+    console.log(`[MockProvider] Resolved theme "${theme}" for leagueId:`, leagueId);
+
+    // Determine Seed ID for generation
+    let seedId = 0;
+    if (typeof leagueId === 'number') {
+        seedId = leagueId;
+    } else if (rootLeague) {
+        const remote = rootLeague.data?.externalReferences?.[0]?.remoteId;
+        seedId = remote ? parseInt(remote) : 0;
+    }
+    if (isNaN(seedId)) seedId = 0;
+
     const names = theme === 'fantasy' ? FANTASY_TEAM_NAMES : SCIFI_TEAM_NAMES;
     const baseId = theme === 'fantasy' ? 2000 : 1000;
     const teams = names.map((name, i) => generateMockTeam(baseId + i, name, theme));
-    const fixtures = await generateFixturesForLeague(leagueId, teams);
+    // Pass the seedId to generateFixtures to ensure stability
+    const fixtures = await generateFixturesForLeague(seedId || leagueId, teams);
     const data = { teams, fixtures };
-    MOCK_DB.set(leagueId, data);
+    MOCK_DB.set(key, data);
     saveMockDB();
     return data;
 }
@@ -206,19 +258,19 @@ async function getOrGenerateLeagueData(leagueId: number): Promise<LeagueData> {
 // ─── Provider Implementation ───────────────────────────────────────────
 
 export class MockProvider implements DataProvider {
-    async getTeams(leagueId: number, season: number): Promise<Team[]> {
+    async getTeams(leagueId: string | number, season: number): Promise<Team[]> {
         const data = await getOrGenerateLeagueData(leagueId);
-        const provider = getProviderName(leagueId);
+        const provider = await getProviderName(leagueId);
         return Promise.all(data.teams.map(t => mapTeam(provider, t)));
     }
 
-    async getFixtures(leagueId: number, season: number): Promise<Fixture[]> {
+    async getFixtures(leagueId: string | number, season: number): Promise<Fixture[]> {
         const data = await getOrGenerateLeagueData(leagueId);
-        const provider = getProviderName(leagueId);
+        const provider = await getProviderName(leagueId);
         return Promise.all(data.fixtures.map(f => mapFixture(provider, f)));
     }
 
-    async getStandings(leagueId: number, season: number): Promise<StandingsRow[]> { return []; }
+    async getStandings(leagueId: string | number, season: number): Promise<StandingsRow[]> { return []; }
 
     async getFixtureDetails(fixtureId: string): Promise<Fixture> {
         let externalIdStr = fixtureId.split(':').pop() || fixtureId;
@@ -233,7 +285,7 @@ export class MockProvider implements DataProvider {
         const leagueId = Math.floor(externalId / 10000);
         const data = await getOrGenerateLeagueData(leagueId);
         const cached = data.fixtures.find(f => f.fixture.id === externalId);
-        const provider = getProviderName(leagueId);
+        const provider = await getProviderName(leagueId);
         if (cached) return mapFixture(provider, cached);
         throw new Error('Fixture not found');
     }
@@ -252,7 +304,7 @@ export class MockProvider implements DataProvider {
         const externalId = parseInt(externalIdStr, 10);
         const leagueId = Math.floor(externalId / 10000);
         const data = await getOrGenerateLeagueData(leagueId);
-        const provider = getProviderName(leagueId);
+        const provider = await getProviderName(leagueId);
         const fixture = data.fixtures.find(f => f.fixture.id === externalId);
         if (fixture) {
             return Promise.all([

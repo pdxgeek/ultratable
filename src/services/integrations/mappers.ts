@@ -1,9 +1,9 @@
 import type { ApiTeam, ApiFixture, ApiStanding, Team, Fixture, StandingsRow, IntegrationName, MatchLineup, Player } from '../../types';
-import { getInternalId } from '../idMap';
+import { database } from '../db';
 
 export async function mapTeam(provider: IntegrationName, apiTeam: ApiTeam): Promise<Team> {
     const externalId = String(apiTeam.team.id);
-    const internalId = await getInternalId(provider, 'team', externalId);
+    const internalId = await database.getInternalId(provider, 'team', externalId);
 
     return {
         id: internalId,
@@ -52,10 +52,10 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'cancelled'
 
 export async function mapFixture(provider: IntegrationName, apiFixture: ApiFixture): Promise<Fixture> {
     const externalId = String(apiFixture.fixture.id);
-    const internalId = await getInternalId(provider, 'fixture', externalId);
+    const internalId = await database.getInternalId(provider, 'fixture', externalId);
 
-    const homeTeamId = await getInternalId(provider, 'team', apiFixture.teams.home.id);
-    const awayTeamId = await getInternalId(provider, 'team', apiFixture.teams.away.id);
+    const homeTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.home.id);
+    const awayTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.away.id);
 
     return {
         id: internalId,
@@ -92,7 +92,7 @@ export async function mapFixture(provider: IntegrationName, apiFixture: ApiFixtu
 }
 
 export async function mapStanding(provider: IntegrationName, apiStanding: ApiStanding): Promise<StandingsRow> {
-    const teamId = await getInternalId(provider, 'team', apiStanding.team.id);
+    const teamId = await database.getInternalId(provider, 'team', apiStanding.team.id);
 
     return {
         position: apiStanding.rank,
@@ -122,7 +122,7 @@ export async function mapStanding(provider: IntegrationName, apiStanding: ApiSta
 
 export async function mapPlayer(provider: IntegrationName, apiPlayer: any): Promise<Player> {
     const externalId = String(apiPlayer.player.id);
-    const internalId = await getInternalId(provider, 'player', externalId);
+    const internalId = await database.getInternalId(provider, 'player', externalId);
 
     return {
         id: internalId,

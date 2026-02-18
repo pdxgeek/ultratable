@@ -9,25 +9,25 @@ export default function SyncBar({
     onSync,
 }: { syncing: boolean; onSync: () => void }) {
     const {
-        activeLeagueKey: leagueId,
-        availableLeagues: leagues,
+        activeLeague,
+        activeSeason,
+        availableLeagues,
+        availableSeasons,
+        activeLeagueKey,
         setActiveLeagueKey: onLeagueChange
     } = useLeague();
 
-    const [, setQuota] = useState<{ current: number; limit: number } | null>(
-        null
-    );
+    const [, setQuota] = useState<{ current: number; limit: number } | null>(null);
     const [cacheAge, setCacheAge] = useState<number | null>(null);
 
     useEffect(() => {
         checkQuota().then(setQuota);
     }, [syncing]);
 
-    // Construct cache key using the actual ID and Season from the current league config
-    const currentLeague = leagues[leagueId];
-    const cacheKey = currentLeague
-        ? `fixtures_${currentLeague.id}_${currentLeague.season}`
-        : '';
+    // Construct cache key using the external remote ID for API-Football
+    const remoteId = activeLeague?.externalReferences[0]?.remoteId || '0';
+    const seasonYear = activeSeason?.season || 0;
+    const cacheKey = remoteId && seasonYear ? `fixtures_${remoteId}_${seasonYear}` : '';
 
     useEffect(() => {
         if (cacheKey) {
@@ -35,9 +35,7 @@ export default function SyncBar({
         }
     }, [cacheKey]);
 
-    const lastSyncText = cacheAge
-        ? formatAge(cacheAge)
-        : 'Never synced';
+    const lastSyncText = cacheAge ? formatAge(cacheAge) : 'Never synced';
 
     const handleLeagueChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         onLeagueChange(e.target.value);
@@ -50,14 +48,17 @@ export default function SyncBar({
                     <span className="sync-bar__icon">🏆</span>
                     <select
                         className="sync-bar__league-select"
-                        value={leagueId}
+                        value={activeLeagueKey}
                         onChange={handleLeagueChange}
                     >
-                        {Object.entries(leagues).map(([key, l]) => (
-                            <option key={key} value={key}>
-                                {l.name} ({l.season})
-                            </option>
-                        ))}
+                        {availableSeasons.map(s => {
+                            const leagueName = availableLeagues.find(l => l.id === s.leagueId)?.commonName || 'Unknown League';
+                            return (
+                                <option key={s.id} value={s.id}>
+                                    {leagueName} — {s.season}
+                                </option>
+                            );
+                        })}
                     </select>
                 </div>
             </div>

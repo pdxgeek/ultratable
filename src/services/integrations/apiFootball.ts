@@ -2,7 +2,7 @@ import type { DataProvider } from './types';
 import type { ApiTeam, ApiFixture, ApiStanding, ApiEvent, MatchLineup, Team, Fixture, StandingsRow, Player } from '../../types';
 import { apiGet } from '../../services/api/client';
 import { mapTeam, mapFixture, mapStanding } from './mappers';
-import { getInternalId } from '../idMap';
+import { database } from '../db';
 
 // API-Football lineup response structure
 interface ApiLineupPlayer {
@@ -95,7 +95,7 @@ export class ApiFootballProvider implements DataProvider {
         // Map API response to our internal structure
         return Promise.all(raw.map(async lineup => {
             const mapPlayerItem = async (apiPlayer: ApiLineupPlayer): Promise<{ player: Player }> => {
-                const playerId = await getInternalId('api-football', 'player', apiPlayer.player.id);
+                const playerId = await database.getInternalId('api-football', 'player', apiPlayer.player.id);
                 return {
                     player: {
                         id: playerId,
