@@ -67,7 +67,14 @@ export default function TeamLogo({ url, teamId, name = '??', className = '', siz
             src={effectiveUrl}
             alt={name}
             className={`${className}`}
-            onError={() => setError(true)}
+            onError={() => {
+                setError(true);
+                if (graphicId) {
+                    gfxRegistry.reportError(graphicId).catch(err => {
+                        console.error('Failed to report broken graphic:', err);
+                    });
+                }
+            }}
             loading="lazy"
         />
     );

@@ -153,6 +153,14 @@ export class GfxRegistry {
             this.blobCache.delete(id);
         }
         await db.graphics.delete(id);
+        // Also ensure it's removed from the blob table if it exists there
+        await db.blobs.delete(id);
+    }
+
+    // Report a broken graphic so it can be cleared from the DB
+    async reportError(id: string): Promise<void> {
+        console.warn(`Reporting broken graphic: ${id}. Clearing from DB.`);
+        await this.deleteGraphic(id);
     }
 
     // Helper for findId (renamed to findIds and returning array)
