@@ -139,6 +139,22 @@ export class GfxRegistry {
         return inMem;
     }
 
+    // Get all registered graphics
+    getAll(): Graphic[] {
+        return Array.from(this.graphics.values());
+    }
+
+    // Delete a graphic
+    async deleteGraphic(id: string): Promise<void> {
+        this.graphics.delete(id);
+        const cached = this.blobCache.get(id);
+        if (cached) {
+            URL.revokeObjectURL(cached.url);
+            this.blobCache.delete(id);
+        }
+        await db.graphics.delete(id);
+    }
+
     // Helper for findId (renamed to findIds and returning array)
     findIds(associationId: string, type: GraphicType): string[] {
         const ids: string[] = [];

@@ -28,6 +28,7 @@ export function PageMenu() {
         ...(isAdmin ? [
             { path: '/data', label: 'Data' },
             { path: '/settings', label: 'Settings' },
+            { path: '/graphics', label: 'Graphics' },
         ] : []),
     ];
 

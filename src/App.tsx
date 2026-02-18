@@ -33,6 +33,7 @@ import DataPage from './pages/DataPage';
 import MatchPage from './pages/MatchPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
+import GraphicsPage from './pages/GraphicsPage';
 
 
 
@@ -260,6 +261,16 @@ function AppContent() {
                 element={
                   authService.isAdmin() ? (
                     <AccountPage />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+              <Route
+                path="graphics"
+                element={
+                  authService.isAdmin() ? (
+                    <GraphicsPage />
                   ) : (
                     <Navigate to="/" replace />
                   )
