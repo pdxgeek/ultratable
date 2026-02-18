@@ -9,7 +9,7 @@ import TeamLogo from '../components/TeamLogo';
 import { gfxRegistry } from '../services/gfxRegistry';
 import { fetchPlayersFromLineup } from '../services/playerData';
 import PlayerInfoPopup from '../components/PlayerInfoPopup';
-import { database } from '../services/db';
+import { useLeague } from '../context/LeagueContext';
 
 // Component to handle player photo display
 function PlayerPhoto({ player, name, season }: { player: Player; name: string; season: number }) {
@@ -102,16 +102,14 @@ export default function MatchPage() {
     const fixtureId = id || '';
     const queryClient = useQueryClient();
 
-    // 1. Resolve Active League for context
-    const { data: league, isLoading: loadingLeague } = useQuery({
-        queryKey: ['activeLeague'],
-        queryFn: async () => {
-            const key = localStorage.getItem('ultratable_active_league');
-            if (!key) return null;
-            const [idStr, seasonStr] = key.split('_');
-            return database.getLeague(parseInt(idStr), parseInt(seasonStr));
-        }
-    });
+    const { activeLeague: apiLeague, activeSeason: apiSeason, isLoading: loadingLeague } = useLeague();
+
+    const league = apiLeague ? {
+        id: apiLeague.id,
+        season: apiSeason?.season || 0,
+        integrations: apiLeague.integrations,
+        externalReferences: apiSeason?.externalReferences || apiLeague.externalReferences
+    } as any : null;
 
     const { data: fixture, isLoading: loadingFixture, error: errorFixture } = useQuery({
         queryKey: ['fixture', fixtureId],
@@ -193,8 +191,8 @@ export default function MatchPage() {
 
     const homeTeam = fixture.homeTeam;
     const awayTeam = fixture.awayTeam;
-    const homeLineup = lineups.find(l => l.team.name === homeTeam.name);
-    const awayLineup = lineups.find(l => l.team.name === awayTeam.name);
+    const homeLineup = lineups.find(l => l.team.name === homeTeam.name || l.team.id === parseInt(fixture.homeTeamId) || fixture.homeTeamId.includes(String(l.team.id)));
+    const awayLineup = lineups.find(l => l.team.name === awayTeam.name || l.team.id === parseInt(fixture.awayTeamId) || fixture.awayTeamId.includes(String(l.team.id)));
 
     return (
         <div className="page match-page">

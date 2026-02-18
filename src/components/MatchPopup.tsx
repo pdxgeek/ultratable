@@ -8,7 +8,6 @@ import { useLeague } from '../context/LeagueContext';
 import { formatFullDateTime } from '../utils/dateUtils';
 import TeamLogo from './TeamLogo';
 import { useCachedImage } from '../hooks/useCachedImage';
-
 import { usePopup } from '../context/PopupContext';
 
 // Track which fixtures have had events loaded to prevent redundant API calls
@@ -32,7 +31,7 @@ export default function MatchPopup({
 }: MatchPopupProps) {
     const navigate = useNavigate();
     const { hidePopup } = usePopup();
-    const { activeLeague: league } = useLeague();
+    const { activeLeague: apiLeague, activeSeason: apiSeason } = useLeague();
 
     const [events, setEvents] = useState<MatchEvent[] | null>(
         fixture.events ?? null
@@ -75,7 +74,13 @@ export default function MatchPopup({
 
         setLoading(true);
         try {
-            const apiEvents = await fetchEvents(league, fixture.id);
+            const leagueConfig = {
+                id: apiLeague?.id || '0',
+                season: apiSeason?.season || 0,
+                integrations: apiLeague?.integrations,
+                externalReferences: apiSeason?.externalReferences || apiLeague?.externalReferences
+            } as any;
+            const apiEvents = await fetchEvents(leagueConfig, fixture.id);
             const transformed = transformEvents(apiEvents);
             setEvents(transformed);
             loadedEventsCache.add(fixture.id); // Mark as loaded
@@ -84,7 +89,7 @@ export default function MatchPopup({
         } finally {
             setLoading(false);
         }
-    }, [fixture.id, fixture.status, events]);
+    }, [fixture.id, fixture.status, events, apiLeague, apiSeason]);
 
     useEffect(() => {
         if (!events && fixture.status === 'played' && !loading) {
