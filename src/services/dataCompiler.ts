@@ -11,6 +11,8 @@ import type {
 } from '../types';
 import { compareByFormula } from './formulas';
 
+export type StandingsFilter = 'all' | 'home' | 'away';
+
 // ─── Status map ────────────────────────────────────────────────────────
 
 function mapStatus(shortStatus: string): FixtureStatus {
@@ -140,7 +142,8 @@ export function compileStandings(
     teams: Map<string, Team>,
     fixtures: Fixture[],
     _rules?: SeasonRules,
-    rankingCriteria: LeagueRankingFormula[] = ['points', 'goalDiff', 'wins']
+    rankingCriteria: LeagueRankingFormula[] = ['points', 'goalDiff', 'wins'],
+    filter: StandingsFilter = 'all'
 ): StandingsRow[] {
     const stats = new Map<string, TeamStats>();
     const teamFixtures = new Map<string, Fixture[]>();
@@ -170,28 +173,32 @@ export function compileStandings(
         const awayStats = stats.get(f.awayTeamId);
         if (!homeStats || !awayStats) continue;
 
-        homeStats.played++;
-        awayStats.played++;
-        homeStats.goalsFor += f.homeGoals;
-        homeStats.goalsAgainst += f.awayGoals;
-        awayStats.goalsFor += f.awayGoals;
-        awayStats.goalsAgainst += f.homeGoals;
+        if (filter !== 'away') {
+            homeStats.played++;
+            homeStats.goalsFor += f.homeGoals;
+            homeStats.goalsAgainst += f.awayGoals;
+        }
+        if (filter !== 'home') {
+            awayStats.played++;
+            awayStats.goalsFor += f.awayGoals;
+            awayStats.goalsAgainst += f.homeGoals;
+        }
 
         if (f.homeGoals > f.awayGoals) {
-            homeStats.won++;
-            awayStats.lost++;
+            if (filter !== 'away') homeStats.won++;
+            if (filter !== 'home') awayStats.lost++;
         } else if (f.homeGoals < f.awayGoals) {
-            awayStats.won++;
-            homeStats.lost++;
+            if (filter !== 'home') awayStats.won++;
+            if (filter !== 'away') homeStats.lost++;
         } else {
-            homeStats.drawn++;
-            awayStats.drawn++;
+            if (filter !== 'away') homeStats.drawn++;
+            if (filter !== 'home') awayStats.drawn++;
         }
     }
 
-    // Populate fixture maps for form
+    // Populate fixture maps
     for (const f of sorted) {
-        if (f.status === 'cancelled' || f.status === 'postponed') continue;
+        if (f.status === 'cancelled') continue;
         const h = teamFixtures.get(f.homeTeamId);
         const a = teamFixtures.get(f.awayTeamId);
         if (h) h.push(f);
@@ -207,6 +214,11 @@ export function compileStandings(
 
         const played = all
             .filter((f) => f.status === 'played')
+            .filter((f) => {
+                if (filter === 'home') return f.homeTeamId === teamId;
+                if (filter === 'away') return f.awayTeamId === teamId;
+                return true;
+            })
             .sort((a, b) => b.timestamp - a.timestamp);
 
         const form = played.slice(0, 5).reverse().map((f) => ({
@@ -220,7 +232,8 @@ export function compileStandings(
             all.find(
                 (f) =>
                     (f.status === 'scheduled' || f.status === 'postponed') &&
-                    f.timestamp * 1000 > now
+                    f.timestamp * 1000 > now &&
+                    (filter === 'all' || (filter === 'home' ? f.homeTeamId === teamId : f.awayTeamId === teamId))
             ) ?? null;
 
         const basePoints = s.won * (_rules?.pointsForWin ?? 3) +

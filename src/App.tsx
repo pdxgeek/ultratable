@@ -15,6 +15,7 @@ import {
   compileStandings,
 } from './services/dataCompiler';
 import { authService } from './services/auth/authService';
+import type { StandingsFilter } from './services/dataCompiler';
 
 // Contexts
 import { PopupProvider } from './context/PopupContext';
@@ -64,6 +65,7 @@ function AppContent() {
   const [hasKey, setHasKey] = useState(hasApiKey());
   const [authInitialized, setAuthInitialized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [standingsFilter, setStandingsFilter] = useState<StandingsFilter>('all');
 
   useEffect(() => {
     debugLogger.init();
@@ -114,7 +116,6 @@ function AppContent() {
   // React Query Hook
   const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league, season, { enabled: authInitialized });
 
-  // Derived State (Data Packs)
   const { teamPack, seasonPack, fixtures, standings, gfxPack } = useMemo(() => {
     if (!apiTeams || !apiFixtures || !league || !season) {
       return {
@@ -141,8 +142,7 @@ function AppContent() {
     const gPack = generateGfxPack(apiTeams);
 
     const fList = apiFixtures; // Already transformed by provider
-    const compiled = compileStandings(tPack, fList, mergedRules, mergedCriteria);
-
+    const compiled = compileStandings(tPack, fList, mergedRules, mergedCriteria, standingsFilter);
 
     return {
       teamPack: tPack,
@@ -151,7 +151,7 @@ function AppContent() {
       standings: compiled,
       gfxPack: gPack
     };
-  }, [apiTeams, apiFixtures, league, season]);
+  }, [apiTeams, apiFixtures, league, season, standingsFilter]);
 
   // Side Effect: Update GFX Registry (moved from useMemo to avoid side effects in memoization)
   useEffect(() => {
@@ -227,6 +227,8 @@ function AppContent() {
                       teams={teamPack}
                       fixtures={fixtures}
                       rules={seasonPack.rules}
+                      filter={standingsFilter}
+                      onFilterChange={setStandingsFilter}
                     />
                   ) : null
                 }

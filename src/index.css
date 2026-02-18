@@ -491,25 +491,94 @@ body {
   margin-left: 8px;
 }
 
-.form-column__expand-btn {
+/* Fixture Dropdown (Split Mode) */
+
+.fixture-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.fixture-dropdown__toggle {
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   padding: 0;
-  margin-left: 4px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+  opacity: 0.6;
 }
 
-.form-column__expand-btn:hover {
+.fixture-dropdown__toggle:hover {
   color: var(--accent-blue);
+  background: var(--bg-row-hover);
+  opacity: 1;
+}
+
+.fixture-dropdown__toggle--active {
+  color: var(--accent-blue);
+  opacity: 1;
+}
+
+.fixture-dropdown__content {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-popup);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  padding: 8px;
+  min-width: 280px;
+  max-height: 400px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.fixture-dropdown__content--align-center {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.fixture-dropdown__content--align-left {
+  left: 0;
+}
+
+.fixture-dropdown__content--align-right {
+  right: 0;
+}
+
+.fixture-dropdown__content--down {
+  top: 100%;
+  margin-top: 8px;
+}
+
+.fixture-dropdown__content--up {
+  bottom: 100%;
+  margin-bottom: 8px;
+}
+
+.fixture-dropdown__section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  letter-spacing: 0.05em;
+}
+
+.fixture-dropdown__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* Expanded fixture list */
@@ -593,7 +662,13 @@ body {
 .fixture-row__score {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  text-align: left;
+  text-align: right;
+  min-width: 40px;
+}
+
+.fixture-row__result-box {
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .fixture-row__date {
