@@ -1,5 +1,4 @@
 import type {
-    ApiFixture,
     Fixture,
     FixtureStatus,
     FormResult,
@@ -16,32 +15,8 @@ export type StandingsFilter = 'all' | 'home' | 'away';
 // ─── Status map ────────────────────────────────────────────────────────
 
 function mapStatus(shortStatus: string): FixtureStatus {
-    switch (shortStatus) {
-        case 'FT':
-        case 'AET':
-        case 'PEN':
-            return 'played';
-        case 'NS':
-            return 'scheduled';
-        case 'TBD':
-            return 'unknown';
-        case 'PST':
-        case 'CANC':
-        case 'ABD':
-        case 'AWD':
-        case 'WO':
-            return 'cancelled';
-        case '1H':
-        case '2H':
-        case 'HT':
-        case 'ET':
-        case 'BT':
-        case 'P':
-        case 'LIVE':
-            return 'live';
-        default:
-            return 'unknown';
-    }
+    // legacy, consider removing if mappers.ts is fully used
+    return 'unknown';
 }
 
 // ─── Transformers ──────────────────────────────────────────────────────
@@ -56,39 +31,7 @@ export function transformTeams(teams: Team[]): Map<string, Team> {
     return map;
 }
 
-export function transformFixtures(apiFixtures: ApiFixture[]): Fixture[] {
-    // This function might be deprecated if we are using mappers.ts directly in the provider.
-    // But usage in App.tsx or useLeagueData might still rely on it if they use raw API data?
-    // Current apiFootball.ts returns Fixture[] directly.
-    // So this might only be used if we are post-processing?
-    // Let's update it just in case, or leave it if it consumes ApiFixture.
-    // It consumes ApiFixture and returns Fixture. 
-    // We should ensure it returns Fixture with new fields.
-    return apiFixtures.map((f) => ({
-        id: f.fixture.id.toString(), // Ensure string
-        externalReferences: [{ integrationName: 'api-football' as any, remoteId: f.fixture.id.toString() }],
-        commonName: `${f.teams.home.name} vs ${f.teams.away.name}`,
-        homeTeamId: f.teams.home.id.toString(),
-        awayTeamId: f.teams.away.id.toString(),
-        homeTeam: { name: f.teams.home.name, logo: f.teams.home.logo, winner: f.teams.home.winner },
-        awayTeam: { name: f.teams.away.name, logo: f.teams.away.logo, winner: f.teams.away.winner },
-        date: f.fixture.date,
-        timestamp: f.fixture.timestamp,
-        venue: f.fixture.venue?.name ?? null,
-        venueImage: null,
-        city: f.fixture.venue?.city ?? null,
-        round: f.league.round,
-        gameweek: parseInt(f.league.round.replace(/[^0-9]/g, ''), 10) || 0,
-        status: mapStatus(f.fixture.status.short),
-        statusShort: f.fixture.status.short,
-        statusLong: f.fixture.status.long,
-        homeGoals: f.goals.home,
-        awayGoals: f.goals.away,
-        events: undefined,
-        eventsLoaded: false,
-        lastRefreshed: new Date().toISOString(),
-    }));
-}
+
 
 export function transformEvents(
     apiEvents: Array<{

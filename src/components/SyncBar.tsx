@@ -7,7 +7,7 @@ import { useLeague } from '../context/LeagueContext';
 export default function SyncBar({
     syncing,
     onSync,
-}: { syncing: boolean; onSync: () => void }) {
+}: { syncing: boolean; onSync: (options?: { forceRefresh?: boolean }) => void }) {
     const {
         activeLeague,
         activeSeason,
@@ -71,7 +71,7 @@ export default function SyncBar({
                 </div>
                 <button
                     className="sync-bar__btn"
-                    onClick={onSync}
+                    onClick={() => onSync()}
                     disabled={syncing}
                     title="Fetch latest data from API"
                 >
@@ -80,8 +80,17 @@ export default function SyncBar({
                             <span className="sync-bar__spinner" /> Syncing…
                         </>
                     ) : (
-                        <>🔄 Refresh Data</>
+                        <>🔄 Refresh</>
                     )}
+                </button>
+                <button
+                    className="sync-bar__btn sync-bar__btn--danger"
+                    onClick={() => onSync({ forceRefresh: true })}
+                    disabled={syncing}
+                    title="Bypass cache and force full reload"
+                    style={{ background: 'var(--accent-red)', opacity: 0.8 }}
+                >
+                    {syncing ? '...' : '🚨 Hard Sync'}
                 </button>
             </div>
         </div>

@@ -148,7 +148,7 @@ export interface SeasonRules {
 }
 
 export interface SeasonDataPack {
-  leagueId: number;
+  leagueId: string;
   season: number;
   name: string;
   teams: string[]; // List of team IDs participating
@@ -285,6 +285,27 @@ export interface Team extends BaseEntity {
   colors?: string[];
 }
 
+export interface Coach extends BaseEntity {
+  name: string;
+  photo: string | null;
+  nationality: string | null;
+  birthDate: string | null;
+}
+
+export interface SquadMember extends BaseEntity {
+  name: string;
+  age: number | null;
+  number: number | null;
+  position: 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Attacker' | 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Forward'; // Aligning with API-Football or existing GK/DF/MF/FW
+  photo: string | null;
+}
+
+export interface TeamDetails {
+  team: Team;
+  coach: Coach | null;
+  squad: SquadMember[];
+}
+
 // ─── Cache types ───────────────────────────────────────────────────────
 
 export interface CacheEntry<T> {
@@ -336,8 +357,8 @@ export interface LeagueSeason extends BaseEntity {
  * @deprecated Use League and LeagueSeason instead.
  */
 export interface LeagueConfig {
-  id: number;
-  internalId?: string;
+  id: string; // NanoID
+  remoteId?: number; // Legacy Remote ID if needed during transition
   name: string;
   season: number;
   matchesPerSeason: number;
@@ -347,7 +368,8 @@ export interface LeagueConfig {
 }
 
 export const DEFAULT_LEAGUE: LeagueConfig = {
-  id: 9999,
+  id: 'galactic-premier-league',
+  remoteId: 9999,
   name: 'Galactic Premier League',
   season: 2024,
   matchesPerSeason: 38,

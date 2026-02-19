@@ -54,9 +54,27 @@ export function useLeagueData(
         fixtures: fixturesQuery.data,
         isLoading: teamsQuery.isLoading || fixturesQuery.isLoading,
         error: teamsQuery.error || fixturesQuery.error,
-        refetch: useCallback(() => {
+        refetch: useCallback(async (options?: { forceRefresh?: boolean }) => {
+            if (options?.forceRefresh) {
+                // We need to trigger the query with a forceRefresh flag
+                // React Query doesn't easily support passing params to refetch that reach the queryFn
+                // So we can use a trick: invalidate or just call the fetch functions manually if needed, 
+                // but for now let's just use the standard refetch and rely on the fact that if we 
+                // truly need a bypass, we'll implement a state-driven force flag.
+                // Alternatively, we can just call the service functions directly here:
+                const config = {
+                    id: league?.id || '0',
+                    season: season?.season || 0,
+                    integrations: league?.integrations,
+                    externalReferences: season?.externalReferences || league?.externalReferences
+                } as any;
+                await Promise.all([
+                    fetchTeams(config, { forceRefresh: true }),
+                    fetchFixtures(config, { forceRefresh: true })
+                ]);
+            }
             teamsRefetch();
             fixturesRefetch();
-        }, [teamsRefetch, fixturesRefetch])
+        }, [teamsRefetch, fixturesRefetch, league, season])
     };
 }

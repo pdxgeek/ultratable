@@ -151,6 +151,8 @@ export interface TeamRecord {
     referenceKeys: string[]; // ['api-football:123', 'mock:456']
     data: any;               // Full Team object
     updatedAt: number;
+    dataExpiration?: number | null;
+    refreshAttempts?: number | null;
 }
 
 export interface FixtureRecord {
@@ -158,6 +160,8 @@ export interface FixtureRecord {
     referenceKeys: string[]; // ['api-football:fixture:33']
     data: any;               // Full Fixture object
     updatedAt: number;
+    dataExpiration?: number | null;
+    refreshAttempts?: number | null;
 }
 
 export interface PlayerRecord {
@@ -165,6 +169,8 @@ export interface PlayerRecord {
     referenceKeys: string[]; // ['api-football:player:123']
     data: any;               // Full Player object
     updatedAt: number;
+    dataExpiration?: number | null;
+    refreshAttempts?: number | null;
 }
 
 // ─── Database Definition ───────────────────────────────────────────────────
@@ -191,6 +197,7 @@ export class UltraTableDB extends Dexie {
     teams!: Table<TeamRecord, string>;
     fixtures!: Table<FixtureRecord, string>;
     players!: Table<PlayerRecord, string>;
+    coaches!: Table<any, string>;
 
     constructor() {
         super('ultratable');
@@ -324,6 +331,52 @@ export class UltraTableDB extends Dexie {
             teams: 'id, *referenceKeys',
             fixtures: 'id, *referenceKeys',
             players: 'id, *referenceKeys',
+        });
+
+        // Version 10: Coaches Table
+        this.version(10).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            leagues_v2: 'id, commonName',
+            league_seasons: 'id, leagueId, season',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, blobHash, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+            teams: 'id, *referenceKeys',
+            fixtures: 'id, *referenceKeys',
+            players: 'id, *referenceKeys',
+            coaches: 'id, *referenceKeys',
+        });
+
+        // Version 11: Compound index for league_seasons
+        this.version(11).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            leagues_v2: 'id, commonName',
+            league_seasons: 'id, [leagueId+season]', // Added compound index
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, blobHash, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+            teams: 'id, *referenceKeys',
+            fixtures: 'id, *referenceKeys',
+            players: 'id, *referenceKeys',
+            coaches: 'id, *referenceKeys',
         });
     }
 }

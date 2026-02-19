@@ -25,29 +25,51 @@ interface ApiLineupResponse {
 }
 
 export class ApiFootballProvider implements DataProvider {
-    async getTeams(leagueId: number, season: number): Promise<Team[]> {
+    async getTeams(leagueId: number, season: number, options?: { forceRefresh?: boolean }): Promise<Team[]> {
         const raw = await apiGet<ApiTeam[]>(
             'teams',
             { league: leagueId, season },
-            `teams_${leagueId}_${season}`
+            `teams_${leagueId}_${season}`,
+            options?.forceRefresh
         );
-        return Promise.all(raw.map(t => mapTeam('api-football', t)));
+        if (!raw) return [];
+        return (await Promise.all(raw.filter(Boolean).map(t => mapTeam('api-football', t)))).filter((t): t is Team => !!t);
     }
 
-    async getFixtures(leagueId: number, season: number): Promise<Fixture[]> {
+    async getFixtures(leagueId: number, season: number, options?: { forceRefresh?: boolean }): Promise<Fixture[]> {
         const raw = await apiGet<ApiFixture[]>(
             'fixtures',
             { league: leagueId, season },
-            `fixtures_${leagueId}_${season}`
+            `fixtures_${leagueId}_${season}`,
+            options?.forceRefresh
         );
-        return Promise.all(raw.map(f => mapFixture('api-football', f)));
+        console.log(`[ApiFootballProvider] Raw fixtures count: ${raw?.length || 0}`);
+        if (!raw || raw.length === 0) return [];
+
+        try {
+            const mapped = await Promise.all(raw.filter(Boolean).map(async (f, idx) => {
+                try {
+                    return await mapFixture('api-football', f);
+                } catch (e) {
+                    console.error(`[ApiFootballProvider] Failed mapping fixture at index ${idx}:`, e);
+                    return null;
+                }
+            }));
+            const filtered = mapped.filter((f): f is Fixture => !!f);
+            console.log(`[ApiFootballProvider] Mapped fixtures count: ${filtered.length}`);
+            return filtered;
+        } catch (e) {
+            console.error('[ApiFootballProvider] Critical failure in mapFixture loop:', e);
+            return [];
+        }
     }
 
-    async getStandings(leagueId: number, season: number): Promise<StandingsRow[]> {
+    async getStandings(leagueId: number, season: number, options?: { forceRefresh?: boolean }): Promise<StandingsRow[]> {
         const raw = await apiGet<Array<{ league: { standings: ApiStanding[][] } }>>(
             'standings',
             { league: leagueId, season },
-            `standings_${leagueId}_${season}`
+            `standings_${leagueId}_${season}`,
+            options?.forceRefresh
         );
 
         let standings: ApiStanding[] = [];
@@ -59,10 +81,10 @@ export class ApiFootballProvider implements DataProvider {
                 standings = raw as unknown as ApiStanding[];
             }
         }
-        return Promise.all(standings.map(s => mapStanding('api-football', s)));
+        return (await Promise.all(standings.filter(Boolean).map(s => mapStanding('api-football', s)))).filter((s): s is StandingsRow => !!s);
     }
 
-    async getFixtureDetails(fixtureId: string): Promise<Fixture> {
+    async getFixtureDetails(fixtureId: string): Promise<Fixture | null> {
         const externalId = parseInt(fixtureId, 10);
         const response = await apiGet<ApiFixture[]>(
             'fixtures',

@@ -258,21 +258,21 @@ async function getOrGenerateLeagueData(leagueId: string | number): Promise<Leagu
 // ─── Provider Implementation ───────────────────────────────────────────
 
 export class MockProvider implements DataProvider {
-    async getTeams(leagueId: string | number, season: number): Promise<Team[]> {
+    async getTeams(leagueId: string | number, season: number, options?: { forceRefresh?: boolean }): Promise<Team[]> {
         const data = await getOrGenerateLeagueData(leagueId);
         const provider = await getProviderName(leagueId);
-        return Promise.all(data.teams.map(t => mapTeam(provider, t)));
+        return (await Promise.all(data.teams.filter(Boolean).map(t => mapTeam(provider, t)))).filter((t): t is Team => !!t);
     }
 
-    async getFixtures(leagueId: string | number, season: number): Promise<Fixture[]> {
+    async getFixtures(leagueId: string | number, season: number, options?: { forceRefresh?: boolean }): Promise<Fixture[]> {
         const data = await getOrGenerateLeagueData(leagueId);
         const provider = await getProviderName(leagueId);
-        return Promise.all(data.fixtures.map(f => mapFixture(provider, f)));
+        return (await Promise.all(data.fixtures.filter(Boolean).map(f => mapFixture(provider, f)))).filter((f): f is Fixture => !!f);
     }
 
-    async getStandings(leagueId: string | number, season: number): Promise<StandingsRow[]> { return []; }
+    async getStandings(leagueId: string | number, season: number, options?: { forceRefresh?: boolean }): Promise<StandingsRow[]> { return []; }
 
-    async getFixtureDetails(fixtureId: string): Promise<Fixture> {
+    async getFixtureDetails(fixtureId: string, options?: { forceRefresh?: boolean }): Promise<Fixture | null> {
         let externalIdStr = fixtureId.split(':').pop() || fixtureId;
 
         // Resolve internal NanoID if needed
@@ -290,9 +290,9 @@ export class MockProvider implements DataProvider {
         throw new Error('Fixture not found');
     }
 
-    async getEvents(fixtureId: number): Promise<ApiEvent[]> { return []; }
+    async getEvents(fixtureId: number, options?: { forceRefresh?: boolean }): Promise<ApiEvent[]> { return []; }
 
-    async getLineups(fixtureId: string): Promise<MatchLineup[]> {
+    async getLineups(fixtureId: string, options?: { forceRefresh?: boolean }): Promise<MatchLineup[]> {
         let externalIdStr = fixtureId.split(':').pop() || '0';
 
         // Resolve internal NanoID if needed

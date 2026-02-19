@@ -90,36 +90,82 @@ export class UltraTableDatabase {
         return refKey ? refKey.split(':').pop() || null : null;
     }
 
+    async getInternalSeasonId(leagueId: string, season: number): Promise<string | null> {
+        const seasonRecord = await db.league_seasons
+            .where('[leagueId+season]')
+            .equals([leagueId, season])
+            .first();
+        if (seasonRecord) return seasonRecord.id;
+
+        // Fallback: If leagueId is actually a Season NanoID
+        const direct = await db.league_seasons.get(leagueId);
+        if (direct) return direct.id;
+
+        return null;
+    }
+
     // ─── Fixtures ──────────────────────────────────────────────────────────
 
-    async getFixtures(leagueId: number, season: number): Promise<Fixture[] | null> {
-        const key = `fixtures_${leagueId}_${season}`;
+    async getFixtures(internalId: string): Promise<Fixture[] | null> {
+        const key = `domain_fixtures_${internalId}`;
         const record = await db.cache.get(key);
         return record?.data || null;
     }
 
-    async saveFixtures(leagueId: number, season: number, fixtures: Fixture[]): Promise<void> {
-        const key = `fixtures_${leagueId}_${season}`;
+    async saveFixtures(internalId: string, fixtures: Fixture[], metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
+        const key = `domain_fixtures_${internalId}`;
         await db.cache.put({ key, data: fixtures, timestamp: Date.now() });
+
+        if (!fixtures) return;
+        // Domain Store Persistence
+        for (const f of fixtures) {
+            if (!f || !f.id) continue;
+            const existing = await db.fixtures.get(f.id);
+            const record = {
+                id: f.id,
+                referenceKeys: (f.externalReferences || []).map(r => `${r.integrationName}:fixture:${r.remoteId}`),
+                data: f,
+                updatedAt: Date.now(),
+                dataExpiration: metadata?.expiration !== undefined ? metadata.expiration : existing?.dataExpiration,
+                refreshAttempts: metadata?.attempts !== undefined ? metadata.attempts : existing?.refreshAttempts,
+            };
+            await db.fixtures.put(record);
+        }
     }
 
-    async getFixturesAge(leagueId: number, season: number): Promise<number | null> {
-        const key = `fixtures_${leagueId}_${season}`;
+    async getFixturesAge(internalId: string): Promise<number | null> {
+        const key = `domain_fixtures_${internalId}`;
         const record = await db.cache.get(key);
         return record ? Date.now() - record.timestamp : null;
     }
 
     // ─── Teams ─────────────────────────────────────────────────────────────
 
-    async getTeams(leagueId: number, season: number): Promise<Team[] | null> {
-        const key = `teams_${leagueId}_${season}`;
+    async getTeams(internalId: string): Promise<Team[] | null> {
+        const key = `domain_teams_${internalId}`;
         const record = await db.cache.get(key);
         return record?.data || null;
     }
 
-    async saveTeams(leagueId: number, season: number, teams: Team[]): Promise<void> {
-        const key = `teams_${leagueId}_${season}`;
+    async saveTeams(internalId: string, teams: Team[], metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
+        const key = `domain_teams_${internalId}`;
         await db.cache.put({ key, data: teams, timestamp: Date.now() });
+
+        if (!teams) return;
+        // Domain Store Persistence
+        for (const t of teams) {
+            if (!t || !t.id) continue;
+            const existing = await db.teams.get(t.id);
+            const record = {
+                id: t.id,
+                referenceKeys: (t.externalReferences || []).map(r => `${r.integrationName}:team:${r.remoteId}`),
+                data: t,
+                updatedAt: Date.now(),
+                dataExpiration: metadata?.expiration !== undefined ? metadata.expiration : existing?.dataExpiration,
+                refreshAttempts: metadata?.attempts !== undefined ? metadata.attempts : existing?.refreshAttempts,
+            };
+            await db.teams.put(record);
+        }
     }
 
     async getTeamsByIDs(ids: string[]): Promise<Team[]> {
@@ -209,15 +255,39 @@ export class UltraTableDatabase {
 
     // ─── Standings ─────────────────────────────────────────────────────────
 
-    async getStandings(leagueId: number, season: number): Promise<StandingsRow[] | null> {
-        const key = `standings_${leagueId}_${season}`;
+    async getStandings(internalId: string): Promise<StandingsRow[] | null> {
+        const key = `domain_standings_${internalId}`;
         const record = await db.cache.get(key);
         return record?.data || null;
     }
 
-    async saveStandings(leagueId: number, season: number, standings: StandingsRow[]): Promise<void> {
-        const key = `standings_${leagueId}_${season}`;
+    async saveStandings(internalId: string, standings: StandingsRow[]): Promise<void> {
+        const key = `domain_standings_${internalId}`;
         await db.cache.put({ key, data: standings, timestamp: Date.now() });
+    }
+
+    // ─── Coaches ───────────────────────────────────────────────────────────
+
+    async getCoach(id: string): Promise<any | null> {
+        const record = await db.coaches.get(id);
+        return record?.data || null;
+    }
+
+    async saveCoaches(coaches: any[], metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
+        if (!coaches) return;
+        for (const c of coaches) {
+            if (!c || !c.id) continue;
+            const existing = await db.coaches.get(c.id);
+            const record = {
+                id: c.id,
+                referenceKeys: (c.externalReferences || []).map((r: any) => `${r.integrationName}:coach:${r.remoteId}`),
+                data: c,
+                updatedAt: Date.now(),
+                dataExpiration: metadata?.expiration !== undefined ? metadata.expiration : existing?.dataExpiration,
+                refreshAttempts: metadata?.attempts !== undefined ? metadata.attempts : existing?.refreshAttempts,
+            };
+            await db.coaches.put(record);
+        }
     }
 
     // ─── Graphics ──────────────────────────────────────────────────────────
@@ -249,14 +319,28 @@ export class UltraTableDatabase {
             timestamp: Date.now()
         });
 
-        // 3. Link graphic record to this hash
-        await db.graphics.where('id').equals(id).modify({ blobHash: hash });
+        // 3. Link graphic record to this hash (if it exists) or create a minimal one
+        const existing = await db.graphics.get(id);
+        if (existing) {
+            await db.graphics.update(id, { blobHash: hash });
+        } else {
+            // Failsafe for tests or generic usage: store blob by ID if no graphic record exists
+            await db.blobs.put({
+                id: id,
+                blob,
+                timestamp: Date.now()
+            });
+        }
     }
 
     async deleteGraphic(id: string): Promise<void> {
-        // We delete the reference. The blob stays (garbage collection could be added later
-        // by checking if any other graphic points to the same blobHash)
+        // 1. Delete from graphics metadata
         await db.graphics.delete(id);
+
+        // 2. Also delete from blobs if it was stored by ID (legacy/failsafe)
+        // Note: For hashed blobs, we keep them for deduplication, but here we 
+        // ensure the direct ID-based lookup is cleared.
+        await db.blobs.delete(id);
     }
 
     async clearAllGraphics(): Promise<void> {
@@ -461,9 +545,20 @@ export class UltraTableDatabase {
         return record?.data || null;
     }
 
-    async savePlayerData(playerId: number, data: any): Promise<void> {
+    async savePlayerData(playerId: number, data: any, metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
         const key = `player_${playerId}`;
         await db.cache.put({ key, data, timestamp: Date.now() });
+
+        // Domain Store Persistence (using NanoID if available, or fallback to key)
+        const record = {
+            id: String(playerId), // Simplified for now, should ideally use NanoID
+            referenceKeys: [`api-football:player:${playerId}`],
+            data: data,
+            updatedAt: Date.now(),
+            dataExpiration: metadata?.expiration,
+            refreshAttempts: metadata?.attempts,
+        };
+        await db.players.put(record);
     }
 
     // ─── Logs ──────────────────────────────────────────────────────────────
@@ -540,6 +635,7 @@ export class UltraTableDatabase {
         await db.teams.clear();
         await db.fixtures.clear();
         await db.players.clear();
+        await db.coaches.clear();
     }
 
     async clearLeagueData(leagueId: number, season: number): Promise<void> {

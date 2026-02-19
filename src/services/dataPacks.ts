@@ -20,6 +20,7 @@ export function generateTeamPack(apiTeams: Team[]): TeamDataPack {
 export function generateGfxPack(apiTeams: Team[]): Graphic[] {
     const pack: Graphic[] = [];
     for (const t of apiTeams) {
+        if (!t || !t.id) continue;
         // Only create graphics for non-empty URLs
         if (t.logo && t.logo.trim() !== '') {
             // Check if graphic already exists in registry (reuse existing ID)
@@ -28,10 +29,11 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
             pack.push({
                 id: logoId,
                 type: 'team_logo',
-                associationId: `team:${t.id}`,
-                integrationId: t.integrationId,
+                associationId: t.id,
                 commonName: `${t.commonName} Logo`,
-                sourceUrl: t.logo
+                sourceUrl: t.logo,
+                externalReferences: t.externalReferences,
+                lastRefreshed: t.lastRefreshed
             });
         }
         if (t.venueImage && t.venueImage.trim() !== '') {
@@ -41,10 +43,11 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
             pack.push({
                 id: venueId,
                 type: 'venue_image',
-                associationId: `team:${t.id}`, // Venue is associated with the team
-                integrationId: t.integrationId,
+                associationId: t.id, // Venue is associated with the team
                 commonName: `${t.venue || t.commonName} Venue`,
-                sourceUrl: t.venueImage
+                sourceUrl: t.venueImage,
+                externalReferences: t.externalReferences,
+                lastRefreshed: t.lastRefreshed
             });
         }
     }
@@ -52,7 +55,7 @@ export function generateGfxPack(apiTeams: Team[]): Graphic[] {
 }
 
 export function generateSeasonPack(
-    leagueId: number,
+    leagueId: string,
     season: number,
     teams: Team[],
     fixtures: any[], // Type as Fixture[] or generic, not used for mapping here really
@@ -69,7 +72,7 @@ export function generateSeasonPack(
         leagueId,
         season,
         name: 'League Season',
-        teams: teams.map((t) => t.id),
+        teams: (teams || []).filter(t => t && t.id).map((t) => t.id),
         rules: rules,
     };
 }

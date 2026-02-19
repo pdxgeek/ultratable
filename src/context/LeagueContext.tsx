@@ -41,8 +41,9 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
             }
             setAvailableSeasons(allSeasons);
 
-            // Handle initial selection if empty
-            if (activeLeagueKey === '' && allSeasons.length > 0) {
+            // Handle initial selection if empty OR invalid
+            const isValid = allSeasons.some(s => s.id === activeLeagueKey);
+            if ((activeLeagueKey === '' || !isValid) && allSeasons.length > 0) {
                 const firstId = allSeasons[0].id;
                 setActiveLeagueKeyState(firstId);
                 localStorage.setItem('ultratable_active_season', firstId);

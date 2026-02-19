@@ -1,12 +1,16 @@
 import type { Team, Fixture, StandingsRow, MatchLineup, ApiEvent } from '../../types';
 
+export interface FetchOptions {
+    forceRefresh?: boolean;
+}
+
 export interface DataProvider {
-    getTeams(leagueId: string | number, season: number): Promise<Team[]>;
-    getFixtures(leagueId: string | number, season: number): Promise<Fixture[]>;
-    getStandings(leagueId: string | number, season: number): Promise<StandingsRow[]>;
-    getFixtureDetails(fixtureId: string): Promise<Fixture>;
-    getEvents(fixtureId: number): Promise<ApiEvent[]>;
-    getLineups(fixtureId: string): Promise<MatchLineup[]>;
+    getTeams(leagueId: string | number, season: number, options?: FetchOptions): Promise<Team[]>;
+    getFixtures(leagueId: string | number, season: number, options?: FetchOptions): Promise<Fixture[]>;
+    getStandings(leagueId: string | number, season: number, options?: FetchOptions): Promise<StandingsRow[]>;
+    getFixtureDetails(fixtureId: string, options?: FetchOptions): Promise<Fixture | null>;
+    getEvents(fixtureId: number, options?: FetchOptions): Promise<ApiEvent[]>;
+    getLineups(fixtureId: string, options?: FetchOptions): Promise<MatchLineup[]>;
 }
 
 export const IntegrationTypes = 'IntegrationTypes';

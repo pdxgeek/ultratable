@@ -132,7 +132,7 @@ function AppContent() {
 
     const tPack = generateTeamPack(apiTeams);
     const sPack = generateSeasonPack(
-      parseInt(league.externalReferences[0]?.remoteId || '0'),
+      league.id,
       season.season,
       apiTeams,
       apiFixtures,
@@ -157,7 +157,7 @@ function AppContent() {
   useEffect(() => {
     if (gfxPack.length > 0) {
       gfxRegistry.registerBatch(gfxPack);
-      gfxRegistry.loadAll(gfxPack.map(g => g.id)).catch(console.warn);
+      gfxRegistry.loadAll(gfxPack.filter(g => g && g.id).map(g => g.id)).catch(console.warn);
     }
   }, [gfxPack]);
 
@@ -174,7 +174,7 @@ function AppContent() {
     <>
       <SyncBar
         syncing={isLoading}
-        onSync={() => refetch()}
+        onSync={(opt) => refetch(opt)}
       />
       {!hasKey && requiresApiKey && (
         <div className="warning-banner">

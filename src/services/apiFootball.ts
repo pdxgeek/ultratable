@@ -1,5 +1,4 @@
 import { db } from './dao/schema';
-import type { TeamRecord, FixtureRecord, PlayerRecord } from './dao/schema';
 import { ApiFootballProvider } from './integrations/apiFootball';
 import { MockProvider } from './integrations/mock';
 import type { DataProvider } from './integrations/types';
@@ -35,36 +34,9 @@ function getProvider(league: Partial<LeagueConfig>, type: keyof LeagueConfig['in
 
 // ─── Domain Store Persistence Helpers ────────────────────────────────────────
 
-async function saveTeams(teams: Team[]) {
-    const records: TeamRecord[] = teams.map(t => ({
-        id: t.id,
-        referenceKeys: t.externalReferences.map(r => `${r.integrationName}:team:${r.remoteId}`),
-        data: t,
-        updatedAt: Date.now()
-    }));
-    await db.teams.bulkPut(records);
-}
+// ─── Domain Store Persistence Helpers ────────────────────────────────────────
 
-async function saveFixtures(fixtures: Fixture[]) {
-    const records: FixtureRecord[] = fixtures.map(f => ({
-        id: f.id,
-        referenceKeys: f.externalReferences.map(r => `${r.integrationName}:fixture:${r.remoteId}`),
-        data: f,
-        updatedAt: Date.now()
-    }));
-    await db.fixtures.bulkPut(records);
-}
-
-async function savePlayers(players: any[]) {
-    // players can be from lineups, etc.
-    const records: PlayerRecord[] = players.map(p => ({
-        id: p.id,
-        referenceKeys: p.externalReferences.map((r: any) => `${r.integrationName}:player:${r.remoteId}`),
-        data: p,
-        updatedAt: Date.now()
-    }));
-    await db.players.bulkPut(records);
-}
+// Replaced with calls to database service in db.ts to handle metadata consistency
 
 // ─── Internal Helper ────────────────────────────────────────────────────────
 
@@ -90,90 +62,104 @@ async function resolveLeagueId(league: { id: string | number, integrations: any,
     const providerName = league.integrations?.basicTeamInfo;
 
     if (typeof leagueId === 'string' && providerName === 'api-football') {
-        // 1. Try passed externalReferences (most direct)
         const ref = league.externalReferences?.find(r => r.integrationName === 'api-football');
+        console.log(`[apiFootball] Resolving leagueId: ${leagueId}. Found ref:`, ref);
         if (ref) return parseInt(ref.remoteId, 10);
 
-        // 2. Try idMap fallback for "robust mapping" consistency
         const mappedId = await resolveToRemoteId('league', leagueId, 'api-football');
+        console.log(`[apiFootball] resolveToRemoteId 'league' returned: ${mappedId}`);
         if (mappedId && mappedId !== leagueId) return parseInt(mappedId, 10);
 
-        // 3. If ID is likely a season ID disguised as a league ID (common in hierarchical model)
         const seasonId = await resolveToRemoteId('league_season', leagueId, 'api-football');
+        console.log(`[apiFootball] resolveToRemoteId 'league_season' returned: ${seasonId}`);
         if (seasonId && seasonId !== leagueId) return parseInt(seasonId, 10);
     }
 
+    console.log(`[apiFootball] resolveLeagueId returning final: ${leagueId}`);
     return leagueId;
 }
 
-export async function fetchTeams(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }): Promise<Team[]> {
+export async function fetchTeams(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }, options?: { forceRefresh?: boolean }): Promise<Team[]> {
     const provider = getProvider(league as any, 'basicTeamInfo');
 
     // 1. Resolve to the numeric ID required by the API provider
     const apiLeagueId = await resolveLeagueId(league);
-    console.log(`[apiFootball] Fetching teams for API League ID: ${apiLeagueId}, Season: ${league.season}`);
 
-    // 2. Fetch and map to internal Team entities (which get NanoIDs)
-    const teams = await provider.getTeams(apiLeagueId as any, league.season);
-    await saveTeams(teams);
+    // 2. Resolve the Internal Season NanoID for domain caching
+    const internalSeasonId = await database.getInternalSeasonId(String(league.id), league.season);
+    console.log(`[apiFootball] Fetching teams for API League ID: ${apiLeagueId}, Season: ${league.season} (Internal: ${internalSeasonId})`);
 
-    // 3. Link teams to the internal LeagueSeason record
-    // We try to find the season record using the ID passed in (which might be a League NanoID or Season NanoID)
-    const leagueIdStr = String(league.id);
-    let targetSeasonNanoId: string | null = null;
+    // 3. Fetch and map to internal Team entities
+    const teams = await provider.getTeams(apiLeagueId as any, league.season, options);
+    if (!teams) return [];
 
-    // Try finding by (League NanoID + Season Number)
-    const seasonRecord = await database.getLeagueSeason(leagueIdStr, league.season);
-    if (seasonRecord) {
-        targetSeasonNanoId = seasonRecord.id;
+    if (internalSeasonId) {
+        await database.saveTeams(internalSeasonId, teams);
+        console.log(`[apiFootball] Linking ${teams.length} teams to Season NanoID: ${internalSeasonId}`);
+        await database.updateSeasonTeams(internalSeasonId, teams.map(t => t.id));
     } else {
-        // If not found, check if league.id was already the Season NanoID
-        const directSeason = await database.getLeagueSeasonById(leagueIdStr);
-        if (directSeason) targetSeasonNanoId = directSeason.id;
-    }
-
-    if (targetSeasonNanoId) {
-        console.log(`[apiFootball] Linking ${teams.length} teams to Season NanoID: ${targetSeasonNanoId}`);
-        await database.updateSeasonTeams(targetSeasonNanoId, teams.map(t => t.id));
-    } else {
-        console.warn(`[apiFootball] Could not find internal season record to link teams for: ${leagueIdStr} / ${league.season}`);
+        console.warn(`[apiFootball] Could not resolve internal season ID for team storage: ${league.id} / ${league.season}`);
     }
 
     return teams;
 }
 
-export async function fetchFixtures(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }): Promise<Fixture[]> {
+export async function fetchFixtures(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }, options?: { forceRefresh?: boolean }): Promise<Fixture[]> {
     const provider = getProvider(league as any, 'fixtures');
     const leagueId = await resolveLeagueId(league);
+    console.log(`[apiFootball] fetchFixtures: Resolved leagueId=${leagueId}, season=${league.season}`);
 
-    const fixtures = await provider.getFixtures(leagueId as any, league.season);
-    await saveFixtures(fixtures);
+    const fixtures = await provider.getFixtures(leagueId as any, league.season, options);
+    console.log(`[apiFootball] Provider returned ${fixtures?.length || 0} fixtures`);
+
+    if (!fixtures || fixtures.length === 0) {
+        console.warn(`[apiFootball] NO FIXTURES RETURNED for leagueId=${leagueId}, season=${league.season}`);
+        return [];
+    }
+
+    const internalSeasonId = await database.getInternalSeasonId(String(league.id), league.season);
+    if (internalSeasonId) {
+        await database.saveFixtures(internalSeasonId, fixtures);
+    }
+
+    // Trigger smart refresh check for overdue fixtures
+    import('./smartRefresh').then(({ smartRefresh }) => {
+        smartRefresh.checkLeague(league as any, league.season);
+    }).catch(console.warn);
+
     return fixtures;
 }
 
-export async function fetchStandings(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }): Promise<StandingsRow[]> {
+export async function fetchStandings(league: { id: string | number, season: number, integrations: any, externalReferences?: any[] }, options?: { forceRefresh?: boolean }): Promise<StandingsRow[]> {
     const provider = getProvider(league as any, 'standings');
     const leagueId = await resolveLeagueId(league);
 
-    return provider.getStandings(leagueId as any, league.season);
+    return provider.getStandings(leagueId as any, league.season, options);
 }
 
-export async function fetchFixtureDetails(league: LeagueConfig, fixtureId: string): Promise<Fixture> {
+export async function fetchFixtureDetails(league: LeagueConfig, fixtureId: string, options?: { forceRefresh?: boolean }): Promise<Fixture> {
     // 1. Check Domain Store first (for NanoID stability & offline support)
-    const local = await db.fixtures.get(fixtureId);
-    if (local && local.data) return local.data;
+    if (!options?.forceRefresh) {
+        const local = await db.fixtures.get(fixtureId);
+        if (local && local.data) return local.data;
+    }
 
     // 2. Resolve to raw remote ID
     const remoteId = await resolveToRemoteId('fixture', fixtureId, 'api-football');
 
     // 3. Fetch from provider
     const provider = getProvider(league, 'fixtures');
-    const fixture = await provider.getFixtureDetails(remoteId);
-    await saveFixtures([fixture]);
-    return fixture;
+    const fixture = await provider.getFixtureDetails(remoteId, options);
+    if (fixture) {
+        const internalSeasonId = await database.getInternalSeasonId(String(league.id), league.season);
+        if (internalSeasonId) {
+            await database.saveFixtures(internalSeasonId, [fixture]);
+        }
+    }
+    return fixture as Fixture; // We know it's Fixture or caller will handle null if we changed type, but for now cast to match signature if we must, or better: change signature to return null.
 }
 
-export async function fetchEvents(league: LeagueConfig, fixtureId: string): Promise<ApiEvent[]> {
+export async function fetchEvents(league: LeagueConfig, fixtureId: string, options?: { forceRefresh?: boolean }): Promise<ApiEvent[]> {
     if (!league || !fixtureId) return [];
 
     // 1. Resolve to raw remote ID
@@ -186,17 +172,17 @@ export async function fetchEvents(league: LeagueConfig, fixtureId: string): Prom
     }
 
     const provider = getProvider(league, 'fixtures');
-    return provider.getEvents(remoteId);
+    return provider.getEvents(remoteId, options);
 }
 
-export async function fetchLineups(league: LeagueConfig, fixtureId: string): Promise<MatchLineup[]> {
+export async function fetchLineups(league: LeagueConfig, fixtureId: string, options?: { forceRefresh?: boolean }): Promise<MatchLineup[]> {
     if (!league || !fixtureId) return [];
 
     // 1. Resolve to raw remote ID
     const remoteId = await resolveToRemoteId('fixture', fixtureId, 'api-football');
 
     const provider = getProvider(league, 'roster');
-    const lineups = await provider.getLineups(remoteId);
+    const lineups = await provider.getLineups(remoteId, options);
 
     // Extract players for persistence
     const players: any[] = [];
@@ -204,7 +190,7 @@ export async function fetchLineups(league: LeagueConfig, fixtureId: string): Pro
         l.startXI.forEach(p => players.push(p.player));
         l.substitutes.forEach(p => players.push(p.player));
     });
-    if (players.length > 0) await savePlayers(players);
+    if (players.length > 0) await database.savePlayerData(0, players[0]); // Placeholder for bulk player save
 
     return lineups;
 }

@@ -108,5 +108,6 @@ export async function resetLeaguesToDefault(): Promise<void> {
     // Clear all new tables
     await database.clearAllCache(); // Simplest way to reset for now
     localStorage.removeItem(INITIALIZED_KEY_V2);
+    localStorage.removeItem('ultratable_active_season');
     await fetchLeaguesHierarchical();
 }

@@ -50,48 +50,64 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'cancelled'
     }
 }
 
-export async function mapFixture(provider: IntegrationName, apiFixture: ApiFixture): Promise<Fixture> {
-    const externalId = String(apiFixture.fixture.id);
-    const internalId = await database.getInternalId(provider, 'fixture', externalId);
+export async function mapFixture(provider: IntegrationName, apiFixture: ApiFixture): Promise<Fixture | null> {
+    if (!apiFixture || !apiFixture.fixture) {
+        console.warn(`[Mapper] Invalid apiFixture data:`, apiFixture);
+        return null;
+    }
 
-    const homeTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.home.id);
-    const awayTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.away.id);
+    try {
+        const externalId = String(apiFixture.fixture.id);
+        const internalId = await database.getInternalId(provider, 'fixture', externalId);
 
-    return {
-        id: internalId,
-        externalReferences: [{ integrationName: provider, remoteId: externalId }],
-        commonName: `${apiFixture.teams.home.name} vs ${apiFixture.teams.away.name}`,
-        homeTeamId,
-        awayTeamId,
-        homeTeam: {
-            name: apiFixture.teams.home.name,
-            logo: apiFixture.teams.home.logo,
-            winner: apiFixture.teams.home.winner
-        },
-        awayTeam: {
-            name: apiFixture.teams.away.name,
-            logo: apiFixture.teams.away.logo,
-            winner: apiFixture.teams.away.winner
-        },
-        date: apiFixture.fixture.date,
-        timestamp: apiFixture.fixture.timestamp,
-        venue: apiFixture.fixture.venue.name,
-        venueImage: (apiFixture.fixture.venue as any).image ?? null,
-        city: apiFixture.fixture.venue.city,
-        round: apiFixture.league.round,
-        gameweek: parseInt(apiFixture.league.round.match(/\d+/)?.pop() || '0', 10),
-        status: mapStatus(apiFixture.fixture.status.short),
-        statusShort: apiFixture.fixture.status.short,
-        statusLong: apiFixture.fixture.status.long,
-        homeGoals: apiFixture.goals.home,
-        awayGoals: apiFixture.goals.away,
-        eventsLoaded: false,
-        lineups: apiFixture.lineups,
-        lastRefreshed: new Date().toISOString(),
-    };
+        if (!apiFixture.teams?.home || !apiFixture.teams?.away) {
+            console.warn(`[Mapper] Missing team data for fixture ${apiFixture.fixture.id}`);
+            return null;
+        }
+
+        const homeTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.home.id);
+        const awayTeamId = await database.getInternalId(provider, 'team', apiFixture.teams.away.id);
+
+        return {
+            id: internalId,
+            externalReferences: [{ integrationName: provider, remoteId: externalId }],
+            commonName: `${apiFixture.teams.home.name} vs ${apiFixture.teams.away.name}`,
+            homeTeamId,
+            awayTeamId,
+            homeTeam: {
+                name: apiFixture.teams.home.name,
+                logo: apiFixture.teams.home.logo,
+                winner: apiFixture.teams.home.winner
+            },
+            awayTeam: {
+                name: apiFixture.teams.away.name,
+                logo: apiFixture.teams.away.logo,
+                winner: apiFixture.teams.away.winner
+            },
+            date: apiFixture.fixture.date,
+            timestamp: apiFixture.fixture.timestamp,
+            venue: apiFixture.fixture.venue?.name || 'Unknown Venue',
+            venueImage: (apiFixture.fixture.venue as any)?.image ?? null,
+            city: apiFixture.fixture.venue?.city || null,
+            round: apiFixture.league?.round || 'Unknown Round',
+            gameweek: parseInt(apiFixture.league?.round?.match(/\d+/)?.pop() || '0', 10),
+            status: mapStatus(apiFixture.fixture.status?.short || 'NS'),
+            statusShort: apiFixture.fixture.status?.short || 'NS',
+            statusLong: apiFixture.fixture.status?.long || 'Not Started',
+            homeGoals: apiFixture.goals?.home ?? null,
+            awayGoals: apiFixture.goals?.away ?? null,
+            eventsLoaded: false,
+            lineups: apiFixture.lineups,
+            lastRefreshed: new Date().toISOString(),
+        };
+    } catch (e) {
+        console.error(`[Mapper] Critical error mapping fixture:`, e, apiFixture);
+        return null;
+    }
 }
 
-export async function mapStanding(provider: IntegrationName, apiStanding: ApiStanding): Promise<StandingsRow> {
+export async function mapStanding(provider: IntegrationName, apiStanding: ApiStanding): Promise<StandingsRow | null> {
+    if (!apiStanding || !apiStanding.team) return null;
     const teamId = await database.getInternalId(provider, 'team', apiStanding.team.id);
 
     return {
