@@ -6,14 +6,15 @@ import { Graphic } from './src/types';
 const mockTeams = [
     {
         id: '1',
-        integrationId: 'team_1',
+        externalReferences: [{ integrationName: 'mock-scifi' as any, remoteId: 'team_1' }],
         commonName: 'Test Team',
         logo: 'http://example.com/logo.png',
         venueImage: 'http://example.com/venue.png',
         shortCode: 'TST',
         venue: 'Test Venue',
         city: 'Test City',
-        founded: 2020
+        founded: 2020,
+        lastRefreshed: new Date().toISOString()
     }
 ];
 
@@ -40,7 +41,7 @@ gfxRegistry.registerBatch(pack);
 
 // 3. Test Lookup
 console.log('Testing lookup...');
-const foundId = gfxRegistry.findId('team:1', 'team_logo');
+const foundId = gfxRegistry.findId('1', 'team_logo');
 if (foundId !== 'gfx_1_logo') {
     console.error('Lookup failed. Expected gfx_1_logo, got', foundId);
 } else {

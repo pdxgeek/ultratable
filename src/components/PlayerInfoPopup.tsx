@@ -21,19 +21,16 @@ export default function PlayerInfoPopup({ player, name, season, position }: Play
     const photoUrl = gfxRegistry.getPlayerPhoto(player);
 
     useEffect(() => {
-        const ref = player.externalReferences.find(r => r.integrationName === 'api-football');
+        const ref = player.externalReferences[0]; // Use the primary reference
         if (!ref) {
             setLoading(false);
             return;
         }
 
-        const externalIdNum = parseInt(ref.remoteId);
-        if (isNaN(externalIdNum)) {
-            setLoading(false);
-            return;
-        }
+        const remoteId = ref.remoteId;
+        const integrationName = ref.integrationName || 'api-football';
 
-        fetchPlayerData(externalIdNum, season).then(data => {
+        fetchPlayerData(remoteId, season, integrationName as any).then(data => {
             setPlayerData(data);
             setLoading(false);
         });
@@ -56,7 +53,7 @@ export default function PlayerInfoPopup({ player, name, season, position }: Play
         );
     }
 
-    if (!playerData) {
+    if (!playerData || !playerData.player) {
         // Show basic info with just what we have
         const initials = name
             .split(' ')
@@ -86,8 +83,8 @@ export default function PlayerInfoPopup({ player, name, season, position }: Play
         );
     }
 
-    const { player: rawPlayer, statistics } = playerData;
-    const currentStats = statistics[0]; // Most recent season stats
+    const { player: rawPlayer, statistics = [] } = playerData;
+    const currentStats = statistics && statistics.length > 0 ? statistics[0] : null; // Most recent season stats
 
     const initials = name
         .split(' ')
@@ -109,7 +106,7 @@ export default function PlayerInfoPopup({ player, name, season, position }: Play
                     )}
                 </div>
                 <div className="player-info-popup__details">
-                    <h3 className="player-info-popup__name">{rawPlayer.name}</h3>
+                    <h3 className="player-info-popup__name">{rawPlayer?.name || name}</h3>
 
                     <div className="player-info-popup__section">
                         <div className="player-info-popup__row">
@@ -170,6 +167,22 @@ export default function PlayerInfoPopup({ player, name, season, position }: Play
                                         <span className="value">{parseFloat(currentStats.games.rating).toFixed(2)}</span>
                                     </div>
                                 )}
+                                <div className="player-info-popup__row">
+                                    <span className="label">Goals:</span>
+                                    <span className="value">{currentStats.goals.total || 0}</span>
+                                </div>
+                                <div className="player-info-popup__row">
+                                    <span className="label">Assists:</span>
+                                    <span className="value">{currentStats.goals.assists || 0}</span>
+                                </div>
+                                <div className="player-info-popup__row">
+                                    <span className="label">Cards (Y/R):</span>
+                                    <span className="value">
+                                        <span style={{ color: '#ffd700' }}>🟨 {currentStats.cards.yellow}</span>
+                                        {' / '}
+                                        <span style={{ color: '#ff4d4d' }}>🟥 {currentStats.cards.red}</span>
+                                    </span>
+                                </div>
                             </div>
                         </>
                     )}

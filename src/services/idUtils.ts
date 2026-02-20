@@ -48,6 +48,15 @@ export async function calculateHash(data: Blob | ArrayBuffer): Promise<string> {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Generates a deterministic NanoID from a blob's content.
+ * This is the primary ID used for physical file storage.
+ */
+export async function generateContentId(data: Blob | ArrayBuffer): Promise<string> {
+    const hash = await calculateHash(data);
+    return generateDeterministicId(hash);
+}
+
 // Legacy support: generate ID with prefix (deprecated - use pure IDs instead)
 export function generateIdWithPrefix(prefix: string): string {
     return `${prefix}_${nanoid()}`;

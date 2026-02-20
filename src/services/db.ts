@@ -1,6 +1,5 @@
 import { db } from './dao/schema';
 import { generateId } from './idUtils';
-import { calculateHash } from './idUtils';
 import type { TeamRecord } from './dao/schema';
 import type { Team, Fixture, StandingsRow, LeagueConfig, CacheEntry, League, LeagueSeason } from '../types';
 
@@ -10,6 +9,7 @@ import type { Team, Fixture, StandingsRow, LeagueConfig, CacheEntry, League, Lea
  * UltraTable Database - Domain-specific, opinionated data access layer
  * Hides implementation details and provides type-safe methods for all data operations
  */
+
 export class UltraTableDatabase {
     private memoryCache = new Map<string, string>();
 
@@ -17,7 +17,7 @@ export class UltraTableDatabase {
 
     async getInternalId(
         provider: string,
-        type: 'team' | 'fixture' | 'player' | 'league',
+        type: 'league' | 'team' | 'player' | 'fixture' | 'coach',
         externalId: string | number
     ): Promise<string> {
         const extIdStr = String(externalId);
@@ -38,6 +38,9 @@ export class UltraTableDatabase {
         } else if (type === 'player') {
             const record = await db.players.where('referenceKeys').equals(referenceKey).first();
             if (record) id = record.id;
+        } else if (type === 'coach') {
+            const record = await db.coaches.where('referenceKeys').equals(referenceKey).first();
+            if (record) id = record.id;
         }
 
         // Fallback to legacy mappings table
@@ -56,7 +59,7 @@ export class UltraTableDatabase {
     }
 
     async getExternalId(
-        type: 'team' | 'fixture' | 'player' | 'league' | 'league_season',
+        type: 'team' | 'fixture' | 'player' | 'league' | 'league_season' | 'coach',
         internalId: string,
         providerName: string
     ): Promise<string | null> {
@@ -82,6 +85,7 @@ export class UltraTableDatabase {
         if (type === 'team') record = await db.teams.get(internalId);
         else if (type === 'fixture') record = await db.fixtures.get(internalId);
         else if (type === 'player') record = await db.players.get(internalId);
+        else if (type === 'coach') record = await db.coaches.get(internalId);
 
         if (!record || !record.referenceKeys) return null;
 
@@ -292,45 +296,60 @@ export class UltraTableDatabase {
 
     // ─── Graphics ──────────────────────────────────────────────────────────
 
-    async getGraphicBlob(id: string): Promise<Blob | null> {
+    async getGraphicBlob(id: string, variantIndex?: number): Promise<Blob | null> {
         const graphic = await db.graphics.get(id);
-        if (!graphic || !graphic.blobHash) {
-            // Fallback for legacy or unhashed
-            const legacyRecord = await db.blobs.get(id);
-            return legacyRecord?.blob || null;
+        if (!graphic) return null;
+
+        let hash: string | undefined;
+        if (graphic.variants && graphic.variants.length > 0) {
+            const idx = variantIndex !== undefined ? variantIndex :
+                graphic.activeVariantIndex !== undefined ? graphic.activeVariantIndex :
+                    graphic.variants.length - 1;
+            hash = graphic.variants[idx]?.blobHash;
+        } else {
+            // Fallback for legacy records
+            hash = (graphic as any).blobHash;
         }
-        const record = await db.blobs.get(graphic.blobHash);
-        return record?.blob || null;
+
+        if (hash) {
+            const blobRecord = await db.blobs.get(hash);
+            if (blobRecord) return blobRecord.blob;
+        }
+
+        // Final fallback for purely legacy ID-keyed blobs
+        const legacyRecord = await db.blobs.get(id);
+        return legacyRecord?.blob || null;
     }
 
-    async getGraphicBlobUrl(id: string): Promise<string | null> {
-        const blob = await this.getGraphicBlob(id);
-        return blob ? URL.createObjectURL(blob) : null;
+    async getGraphicBlobUrl(id: string, variantIndex?: number): Promise<string | null> {
+        const blob = await this.getGraphicBlob(id, variantIndex);
+        if (!blob) return null;
+        return URL.createObjectURL(blob);
     }
 
-    async saveGraphicBlob(id: string, blob: Blob): Promise<void> {
-        // 1. Calculate content hash
-        const hash = await calculateHash(blob);
+    async saveGraphicBlob(id: string, blob: Blob, variantIndex?: number): Promise<string> {
+        // 1. Calculate deterministic Content ID from blob
+        const { generateContentId } = await import('./idUtils');
+        const contentId = await generateContentId(blob);
 
-        // 2. Store blob indexed by hash (deduplication)
+        // 2. Store blob by Content ID
         await db.blobs.put({
-            id: hash,
+            id: contentId,
             blob,
             timestamp: Date.now()
         });
 
-        // 3. Link graphic record to this hash (if it exists) or create a minimal one
-        const existing = await db.graphics.get(id);
-        if (existing) {
-            await db.graphics.update(id, { blobHash: hash });
-        } else {
-            // Failsafe for tests or generic usage: store blob by ID if no graphic record exists
-            await db.blobs.put({
-                id: id,
-                blob,
-                timestamp: Date.now()
-            });
+        // 3. Update the graphic record's variant hash
+        const graphic = await db.graphics.get(id);
+        if (graphic && graphic.variants) {
+            const idx = variantIndex !== undefined ? variantIndex : (graphic.variants.length - 1);
+            if (graphic.variants[idx]) {
+                graphic.variants[idx].blobHash = contentId;
+                await db.graphics.put(graphic);
+            }
         }
+
+        return contentId;
     }
 
     async deleteGraphic(id: string): Promise<void> {
@@ -338,14 +357,49 @@ export class UltraTableDatabase {
         await db.graphics.delete(id);
 
         // 2. Also delete from blobs if it was stored by ID (legacy/failsafe)
-        // Note: For hashed blobs, we keep them for deduplication, but here we 
-        // ensure the direct ID-based lookup is cleared.
         await db.blobs.delete(id);
     }
 
     async clearAllGraphics(): Promise<void> {
         await db.blobs.clear();
         await db.graphics.clear();
+    }
+
+    async migrateGraphicsAssociationIds(): Promise<number> {
+        const graphics = await db.graphics.toArray();
+        let migratedCount = 0;
+
+        for (const g of graphics) {
+            if (g.associationId.startsWith('team:') || g.associationId.startsWith('player:')) {
+                const newAssocId = g.associationId.replace(/^(team:|player:)/, '');
+                await db.graphics.update(g.id, { associationId: newAssocId });
+                migratedCount++;
+            }
+        }
+
+        if (migratedCount > 0) {
+            console.log(`[Migration] Cleaned up ${migratedCount} graphics association IDs.`);
+        }
+        return migratedCount;
+    }
+
+    async purgeBrokenGraphics(): Promise<number> {
+        const graphics = await db.graphics.toArray();
+        const toDelete: string[] = [];
+
+        for (const g of graphics) {
+            // Aggressive check: if it doesn't have a content blob, delete the metadata
+            const blob = await this.getGraphicBlob(g.id);
+            if (!blob) {
+                toDelete.push(g.id);
+            }
+        }
+
+        if (toDelete.length > 0) {
+            await db.graphics.bulkDelete(toDelete);
+            console.log(`[Cleanup] Purged ${toDelete.length} graphics without content blobs.`);
+        }
+        return toDelete.length;
     }
 
     // ─── API Quotas ────────────────────────────────────────────────────────
@@ -538,25 +592,54 @@ export class UltraTableDatabase {
     }
 
     // ─── Player Data ───────────────────────────────────────────────────────
+    async saveInternalId(integrationName: string, entityType: string, remoteId: string | number, internalId: string): Promise<void> {
+        const key = `${integrationName}:${entityType}:${remoteId}`;
+        await db.mappings.put({
+            key,
+            provider: integrationName,
+            type: entityType,
+            externalId: String(remoteId),
+            internalId,
+            timestamp: Date.now()
+        });
+    }
 
-    async getPlayerData(playerId: number): Promise<any | null> {
-        const key = `player_${playerId}`;
+    async getPlayerData(integrationName: string, playerId: string | number, season: number): Promise<any | null> {
+        const key = `player_${integrationName}_${playerId}_${season}`;
         const record = await db.cache.get(key);
         return record?.data || null;
     }
 
-    async savePlayerData(playerId: number, data: any, metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
-        const key = `player_${playerId}`;
-        await db.cache.put({ key, data, timestamp: Date.now() });
+    async savePlayerData(integrationName: string, playerId: string | number, season: number | null, data: any, metadata?: { expiration?: number | null, attempts?: number | null }): Promise<void> {
+        // 1. Cache the raw API response (only if it has statistics, i.e., "Full" data)
+        if (season && data.statistics && Array.isArray(data.statistics) && data.statistics.length > 0) {
+            const key = `player_${integrationName}_${playerId}_${season}`;
+            await db.cache.put({ key, data, timestamp: Date.now() });
+        }
 
-        // Domain Store Persistence (using NanoID if available, or fallback to key)
+        // 2. Persist to Domain Store (Players table)
+        // Extract internal Player object if data is ApiPlayerData, otherwise assume it is a Player object
+        const playerData = data.player || data;
         const record = {
-            id: String(playerId), // Simplified for now, should ideally use NanoID
-            referenceKeys: [`api-football:player:${playerId}`],
-            data: data,
+            id: `${integrationName}:${playerId}`,
+            referenceKeys: [`${integrationName}:player:${playerId}`],
+            data: playerData,
             updatedAt: Date.now(),
             dataExpiration: metadata?.expiration,
             refreshAttempts: metadata?.attempts,
+        };
+        await db.players.put(record);
+    }
+
+    /**
+     * Persist basic player metadata without affecting the full stats cache.
+     */
+    async savePlayer(integrationName: string, playerId: string | number, player: any): Promise<void> {
+        const record = {
+            id: `${integrationName}:${playerId}`,
+            referenceKeys: [`${integrationName}:player:${playerId}`],
+            data: player,
+            updatedAt: Date.now()
         };
         await db.players.put(record);
     }

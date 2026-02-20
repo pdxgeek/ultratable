@@ -1,12 +1,7 @@
-import { apiGet } from './api/client';
 import { gfxRegistry } from './gfxRegistry';
 import { database } from './db';
-import { quotaTrackers } from './quotaTracker';
-import { generateId } from './idUtils';
-import type { Graphic } from '../types';
-
-// Quota tracker for API-Football player endpoint
-const playerQuota = quotaTrackers['api-football-players'];
+import { providerRegistry } from './integrations';
+import type { IntegrationName } from '../types';
 
 // API-Football player response structure
 export interface ApiPlayerData {
@@ -50,55 +45,45 @@ export interface ApiPlayerData {
             rating: string;
             captain: boolean;
         };
+        goals: {
+            total: number | null;
+            assists: number | null;
+            conceded: number | null;
+            saves: number | null;
+        };
+        cards: {
+            yellow: number;
+            yellowred: number;
+            red: number;
+        };
     }>;
 }
 
-// Export quota status for external use
-export function getQuotaStatus(): { used: number; limit: number; remaining: number } {
-    return playerQuota.getStatus();
-}
+// Quota tracker is now provider-specific if needed
 
-// Fetch player data with quota and caching
+// Fetch player data with provider and caching
 export async function fetchPlayerData(
-    playerId: number,
+    playerId: string | number,
     season: number,
-    leagueId?: number
+    integrationName: IntegrationName = 'api-football'
 ): Promise<ApiPlayerData | null> {
-    // Check cache first using the unified database service
-    const cached = await database.getPlayerData(playerId);
+    const provider = providerRegistry[integrationName];
+    if (!provider) return null;
+    const cached = await database.getPlayerData(integrationName, playerId, season);
     if (cached) {
-        console.log('Player data cache hit:', playerId);
+        console.log(`[PlayerData] Cache hit for ${integrationName}:${playerId} (Season ${season})`);
 
         // Ensure graphics are registered even when loading from cache
-        if (cached.player.photo) {
-            await registerPlayerPhoto(cached.player.id, cached.player.name, cached.player.photo);
+        if (cached?.player && cached.player.photo) {
+            await registerPlayerPhoto(playerId, cached.player.name, cached.player.photo, integrationName);
         }
 
         return cached;
     }
 
-    // Check quota
-    if (!playerQuota.increment()) {
-        console.warn('Player photo quota exceeded, skipping fetch for player:', playerId);
-        return null;
-    }
-
-    // Fetch from API
+    // Fetch from Provider
     try {
-        const params: Record<string, any> = {
-            id: playerId,
-            season,
-        };
-        if (leagueId) {
-            params.league = leagueId;
-        }
-
-        const response = await apiGet<ApiPlayerData[]>(
-            'players',
-            params,
-            null, // Don't use general cache, we have our own
-            false
-        );
+        const response = await provider.getPlayerData(playerId, season);
 
         if (!response || response.length === 0) {
             return null;
@@ -107,11 +92,11 @@ export async function fetchPlayerData(
         const playerData = response[0];
 
         // Cache the full data in Dexie
-        await database.savePlayerData(playerId, playerData);
+        await database.savePlayerData(integrationName, playerId, season, playerData);
 
         // Register photo in graphics registry
-        if (playerData.player.photo) {
-            await registerPlayerPhoto(playerData.player.id, playerData.player.name, playerData.player.photo);
+        if (playerData?.player && playerData.player.photo) {
+            await registerPlayerPhoto(playerData.player.id, playerData.player.name, playerData.player.photo, integrationName);
         }
 
         return playerData;
@@ -125,11 +110,16 @@ export async function fetchPlayerData(
  * Register a player photo and ensure stable ID mapping.
  * Handles deduplication and multi-photo collections.
  */
-async function registerPlayerPhoto(playerId: number, playerName: string, photoUrl: string): Promise<void> {
-    const associationId = `player:api-football:${playerId}`;
+export async function registerPlayerPhoto(playerId: string | number, playerName: string, photoUrl: string, integrationName: IntegrationName = 'api-football'): Promise<void> {
+    const associationId = await database.getInternalId(integrationName, 'player', playerId);
+    if (!associationId) {
+        console.warn(`[GfxDebug] No internal ID found for player ${playerId} (${playerName}). Cannot register photo.`);
+        return;
+    }
 
     // 1. Get all photos for this player
     const existingIds = await gfxRegistry.getManyByAssociation(associationId, 'player_photo');
+    console.log(`[GfxDebug] Player ${playerName} (${associationId}) has ${existingIds.length} existing photo records.`);
 
     // 2. See if this specific URL is already registered
     let foundId: string | undefined;
@@ -146,18 +136,20 @@ async function registerPlayerPhoto(playerId: number, playerName: string, photoUr
         gfxRegistry.loadById(foundId).catch(() => { });
     } else {
         // Register as new graphic record (it will be deduplicated at the binary level)
-        const graphicId = generateId();
-        const graphic: Graphic = {
+        const graphicId = gfxRegistry.calculateSlotId(associationId, 'player_photo');
+        console.log(`[GfxDebug] Registering new photo slot ${graphicId} for ${playerName}`);
+        await gfxRegistry.register({
             id: graphicId,
             type: 'player_photo',
             associationId,
-            externalReferences: [{ integrationName: 'api-football', remoteId: playerId.toString() }],
+            associationType: 'player',
+            externalReferences: [{ integrationName, remoteId: playerId.toString() }],
             commonName: `${playerName} Photo`,
-            sourceUrl: photoUrl,
-            lastRefreshed: new Date().toISOString(),
-        };
-        await gfxRegistry.register(graphic);
-        gfxRegistry.loadById(graphic.id).catch(() => { });
+            sourceUrl: photoUrl
+        });
+        gfxRegistry.loadById(graphicId).catch((err) => {
+            console.error(`[GfxDebug] Initial load failed for ${playerName}:`, err);
+        });
     }
 }
 
@@ -165,20 +157,14 @@ async function registerPlayerPhoto(playerId: number, playerName: string, photoUr
 export async function fetchPlayersFromLineup(
     playerIds: number[],
     season: number,
-    leagueId?: number
+    integrationName: IntegrationName = 'api-football'
 ): Promise<Map<number, ApiPlayerData>> {
     const results = new Map<number, ApiPlayerData>();
-    const quota = getQuotaStatus();
-
-    console.log(`Fetching player data. Quota: ${quota.used}/${quota.limit}`);
-
-    // Limit to remaining quota
-    const limit = Math.min(playerIds.length, quota.remaining);
-    const idsToFetch = playerIds.slice(0, limit);
+    const idsToFetch = playerIds;
 
     // Fetch in parallel
     const promises = idsToFetch.map(async (id) => {
-        const data = await fetchPlayerData(id, season, leagueId);
+        const data = await fetchPlayerData(id, season, integrationName);
         if (data) {
             results.set(id, data);
         }

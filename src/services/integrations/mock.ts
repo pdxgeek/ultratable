@@ -115,7 +115,7 @@ async function generateFixturesForLeague(leagueId: string | number, teams: ApiTe
 
     let fixtureIdCounter = (numericLeagueId || 1) * 10000;
     const seasonStart = new Date('2025-08-01T12:00:00Z');
-    const rng = new SeededRandom(numericLeagueId);
+    // rng is used for variety in fixtures if needed, but for now we seeded per match
 
     for (let round = 1; round <= totalRounds; round++) {
         const roundDate = new Date(seasonStart.getTime() + round * 7 * ONE_DAY_MS);
@@ -317,6 +317,71 @@ export class MockProvider implements DataProvider {
             generateMockLineup(teams[0]?.team.name || 'Home', provider, teams[0]?.team.id || 0),
             generateMockLineup(teams[1]?.team.name || 'Away', provider, teams[1]?.team.id || 0)
         ]);
+    }
+
+    async getTeamDetails(teamId: string, options?: { forceRefresh?: boolean }): Promise<{ team: Team; coach: any; squad: any[] }> {
+        const externalIdStr = teamId.split(':').pop() || teamId;
+        const externalId = parseInt(externalIdStr, 10);
+        const data = await getOrGenerateLeagueData(Math.floor(externalId / 1000) || 0);
+        const teamRaw = data.teams.find(t => t.team.id === externalId) || data.teams[0];
+        const provider = 'mock-scifi';
+        const team = await mapTeam(provider, teamRaw!);
+
+        const coachId = await database.getInternalId(provider, 'coach', `coach_${externalId}`);
+        const coach = {
+            id: coachId,
+            name: `${team!.commonName} Coach`,
+            photo: '',
+            externalReferences: [{ integrationName: provider, remoteId: `coach_${externalId}` }]
+        };
+
+        const squad = await Promise.all(Array.from({ length: 11 }, async (_, i) => {
+            const lineup = await generateMockLineup(team!.commonName, provider, externalId);
+            return lineup.startXI[i].player;
+        }));
+
+        return { team: team!, coach, squad };
+    }
+
+    async getPlayerData(playerId: string | number, season: number, options?: { forceRefresh?: boolean }): Promise<any> {
+        let externalIdStr = String(playerId).split(':').pop() || String(playerId);
+
+        // If it's a number-like string, use it for positional lookup
+        const externalIdNum = parseInt(externalIdStr, 10);
+
+        const team = await this.getTeamDetails('mock:team:1', options); // Fallback mock team
+
+        // Find player by name or index
+        let player = team.squad[0];
+        if (!isNaN(externalIdNum) && externalIdNum >= 0) {
+            player = team.squad[externalIdNum % team.squad.length];
+        } else {
+            // Try matching by the remoteId component if available
+            player = team.squad.find(p => p.externalReferences[0]?.remoteId === externalIdStr) || team.squad[0];
+        }
+
+        return [{
+            player: {
+                id: playerId,
+                name: player.commonName,
+                firstname: player.commonName.split(' ')[0],
+                lastname: player.commonName.split(' ').slice(1).join(' '),
+                age: 25 + (typeof playerId === 'number' ? playerId % 10 : (playerId.length % 10)),
+                birth: { date: '1999-01-01', place: 'Mock City', country: 'Mockland' },
+                nationality: 'Mockian',
+                height: '180 cm',
+                weight: '75 kg',
+                injured: false,
+                photo: player.photo
+            },
+            statistics: [{
+                team: { id: 1, name: 'Mock FC', logo: '' },
+                league: { id: 1, name: 'Mock League', country: 'Mockland', logo: '', flag: '', season },
+                games: { appearences: 20, lineups: 18, minutes: 1600, number: 10, position: player.position, rating: '7.5', captain: false },
+                goals: { total: 5, assists: 3, conceded: 0, saves: 0 },
+                cards: { yellow: 2, yellowred: 0, red: 0 }
+            }]
+        }];
     }
 }
 

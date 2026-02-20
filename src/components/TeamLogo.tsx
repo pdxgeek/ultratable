@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { gfxRegistry } from '../services/gfxRegistry';
+import { useGraphic } from '../hooks/useGraphic';
 
 interface TeamLogoProps {
     url?: string;
@@ -12,9 +13,9 @@ interface TeamLogoProps {
 export default function TeamLogo({ url, teamId, name = '??', className = '', size }: TeamLogoProps) {
     const [error, setError] = useState(false);
 
-    // Look up graphic by team association
-    const graphicId = teamId ? gfxRegistry.findId(`team:${teamId}`, 'team_logo') : null;
-    const blobUrl = graphicId ? gfxRegistry.getById(graphicId) : undefined;
+    // Look up graphic by team association (using pure NanoID)
+    const graphicId = teamId ? gfxRegistry.findId(teamId, 'team_logo') : null;
+    const blobUrl = useGraphic(graphicId);
 
     // If we have a blobUrl from the hook, use it. Otherwise use the provided url prop.
     const effectiveUrl = blobUrl || url;

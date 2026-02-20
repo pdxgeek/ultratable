@@ -146,4 +146,66 @@ export class ApiFootballProvider implements DataProvider {
             };
         }));
     }
+
+    async getTeamDetails(teamId: string, options?: { forceRefresh?: boolean }): Promise<{ team: Team; coach: any; squad: any[] }> {
+        const externalId = parseInt(teamId, 10);
+
+        // 1. Fetch Basic Team Info (Logo, Venue)
+        const teamRaw = await apiGet<ApiTeam[]>(
+            'teams',
+            { id: externalId },
+            `teams_detail_${externalId}`,
+            options?.forceRefresh
+        );
+        if (!teamRaw || teamRaw.length === 0) throw new Error('Team not found');
+        const team = await mapTeam('api-football', teamRaw[0]);
+
+        // 2. Fetch Coach
+        const coachRaw = await apiGet<any[]>(
+            'coaches',
+            { team: externalId },
+            `coach_${externalId}`,
+            options?.forceRefresh
+        );
+        const coach = coachRaw && coachRaw.length > 0 ? {
+            id: await database.getInternalId('api-football', 'coach', coachRaw[0].id),
+            name: coachRaw[0].name,
+            photo: coachRaw[0].photo,
+            nationality: coachRaw[0].nationality,
+            birthDate: coachRaw[0].birth?.date,
+            externalReferences: [{ integrationName: 'api-football', remoteId: String(coachRaw[0].id) }]
+        } : null;
+
+        // 3. Fetch Squad (simplified from player endpoint)
+        const squadRaw = await apiGet<any[]>(
+            'players/squads',
+            { team: externalId },
+            `squad_${externalId}`,
+            options?.forceRefresh
+        );
+
+        const squad = squadRaw && squadRaw[0]?.players ? await Promise.all(squadRaw[0].players.map(async (p: any) => {
+            const playerId = await database.getInternalId('api-football', 'player', p.id);
+            return {
+                id: playerId,
+                commonName: p.name,
+                number: p.number,
+                position: p.position,
+                age: p.age,
+                photo: `https://media.api-sports.io/football/players/${p.id}.png`, // Deterministic photo URL
+                externalReferences: [{ integrationName: 'api-football', remoteId: String(p.id) }]
+            };
+        })) : [];
+
+        return { team: team!, coach, squad };
+    }
+
+    async getPlayerData(playerId: number, season: number, options?: { forceRefresh?: boolean }): Promise<any> {
+        return apiGet<any[]>(
+            'players',
+            { id: playerId, season },
+            `player_detail_${playerId}_${season}`,
+            options?.forceRefresh
+        );
+    }
 }

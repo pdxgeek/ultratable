@@ -24,7 +24,7 @@ export interface QuotaRecord {
 
 export interface LeagueRecord {
     key: string;          // Primary key (e.g., '39_2024')
-    id: number;
+    id: string;           // NanoID or API ID (as string)
     name: string;
     season: number;
     config: any;          // Full LeagueConfig object
@@ -50,15 +50,21 @@ export interface LogRecord {
 }
 
 export interface GraphicRecord {
-    id: string;              // Primary key (graphic ID)
-    type: string;            // 'team_logo', 'player_photo', 'venue_image', etc.
-    associationId: string;   // e.g., NanoID of the team/player
-    blobHash?: string;       // SHA-256 hash of the content (for deduplication)
+    id: string;              // Primary key (stable graphic ID)
+    type: string;            // 'team_logo', 'player_photo', etc.
+    associationId: string;   // NanoID of the team/player
+    associationType: string; // 'team', 'player', etc.
+    variants: Array<{
+        blobHash: string;
+        sourceUrl: string;
+        lastRefreshed: string;
+        tag?: string;
+    }>;
+    activeVariantIndex?: number;
     externalReferences: IntegrationReference[];
-    commonName: string;      // Human-readable name
-    sourceUrl: string;       // Original URL
-    timestamp: number;       // When registered
-    lastRefreshed?: string;  // ISO UTC timestamp
+    commonName: string;
+    timestamp: number;       // When the "slot" was first created
+    lastRefreshed?: string;  // Overall last refreshed timestamp
 }
 
 // ─── User & Auth Records ───────────────────────────────────────────────────

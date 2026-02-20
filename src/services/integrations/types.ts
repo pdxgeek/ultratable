@@ -11,6 +11,8 @@ export interface DataProvider {
     getFixtureDetails(fixtureId: string, options?: FetchOptions): Promise<Fixture | null>;
     getEvents(fixtureId: number, options?: FetchOptions): Promise<ApiEvent[]>;
     getLineups(fixtureId: string, options?: FetchOptions): Promise<MatchLineup[]>;
+    getTeamDetails(teamId: string, options?: FetchOptions): Promise<{ team: Team; coach: any; squad: any[] }>;
+    getPlayerData(playerId: string | number, season: number, options?: FetchOptions): Promise<any>;
 }
 
 export const IntegrationTypes = 'IntegrationTypes';

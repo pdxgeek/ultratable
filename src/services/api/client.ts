@@ -101,5 +101,5 @@ export async function apiGet<T>(
         }
 
         return json.response;
-    });
+    }, cacheKey || undefined);
 }

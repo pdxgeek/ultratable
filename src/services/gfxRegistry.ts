@@ -1,16 +1,29 @@
-import { cacheLogo, cacheImageById, getCachedImageById } from './cache';
-import type { Graphic, GraphicType, Player } from '../types';
-import { db } from './dao/schema';
+import { cacheLogo } from './cache';
+import type { Graphic, GraphicType, Player, GraphicVariant } from '../types';
+import { db, type GraphicRecord } from './dao/schema';
+import { database } from './db';
+import { generateDeterministicId } from './idUtils';
 
 export class GfxRegistry {
     private graphics: Map<string, Graphic>; // ID -> Graphic (metadata always in memory)
     private blobCache: Map<string, { url: string; lastAccessed: number }>; // LRU cache for blob URLs
     private initialized: boolean = false;
-    private readonly MAX_BLOB_CACHE_SIZE = 100; // Max blobs to keep in memory
+    private initPromise: Promise<void> | null = null;
+    private readonly MAX_BLOB_CACHE_SIZE = 2000;
+    private activeDownloads: Set<string> = new Set();
+    private totalStarted: number = 0;
+    private totalFinished: number = 0;
+    private batchStartTime: number | null = null;
+    private queueListeners: Set<(stats: { activeIds: string[], totalStarted: number, totalFinished: number, rate: number }) => void> = new Set();
 
     constructor() {
         this.graphics = new Map();
         this.blobCache = new Map();
+    }
+
+    private cacheBlob(key: string, url: string) {
+        this.blobCache.set(key, { url, lastAccessed: Date.now() });
+        this.evictOldestBlobs();
     }
 
     // Evict least recently used blobs when cache is full
@@ -32,83 +45,204 @@ export class GfxRegistry {
         console.log(`Evicted ${toRemove.length} blob(s) from cache`);
     }
 
-    // Initialize by loading all graphics from database
-    async initialize(): Promise<void> {
-        if (this.initialized) return;
+    private notifyQueueListeners(): void {
+        const activeIds = Array.from(this.activeDownloads);
 
-        try {
-            const allGraphics = await db.graphics.toArray();
-            const toDelete: string[] = [];
+        let rate = 0;
+        if (this.batchStartTime && this.totalFinished > 0) {
+            const elapsedSec = (Date.now() - this.batchStartTime) / 1000;
+            rate = elapsedSec > 0 ? this.totalFinished / elapsedSec : 0;
+        }
 
-            for (const record of allGraphics) {
-                // Skip and mark for deletion if URL is empty
-                if (!record.sourceUrl || record.sourceUrl.trim() === '') {
-                    toDelete.push(record.id);
-                    continue;
-                }
+        const stats = {
+            activeIds,
+            totalStarted: this.totalStarted,
+            totalFinished: this.totalFinished,
+            rate
+        };
 
-                const graphic: Graphic = {
-                    id: record.id,
-                    type: record.type as GraphicType,
-                    associationId: record.associationId,
-                    externalReferences: record.externalReferences,
-                    commonName: record.commonName,
-                    sourceUrl: record.sourceUrl,
-                    lastRefreshed: record.lastRefreshed || new Date().toISOString(),
-                };
-                this.graphics.set(graphic.id, graphic);
-            }
+        this.queueListeners.forEach(l => l(stats));
 
-            // Clean up graphics with empty URLs
-            if (toDelete.length > 0) {
-                await db.graphics.bulkDelete(toDelete);
-                console.log(`Removed ${toDelete.length} graphics with empty URLs`);
-            }
-
-            console.log(`Loaded ${this.graphics.size} graphics from database`);
-            this.initialized = true;
-        } catch (err) {
-            console.error('Failed to initialize graphics registry:', err);
+        // Reset batch if everything is finished
+        if (activeIds.length === 0) {
+            this.totalStarted = 0;
+            this.totalFinished = 0;
+            this.batchStartTime = null;
         }
     }
 
-    // Register a new graphic and return its ID
-    async register(graphic: Graphic): Promise<string> {
-        // Check if already in memory
-        if (this.graphics.has(graphic.id)) {
-            const existing = this.graphics.get(graphic.id)!;
-            // If the URL and association haven't changed, skip DB update
-            if (existing.sourceUrl === graphic.sourceUrl && existing.associationId === graphic.associationId) {
-                return graphic.id;
+    subscribeToQueue(callback: (stats: { activeIds: string[], totalStarted: number, totalFinished: number, rate: number }) => void): () => void {
+        this.queueListeners.add(callback);
+
+        const activeIds = Array.from(this.activeDownloads);
+        let rate = 0;
+        if (this.batchStartTime && this.totalFinished > 0) {
+            const elapsedSec = (Date.now() - this.batchStartTime) / 1000;
+            rate = elapsedSec > 0 ? this.totalFinished / elapsedSec : 0;
+        }
+
+        callback({
+            activeIds,
+            totalStarted: this.totalStarted,
+            totalFinished: this.totalFinished,
+            rate
+        });
+        return () => this.queueListeners.delete(callback);
+    }
+
+    // Initialize by loading all graphics from database
+    async initialize(): Promise<void> {
+        if (this.initialized) return;
+        if (this.initPromise) return this.initPromise;
+
+        this.initPromise = (async () => {
+
+            try {
+                // Run migrations and cleanup once before loading into memory
+                await database.migrateGraphicsAssociationIds();
+                await database.purgeBrokenGraphics();
+
+                const allGraphics = await db.graphics.toArray();
+
+                for (const record of allGraphics) {
+                    // Determine associationType if missing (migration bridge)
+                    const assocType = (record as any).associationType ||
+                        (record.type === 'player_photo' ? 'player' : 'team');
+
+                    const graphic: Graphic = {
+                        id: record.id,
+                        type: record.type as GraphicType,
+                        associationId: record.associationId,
+                        associationType: assocType as any,
+                        externalReferences: record.externalReferences,
+                        commonName: record.commonName,
+                        variants: record.variants || [],
+                        activeVariantIndex: record.activeVariantIndex,
+                        lastRefreshed: record.lastRefreshed || new Date().toISOString(),
+                    };
+
+                    // Backwards compatibility for flat records during migration
+                    if (!record.variants && (record as any).sourceUrl) {
+                        graphic.variants = [{
+                            sourceUrl: (record as any).sourceUrl,
+                            blobHash: (record as any).blobHash || '',
+                            lastRefreshed: record.lastRefreshed || new Date().toISOString()
+                        }];
+                    }
+
+                    this.graphics.set(graphic.id, graphic);
+                }
+
+                console.log(`Loaded ${this.graphics.size} graphics from database`);
+                this.initialized = true;
+            } catch (err) {
+                console.error('Failed to initialize graphics registry:', err);
+            } finally {
+                this.initPromise = null;
+            }
+        })();
+
+        return this.initPromise;
+    }
+
+    // Register a new graphic variant for an association
+    async register(graphic: Partial<Graphic> & { sourceUrl: string; tag?: string }): Promise<string> {
+        const type = graphic.type || 'team_logo';
+        const assocId = graphic.associationId || '';
+        const assocType = graphic.associationType || (type === 'player_photo' ? 'player' : 'team');
+
+        // 1. Deterministic Slot ID calculation
+        const slotId = this.calculateSlotId(assocId, type);
+        let existing = this.graphics.get(slotId);
+
+        if (!existing) {
+            // Check database if not in memory
+            const record = await db.graphics.get(slotId);
+            if (record) {
+                existing = {
+                    id: record.id,
+                    type: record.type as GraphicType,
+                    associationId: record.associationId,
+                    associationType: record.associationType as any,
+                    externalReferences: record.externalReferences,
+                    commonName: record.commonName,
+                    variants: record.variants || [],
+                    activeVariantIndex: record.activeVariantIndex,
+                    lastRefreshed: record.lastRefreshed || new Date().toISOString(),
+                };
+                this.graphics.set(slotId, existing);
+            } else {
+                // Create a new deterministic slot
+                const newGraphic: Graphic = {
+                    id: slotId,
+                    type,
+                    associationId: assocId,
+                    associationType: assocType as any,
+                    commonName: graphic.commonName || 'Unnamed Graphic',
+                    externalReferences: graphic.externalReferences || [],
+                    variants: [],
+                    lastRefreshed: new Date().toISOString()
+                };
+                this.graphics.set(slotId, newGraphic);
+                existing = newGraphic;
             }
         }
 
-        this.graphics.set(graphic.id, graphic);
+        // 2. See if this specific URL is already in the variants
+        const hasVariant = existing.variants.some(v => v.sourceUrl === graphic.sourceUrl);
+        if (hasVariant) return slotId;
+
+        // 3. Append new variant (Gallery logic)
+        const newVariant: GraphicVariant = {
+            sourceUrl: graphic.sourceUrl,
+            blobHash: '', // Will be populated by loadById/cache
+            lastRefreshed: new Date().toISOString(),
+            tag: graphic.tag
+        };
+        existing.variants.push(newVariant);
+        existing.lastRefreshed = newVariant.lastRefreshed;
 
         // Persist to database
         try {
-            await db.graphics.put({
-                id: graphic.id,
-                type: graphic.type,
-                associationId: graphic.associationId,
-                externalReferences: graphic.externalReferences,
-                commonName: graphic.commonName,
-                sourceUrl: graphic.sourceUrl,
+            const record: GraphicRecord = {
+                id: existing.id,
+                type: existing.type,
+                associationId: existing.associationId,
+                associationType: existing.associationType,
+                externalReferences: existing.externalReferences,
+                commonName: existing.commonName,
+                variants: existing.variants,
+                activeVariantIndex: existing.activeVariantIndex,
                 timestamp: Date.now(),
-                lastRefreshed: graphic.lastRefreshed,
-            });
+                lastRefreshed: existing.lastRefreshed
+            };
+            await db.graphics.put(record);
+            console.log(`[GfxDebug] Persisted graphic record ${existing.id} to DB.`);
         } catch (err) {
-            console.error('Failed to persist graphic to database:', err);
+            console.error('[GfxDebug] Failed to persist graphic:', err);
         }
 
-        return graphic.id;
+        return slotId;
+    }
+
+    // Batch register graphics
+    async registerBatch(graphics: (Partial<Graphic> & { sourceUrl: string; tag?: string })[]): Promise<string[]> {
+        const results: string[] = [];
+        for (const g of graphics) {
+            results.push(await this.register(g));
+        }
+        return results;
     }
 
     // Find all graphic IDs for an association directly from the database
     async getManyByAssociation(associationId: string, type: GraphicType): Promise<string[]> {
         // Check memory first
-        const inMem = this.findIds(associationId, type);
-        // Even if found in memory, we might want to sync with DB to be sure we have the full set
+        const inMem: string[] = [];
+        for (const g of this.graphics.values()) {
+            if (g.associationId === associationId && g.type === type) {
+                inMem.push(g.id);
+            }
+        }
 
         try {
             const records = await db.graphics
@@ -124,10 +258,11 @@ export class GfxRegistry {
                     id: record.id,
                     type: record.type as GraphicType,
                     associationId: record.associationId,
+                    associationType: record.associationType as any,
                     externalReferences: record.externalReferences,
                     commonName: record.commonName,
-                    sourceUrl: record.sourceUrl,
-                    blobHash: record.blobHash,
+                    variants: record.variants || [],
+                    activeVariantIndex: record.activeVariantIndex,
                     lastRefreshed: record.lastRefreshed || new Date().toISOString()
                 });
                 ids.push(record.id);
@@ -163,15 +298,14 @@ export class GfxRegistry {
         await this.deleteGraphic(id);
     }
 
-    // Helper for findId (renamed to findIds and returning array)
-    findIds(associationId: string, type: GraphicType): string[] {
-        const ids: string[] = [];
-        for (const graphic of this.graphics.values()) {
-            if (graphic.associationId === associationId && graphic.type === type) {
-                ids.push(graphic.id);
-            }
-        }
-        return ids;
+    // Helper to calculate a deterministic Slot ID for an entity:type pair
+    calculateSlotId(associationId: string, type: GraphicType): string {
+        return generateDeterministicId(`${type}:${associationId}`);
+    }
+
+    // Helper for findId - now deterministic
+    findId(associationId: string, type: GraphicType): string {
+        return this.calculateSlotId(associationId, type);
     }
 
     // Individual lookup (returns first match)
@@ -180,75 +314,90 @@ export class GfxRegistry {
         return ids.length > 0 ? ids[0] : undefined;
     }
 
-    // Batch register graphics
-    async registerBatch(graphics: Graphic[]): Promise<void> {
-        const records = graphics.map(g => ({
-            id: g.id,
-            type: g.type,
-            associationId: g.associationId,
-            externalReferences: g.externalReferences,
-            commonName: g.commonName,
-            sourceUrl: g.sourceUrl,
-            timestamp: Date.now(),
-            lastRefreshed: g.lastRefreshed,
-        }));
+    // Load binary content for a graphic (latest variant by default)
+    async loadById(id: string, variantIndex?: number): Promise<string | undefined> {
+        await this.initialize();
+        const graphic = this.graphics.get(id);
+        if (!graphic || graphic.variants.length === 0) return undefined;
 
-        // Add to in-memory map
-        for (const g of graphics) {
-            this.graphics.set(g.id, g);
+        // Use specified variant or active or latest
+        const idx = variantIndex !== undefined ? variantIndex :
+            graphic.activeVariantIndex !== undefined ? graphic.activeVariantIndex :
+                graphic.variants.length - 1;
+
+        const variant = graphic.variants[idx];
+        if (!variant) return undefined;
+
+        // Check memory cache
+        const cacheKey = `${id}:${idx}`;
+        if (this.blobCache.has(cacheKey)) {
+            const entry = this.blobCache.get(cacheKey)!;
+            entry.lastAccessed = Date.now();
+            return entry.url;
         }
 
-        // Persist to database in batch
         try {
-            await db.graphics.bulkPut(records);
+            if (this.activeDownloads.size === 0) {
+                this.batchStartTime = Date.now();
+            }
+            this.activeDownloads.add(id);
+            this.totalStarted++;
+            this.notifyQueueListeners();
+
+            // Load from DB
+            const blob = await database.getGraphicBlob(id, idx);
+            if (blob) {
+                const url = URL.createObjectURL(blob);
+                this.cacheBlob(cacheKey, url);
+                return url;
+            }
+
+            // Fallback: Download from source
+            if (variant.sourceUrl && variant.sourceUrl.startsWith('http')) {
+                try {
+                    const response = await fetch(variant.sourceUrl);
+                    const blob = await response.blob();
+
+                    // Cache blob in vault directly (now using generateContentId internally in saveGraphicBlob)
+                    const contentId = await database.saveGraphicBlob(id, blob, idx);
+                    console.log(`[GfxDebug] Downloaded and saved blob ${contentId} for ${id}`);
+
+                    // Update variant in memory
+                    variant.blobHash = contentId;
+                    await db.graphics.update(id, { variants: graphic.variants });
+
+                    const url = URL.createObjectURL(blob);
+                    this.cacheBlob(cacheKey, url);
+                    return url;
+                } catch (err) {
+                    console.error(`Failed to download graphic fallback for ${id}:`, err);
+                }
+            }
         } catch (err) {
-            console.error('Failed to persist graphics batch to database:', err);
-        }
-    }
-
-    getById(id: string): string | undefined {
-        // First check in-memory cache
-        const cached = this.blobCache.get(id);
-        if (cached) {
-            // Update last accessed time for LRU
-            cached.lastAccessed = Date.now();
-            return cached.url;
+            console.error(`Failed to load graphic ${id}:`, err);
+        } finally {
+            this.activeDownloads.delete(id);
+            this.totalFinished++;
+            this.notifyQueueListeners();
         }
 
-        // If not in memory, try to load from IndexedDB synchronously
-        // This will trigger async load in background
-        this.loadById(id).catch(() => { });
         return undefined;
     }
 
-    // Legacy helper (returns first match)
-    findId(associationId: string, type: GraphicType): string | undefined {
-        const ids = this.findIds(associationId, type);
-        return ids.length > 0 ? ids[0] : undefined;
-    }
-
-    async loadById(id: string): Promise<string | undefined> {
-        // Check in-memory cache first
-        const cached = this.blobCache.get(id);
-        if (cached) {
-            cached.lastAccessed = Date.now();
-            return cached.url;
-        }
-
-        // Try to load from IndexedDB by ID
-        const cachedBlob = await getCachedImageById(id);
-        if (cachedBlob) {
-            this.blobCache.set(id, { url: cachedBlob, lastAccessed: Date.now() });
-            this.evictOldestBlobs();
-            return cachedBlob;
-        }
-
-        // Not in IndexedDB, fetch from source
+    // Get a cached blob URL synchronously (latest variant)
+    getById(id: string): string | undefined {
         const graphic = this.graphics.get(id);
-        if (!graphic) return undefined;
-        await this.loadOne(graphic);
-        const entry = this.blobCache.get(id);
-        return entry?.url;
+        if (!graphic || graphic.variants.length === 0) return undefined;
+
+        const idx = graphic.activeVariantIndex !== undefined ? graphic.activeVariantIndex :
+            graphic.variants.length - 1;
+        const cacheKey = `${id}:${idx}`;
+        const entry = this.blobCache.get(cacheKey);
+        if (entry) {
+            entry.lastAccessed = Date.now();
+            return entry.url;
+        }
+        return undefined;
     }
 
     // Pre-load graphics. If IDs are provided, only those are loaded.
@@ -259,23 +408,14 @@ export class GfxRegistry {
             : Array.from(this.graphics.values());
 
         for (const graphic of targets) {
-            if (!this.blobCache.has(graphic.id)) {
-                promises.push(this.loadOne(graphic));
+            if (graphic.variants.length > 0) {
+                promises.push(this.loadById(graphic.id).then(() => { }));
             }
         }
         await Promise.all(promises);
     }
 
-    private async loadOne(graphic: Graphic) {
-        try {
-            // Cache with ID as key (not URL)
-            const blobUrl = await cacheImageById(graphic.id, graphic.sourceUrl);
-            this.blobCache.set(graphic.id, { url: blobUrl, lastAccessed: Date.now() });
-            this.evictOldestBlobs();
-        } catch (e) {
-            console.warn(`Failed to cache graphic ${graphic.id} (${graphic.sourceUrl})`, e);
-        }
-    }
+    // (Removed stale loadOne logic)
 
     // Legacy support / Direct URL support
     // We can register ad-hoc URLs as 'misc' graphics if needed, or keep the old direct-URL method?
@@ -289,19 +429,19 @@ export class GfxRegistry {
 
     // Let's keep the raw URL loader for things that haven't been migrated or 
     // for just loading a URL.
+    // Let's keep the raw URL loader for things that haven't been migrated
     async loadUrl(url: string): Promise<string> {
-        // Check if this URL matches any registered graphic?
+        // Check if this URL matches any registered graphic variant
         for (const g of this.graphics.values()) {
-            if (g.sourceUrl === url) {
-                const cached = this.blobCache.get(g.id);
+            const vIdx = g.variants.findIndex(v => v.sourceUrl === url);
+            if (vIdx !== -1) {
+                const cached = this.blobCache.get(`${g.id}:${vIdx}`);
                 if (cached) {
                     cached.lastAccessed = Date.now();
                     return cached.url;
                 }
-                // If not cached, load it using its ID logic
-                await this.loadOne(g);
-                const entry = this.blobCache.get(g.id);
-                return entry?.url || url;
+                // If not cached, load it
+                return (await this.loadById(g.id, vIdx)) || url;
             }
         }
 
@@ -311,7 +451,7 @@ export class GfxRegistry {
     // Legacy/Helper for Team Logos
     getLogo(teamId: string | number): string | undefined {
         const idStr = teamId.toString();
-        const graphicId = this.findId(`team:${idStr}`, 'team_logo');
+        const graphicId = this.findId(idStr, 'team_logo'); // Pure NanoID
         if (!graphicId) return undefined;
         return this.getById(graphicId);
     }
@@ -319,7 +459,7 @@ export class GfxRegistry {
     // Helper for Venue Images (associated with team)
     getVenue(teamId: string | number): string | undefined {
         const idStr = teamId.toString();
-        const graphicId = this.findId(`team:${idStr}`, 'venue_image');
+        const graphicId = this.findId(idStr, 'venue_image'); // Pure NanoID
         if (!graphicId) return undefined;
         return this.getById(graphicId);
     }
@@ -327,10 +467,9 @@ export class GfxRegistry {
     // Helper for Player Photos
     getPlayerPhoto(player: Player | string): string | undefined {
         const id = typeof player === 'string' ? player : player.id;
-        // First try finding by associationId (NanoID)
+        // First try finding by associationId (Deterministic)
         let graphicId = this.findId(id, 'player_photo');
 
-        // Fallback for older data or if associationId was provider-specific
         if (!graphicId && typeof player !== 'string') {
             const ref = player.externalReferences?.find(r => r.integrationName === 'api-football');
             if (ref) {
@@ -346,6 +485,27 @@ export class GfxRegistry {
     async getImage(url: string | null | undefined): Promise<string | null> {
         if (!url) return null;
         return this.loadUrl(url);
+    }
+
+    // Purge everything from memory and database
+    async purge(): Promise<void> {
+        // Clear memory
+        this.graphics.clear();
+        for (const entry of this.blobCache.values()) {
+            URL.revokeObjectURL(entry.url);
+        }
+        this.blobCache.clear();
+
+        // Clear database
+        try {
+            await db.graphics.clear();
+            await db.blobs.clear();
+        } catch (err) {
+            console.error('Failed to purge graphics from database:', err);
+        }
+
+        console.log('Graphics registry purged completely.');
+        this.notifyQueueListeners();
     }
 }
 

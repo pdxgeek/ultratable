@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { fetchFixtureDetails, fetchLineups, fetchEvents } from '../services/apiFootball';
 import type { Fixture, Player } from '../types';
 import { useCachedImage } from '../hooks/useCachedImage';
+import { useGraphic } from '../hooks/useGraphic';
 import TeamLogo from '../components/TeamLogo';
 import { gfxRegistry } from '../services/gfxRegistry';
 import { fetchPlayersFromLineup } from '../services/playerData';
@@ -18,11 +19,13 @@ function PlayerPhoto({ player, name, season }: { player: Player; name: string; s
     const photoRef = useRef<HTMLDivElement>(null);
 
     // Get photo from graphics registry using the new entity-based lookup
-    const photoUrl = gfxRegistry.getPlayerPhoto(player);
+    const graphicId = gfxRegistry.findId(player.id, 'player_photo');
+    const photoUrl = useGraphic(graphicId);
 
     const handleMouseEnter = (e: React.MouseEvent) => {
+        const isRightSide = e.clientX > window.innerWidth * 0.6;
         setPopupPosition({
-            x: e.clientX + 15,
+            x: isRightSide ? e.clientX - 375 : e.clientX + 15,
             y: e.clientY + 15
         });
         setShowPopup(true);
@@ -30,8 +33,9 @@ function PlayerPhoto({ player, name, season }: { player: Player; name: string; s
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (showPopup) {
+            const isRightSide = e.clientX > window.innerWidth * 0.6;
             setPopupPosition({
-                x: e.clientX + 15,
+                x: isRightSide ? e.clientX - 375 : e.clientX + 15,
                 y: e.clientY + 15
             });
         }
@@ -141,9 +145,10 @@ export default function MatchPage() {
     });
 
     // For venue images
-    const venueFromRegistry = fixture ? gfxRegistry.getVenue(fixture.homeTeamId) : undefined;
+    const venueGraphicId = fixture ? gfxRegistry.findId(fixture.homeTeamId, 'venue_image') : null;
+    const venueFromRegistry = useGraphic(venueGraphicId);
     const venueDirectUrl = useCachedImage(fixture?.venueImage);
-    const venueImageUrl = venueDirectUrl || venueFromRegistry;
+    const venueImageUrl = venueFromRegistry || venueDirectUrl;
 
     // Fetch player photos when lineups are loaded
     const fetchingFixtureId = useRef<string | null>(null);
@@ -218,7 +223,7 @@ export default function MatchPage() {
                             <ul className="player-list">
                                 {homeLineup.startXI.map(item => (
                                     <li key={item.player.id} className="player-item">
-                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
+                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={league.season} />
                                         <span className="player-number">{item.player.number}</span>
                                         <span className="player-name">{item.player.commonName}</span>
                                         <span className="player-pos">{item.player.pos}</span>
@@ -325,7 +330,7 @@ export default function MatchPage() {
                                             <span className="player-name">{item.player.commonName}</span>
                                             <span className="player-number">{item.player.number}</span>
                                         </div>
-                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={new Date(fixture.date).getFullYear()} />
+                                        <PlayerPhoto player={item.player} name={item.player.commonName} season={league.season} />
                                     </li>
                                 ))}
                             </ul>

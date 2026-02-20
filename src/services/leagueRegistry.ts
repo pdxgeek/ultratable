@@ -92,7 +92,7 @@ export async function fetchLeagues(): Promise<Record<string, LeagueConfig>> {
             // Reconstruct legacy config for compatibility
             const key = `${l.externalReferences[0]?.remoteId || 0}_${s.season}`;
             result[key] = {
-                id: parseInt(l.externalReferences[0]?.remoteId || '0'),
+                id: (l.externalReferences[0]?.remoteId || '0').toString(),
                 name: l.commonName,
                 season: s.season,
                 matchesPerSeason: s.matchesPerSeason,

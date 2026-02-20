@@ -177,11 +177,19 @@ export interface BaseEntity {
 
 export type GraphicType = 'team_logo' | 'venue_image' | 'player_photo' | 'league_logo';
 
+export interface GraphicVariant {
+  blobHash: string;      // Hash for deduplicated binary storage
+  sourceUrl: string;     // Original source for this specific version
+  lastRefreshed: string; // ISO Timestamp for this specific version
+  tag?: string;          // Optional tag (e.g., 'high_res', 'transparent')
+}
+
 export interface Graphic extends BaseEntity {
   type: GraphicType;
-  associationId: string; // ID of the entity it belongs to (Team ID, Player ID)
-  sourceUrl: string; // Original URL
-  blobHash?: string; // SHA-256 hash of the content
+  associationId: string;    // ID of the entity it belongs to
+  associationType: 'team' | 'player' | 'league' | 'coach'; // Semantic owner type
+  variants: GraphicVariant[];
+  activeVariantIndex?: number; // Which variant to show by default
 }
 
 export type FixtureStatus =

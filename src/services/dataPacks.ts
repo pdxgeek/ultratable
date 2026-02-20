@@ -6,7 +6,6 @@ import type {
     SeasonDataPack
 } from '../types';
 import { transformTeams } from './dataCompiler';
-import { generateId } from './idUtils';
 import { gfxRegistry } from './gfxRegistry';
 
 // ─── Generators ────────────────────────────────────────────────────────
@@ -17,37 +16,33 @@ export function generateTeamPack(apiTeams: Team[]): TeamDataPack {
     return transformTeams(apiTeams);
 }
 
-export function generateGfxPack(apiTeams: Team[]): Graphic[] {
-    const pack: Graphic[] = [];
+export function generateGfxPack(apiTeams: Team[]): (Partial<Graphic> & { sourceUrl: string; tag?: string })[] {
+    const pack: (Partial<Graphic> & { sourceUrl: string; tag?: string })[] = [];
     for (const t of apiTeams) {
         if (!t || !t.id) continue;
         // Only create graphics for non-empty URLs
         if (t.logo && t.logo.trim() !== '') {
-            // Check if graphic already exists in registry (reuse existing ID)
-            const existingLogoId = gfxRegistry.findId(`team:${t.id}`, 'team_logo');
-            const logoId = existingLogoId || generateId();
+            // Deterministic Slot ID calculation
+            const logoId = gfxRegistry.calculateSlotId(t.id, 'team_logo');
             pack.push({
                 id: logoId,
                 type: 'team_logo',
                 associationId: t.id,
                 commonName: `${t.commonName} Logo`,
                 sourceUrl: t.logo,
-                externalReferences: t.externalReferences,
-                lastRefreshed: t.lastRefreshed
+                externalReferences: t.externalReferences
             });
         }
         if (t.venueImage && t.venueImage.trim() !== '') {
-            // Check if graphic already exists in registry (reuse existing ID)
-            const existingVenueId = gfxRegistry.findId(`team:${t.id}`, 'venue_image');
-            const venueId = existingVenueId || generateId();
+            // Deterministic Slot ID calculation
+            const venueId = gfxRegistry.calculateSlotId(t.id, 'venue_image');
             pack.push({
                 id: venueId,
                 type: 'venue_image',
                 associationId: t.id, // Venue is associated with the team
                 commonName: `${t.venue || t.commonName} Venue`,
                 sourceUrl: t.venueImage,
-                externalReferences: t.externalReferences,
-                lastRefreshed: t.lastRefreshed
+                externalReferences: t.externalReferences
             });
         }
     }
@@ -58,7 +53,7 @@ export function generateSeasonPack(
     leagueId: string,
     season: number,
     teams: Team[],
-    fixtures: any[], // Type as Fixture[] or generic, not used for mapping here really
+    _fixtures: any[], // Type as Fixture[] or generic, not used for mapping here really
     _standings: any[],
     rules: SeasonRules
 ): SeasonDataPack {

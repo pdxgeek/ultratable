@@ -30,6 +30,6 @@ export const auth = betterAuth({
 });
 
 // Export handler for Vite middleware
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
-    return auth.handler(req, res);
+export default async function handler(req: IncomingMessage, _res: ServerResponse) {
+    return (auth.handler as any)(req);
 }
