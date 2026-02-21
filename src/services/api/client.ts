@@ -43,14 +43,19 @@ export async function apiGet<T>(
     endpoint: string,
     params: Record<string, any> = {},
     cacheKey: string | null = null,
-    forceRefresh = false
+    forceRefresh = false,
+    ttl?: number // TTL in milliseconds
 ): Promise<T> {
     // 1. Check Cache
     if (cacheKey && !forceRefresh) {
         const cached = await getCache<T>(cacheKey);
         if (cached) {
-            console.log('Cache Hit:', cacheKey);
-            return cached.data;
+            const age = Date.now() - cached.timestamp;
+            if (!ttl || age < ttl) {
+                console.log('Cache Hit:', cacheKey, `(Age: ${Math.round(age / 1000)}s)`);
+                return cached.data;
+            }
+            console.log('Cache Stale:', cacheKey, `(Age: ${Math.round(age / 1000)}s, TTL: ${Math.round(ttl / 1000)}s)`);
         }
     }
 

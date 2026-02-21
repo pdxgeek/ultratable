@@ -152,6 +152,15 @@ export interface MappingRecord {
 
 // ─── Domain Entity Records ─────────────────────────────────────────────────
 
+export interface ScheduleRecord {
+    id: string;              // Primary key: "{seasonId}:{teamId}:{gameweek}"
+    seasonId: string;
+    teamId: string;
+    gameweek: number;
+    fixtureId: string | null;
+    updatedAt: number;
+}
+
 export interface TeamRecord {
     id: string;              // Primary key (NanoID)
     referenceKeys: string[]; // ['api-football:123', 'mock:456']
@@ -202,6 +211,7 @@ export class UltraTableDB extends Dexie {
     // Domain Store (v7)
     teams!: Table<TeamRecord, string>;
     fixtures!: Table<FixtureRecord, string>;
+    schedules!: Table<ScheduleRecord, string>;
     players!: Table<PlayerRecord, string>;
     coaches!: Table<any, string>;
 
@@ -384,6 +394,30 @@ export class UltraTableDB extends Dexie {
             players: 'id, *referenceKeys',
             coaches: 'id, *referenceKeys',
         });
+
+        // Version 12: Schedules table and seasonId indexing
+        this.version(12).stores({
+            cache: 'key, timestamp',
+            blobs: 'id, timestamp',
+            quotas: 'key, resetAt',
+            leagues: 'key, id, season',
+            leagues_v2: 'id, commonName',
+            league_seasons: 'id, [leagueId+season]',
+            settings: 'key',
+            mockData: '[leagueId+key], leagueId',
+            logs: '++id, timestamp, level',
+            graphics: 'id, type, associationId, blobHash, timestamp',
+            users: 'id, email, lastLogin, role',
+            oauthConnections: 'id, userId, [provider+providerId], lastUsed',
+            predictorProfiles: 'id, userId, slug, isPublic, createdAt',
+            predictions: 'id, profileId, fixtureId, [leagueId+season], isLocked, createdAt',
+            mappings: 'key, internalId, [provider+type+externalId]',
+            teams: 'id, *referenceKeys',
+            fixtures: 'id, *referenceKeys, seasonId', // Added seasonId index
+            schedules: 'id, seasonId, teamId, [seasonId+teamId+gameweek]', // Added schedules table
+            players: 'id, *referenceKeys',
+            coaches: 'id, *referenceKeys',
+        });
     }
 }
 
@@ -402,3 +436,15 @@ export interface LeagueSeasonRecord {
 
 // Singleton instance
 export const db = new UltraTableDB();
+
+// Handle cross-tab schema upgrades to prevent "Error code: 5" (blocked upgrade)
+db.on('versionchange', () => {
+    console.log('[Dexie] Database version change detected. Closing connection to allow upgrade.');
+    db.close();
+    // In a real app, we might also want to notify the user or reload
+    if (typeof window !== 'undefined') {
+        // window.location.reload(); 
+        // Or just let the user refresh when they see the next error.
+        // Closing is usually enough to allow the other tab to finish and then this one will reopen on next access.
+    }
+});

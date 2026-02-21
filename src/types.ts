@@ -144,6 +144,7 @@ export interface SeasonRules {
   pointsForWin: number;
   pointsForDraw: number;
   pointsForLoss: number;
+  rankingCriteria?: LeagueRankingFormula[];
   pointModifications?: PointModification[];
 }
 
@@ -201,6 +202,7 @@ export type FixtureStatus =
   | 'unknown';
 
 export interface Fixture extends BaseEntity {
+  seasonId: string;   // Reference to LeagueSeason NanoID
   homeTeamId: string; // Internal ID
   awayTeamId: string; // Internal ID
   homeTeam: { name: string; logo: string; winner?: boolean | null };
@@ -223,6 +225,13 @@ export interface Fixture extends BaseEntity {
     away: Lineup;
   };
   eventsLoaded: boolean;
+}
+
+export interface ScheduleEntry {
+  seasonId: string;
+  teamId: string;
+  gameweek: number;
+  fixtureId: string | null;
 }
 
 export interface MatchEvent {
@@ -342,7 +351,7 @@ export interface IntegrationCapabilities {
   playerPhotos: IntegrationName;
 }
 
-export type LeagueRankingFormula = 'points' | 'goalDiff' | 'headToHead' | 'wins' | 'awayGoalsScored';
+export type LeagueRankingFormula = 'points' | 'goalDiff' | 'headToHead' | 'wins' | 'awayGoalsScored' | 'goalsFor';
 
 export interface League extends BaseEntity {
   logo: string | null;

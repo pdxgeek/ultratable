@@ -1,11 +1,12 @@
 import type {
+    StandingsRow,
+    Team,
     Fixture,
     FormResult,
     MatchEvent,
-    StandingsRow,
     SeasonRules,
-    Team,
     LeagueRankingFormula,
+    ScheduleEntry,
 } from '../types';
 import { compareByFormula } from './formulas';
 
@@ -48,14 +49,7 @@ export function transformEvents(
 
 // ─── Compiler ──────────────────────────────────────────────────────────
 
-interface TeamStats {
-    played: number;
-    won: number;
-    drawn: number;
-    lost: number;
-    goalsFor: number;
-    goalsAgainst: number;
-}
+// ─── Ranking Logic ────────────────────────────────────────────────────────
 
 function getFormResult(
     fixture: Fixture,
@@ -73,35 +67,70 @@ function getFormResult(
     return 'D';
 }
 
+export interface StandingsOptions {
+    schedules?: Map<string, ScheduleEntry[]> | null;
+    rankingCriteria?: LeagueRankingFormula[];
+    filter?: StandingsFilter;
+    rules?: SeasonRules;
+}
+
 export function compileStandings(
     teams: Map<string, Team>,
     fixtures: Fixture[],
-    _rules?: SeasonRules,
-    rankingCriteria: LeagueRankingFormula[] = ['points', 'goalDiff', 'wins'],
-    filter: StandingsFilter = 'all'
+    options: StandingsOptions = {}
 ): StandingsRow[] {
-    const stats = new Map<string, TeamStats>();
-    const teamFixtures = new Map<string, Fixture[]>();
+    const {
+        schedules = null,
+        rankingCriteria = ['points', 'goalDiff', 'wins', 'awayGoalsScored'],
+        filter = 'all',
+        rules: _rules
+    } = options;
 
-    // Initialize
-    for (const [id] of teams) {
-        stats.set(id, {
-            played: 0,
-            won: 0,
-            drawn: 0,
-            lost: 0,
-            goalsFor: 0,
-            goalsAgainst: 0,
-        });
-        teamFixtures.set(id, []);
+    const stats = new Map<string, {
+        played: number; won: number; drawn: number; lost: number;
+        goalsFor: number; goalsAgainst: number;
+    }>();
+
+    const teamFixtures = new Map<string, Fixture[]>();
+    const fixtureMap = new Map<string, Fixture>(fixtures.map(f => [f.id, f]));
+
+    for (const teamId of teams.keys()) {
+        stats.set(teamId, { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 });
+        teamFixtures.set(teamId, []);
     }
 
-    // Sort fixtures
-    const sorted = [...fixtures].sort((a, b) => a.timestamp - b.timestamp);
+    // Use schedules as the source of truth if available
+    if (schedules && schedules.size > 0) {
+        for (const [teamId, teamSchedules] of schedules) {
+            const list = teamFixtures.get(teamId);
+            if (!list) continue;
+            for (const entry of teamSchedules) {
+                if (entry.fixtureId) {
+                    const f = fixtureMap.get(entry.fixtureId);
+                    if (f) list.push(f);
+                }
+            }
+        }
+    } else {
+        // Fallback to flat list logic if schedules not provided
+        for (const f of fixtures) {
+            const h = teamFixtures.get(f.homeTeamId);
+            const a = teamFixtures.get(f.awayTeamId);
+            if (h) h.push(f);
+            if (a) a.push(f);
+        }
+    }
+
+    // Sort team fixtures by timestamp/gameweek
+    for (const list of teamFixtures.values()) {
+        list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0) || (a.gameweek || 0) - (b.gameweek || 0));
+    }
+
+    // Only process fixtures for standings that are 'played'
+    const playedFixtures = fixtures.filter(f => f.status === 'played');
 
     // Accumulate
-    for (const f of sorted) {
-        if (f.status !== 'played') continue;
+    for (const f of playedFixtures) {
         if (f.homeGoals === null || f.awayGoals === null) continue;
 
         const homeStats = stats.get(f.homeTeamId);
@@ -129,15 +158,6 @@ export function compileStandings(
             if (filter !== 'away') homeStats.drawn++;
             if (filter !== 'home') awayStats.drawn++;
         }
-    }
-
-    // Populate fixture maps
-    for (const f of sorted) {
-        if (f.status === 'cancelled') continue;
-        const h = teamFixtures.get(f.homeTeamId);
-        const a = teamFixtures.get(f.awayTeamId);
-        if (h) h.push(f);
-        if (a) a.push(f);
     }
 
     const rows: StandingsRow[] = [];
@@ -207,8 +227,18 @@ export function compileStandings(
 
 export function getTeamFixtures(
     teamId: string,
-    fixtures: Fixture[]
+    fixtures: Fixture[],
+    schedules: Map<string, ScheduleEntry[]> | null = null
 ): Fixture[] {
+    if (schedules && schedules.has(teamId)) {
+        const teamSchedules = schedules.get(teamId)!;
+        const fixtureMap = new Map(fixtures.map(f => [f.id, f]));
+        return teamSchedules
+            .map(e => e.fixtureId ? fixtureMap.get(e.fixtureId) : null)
+            .filter((f): f is Fixture => f !== null && f !== undefined)
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0) || (a.gameweek || 0) - (b.gameweek || 0));
+    }
+
     return fixtures
         .filter(
             (f) =>

@@ -4,6 +4,7 @@ import type {
     Team,
     Fixture,
     SeasonRules,
+    ScheduleEntry,
 } from '../types';
 import clsx from 'clsx';
 import FormColumn from './FormColumn';
@@ -19,6 +20,7 @@ interface StandingsTableProps {
     standings: StandingsRow[];
     teams: Map<string, Team>;
     fixtures: Fixture[];
+    schedules: Map<string, ScheduleEntry[]> | null;
     rules: SeasonRules;
     filter?: StandingsFilter;
     onFilterChange?: (filter: StandingsFilter) => void;
@@ -31,6 +33,7 @@ export default function StandingsTable({
     standings,
     teams,
     fixtures,
+    schedules,
     rules,
     filter = 'all',
     onFilterChange,
@@ -216,7 +219,7 @@ export default function StandingsTable({
                                                     align="left"
                                                     teamId={team.id}
                                                     teams={teams}
-                                                    fixtures={getTeamFixtures(team.id, fixtures).filter(f => {
+                                                    fixtures={getTeamFixtures(team.id, fixtures, schedules).filter(f => {
                                                         if (filter === 'home') return f.homeTeamId === team.id;
                                                         if (filter === 'away') return f.awayTeamId === team.id;
                                                         return true;
@@ -243,7 +246,7 @@ export default function StandingsTable({
                                                 align="right"
                                                 teamId={team.id}
                                                 teams={teams}
-                                                fixtures={getTeamFixtures(team.id, fixtures).filter(f => {
+                                                fixtures={getTeamFixtures(team.id, fixtures, schedules).filter(f => {
                                                     if (filter === 'home') return f.homeTeamId === team.id;
                                                     if (filter === 'away') return f.awayTeamId === team.id;
                                                     return true;

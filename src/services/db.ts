@@ -1,7 +1,8 @@
+import Dexie from 'dexie';
 import { db } from './dao/schema';
 import { generateId } from './idUtils';
-import type { TeamRecord } from './dao/schema';
-import type { Team, Fixture, StandingsRow, LeagueConfig, CacheEntry, League, LeagueSeason } from '../types';
+import type { TeamRecord, ScheduleRecord } from './dao/schema';
+import type { Team, Fixture, StandingsRow, LeagueConfig, CacheEntry, League, LeagueSeason, ScheduleEntry } from '../types';
 
 // ─── Opinionated Database Interface ────────────────────────────────────────
 
@@ -122,18 +123,42 @@ export class UltraTableDatabase {
 
         if (!fixtures) return;
         // Domain Store Persistence
+        const schedules: ScheduleEntry[] = [];
         for (const f of fixtures) {
             if (!f || !f.id) continue;
+
+            // Ensure seasonId is set
+            f.seasonId = internalId;
+
             const existing = await db.fixtures.get(f.id);
             const record = {
                 id: f.id,
                 referenceKeys: (f.externalReferences || []).map(r => `${r.integrationName}:fixture:${r.remoteId}`),
+                seasonId: internalId,
                 data: f,
                 updatedAt: Date.now(),
                 dataExpiration: metadata?.expiration !== undefined ? metadata.expiration : existing?.dataExpiration,
                 refreshAttempts: metadata?.attempts !== undefined ? metadata.attempts : existing?.refreshAttempts,
             };
             await db.fixtures.put(record);
+
+            // Build schedule associations
+            schedules.push({
+                seasonId: internalId,
+                teamId: f.homeTeamId,
+                gameweek: f.gameweek,
+                fixtureId: f.id
+            });
+            schedules.push({
+                seasonId: internalId,
+                teamId: f.awayTeamId,
+                gameweek: f.gameweek,
+                fixtureId: f.id
+            });
+        }
+
+        if (schedules.length > 0) {
+            await this.saveSchedule(schedules);
         }
     }
 
@@ -141,6 +166,60 @@ export class UltraTableDatabase {
         const key = `domain_fixtures_${internalId}`;
         const record = await db.cache.get(key);
         return record ? Date.now() - record.timestamp : null;
+    }
+
+    async getFixturesBySeason(seasonId: string): Promise<Fixture[]> {
+        const records = await db.fixtures.where('seasonId').equals(seasonId).toArray();
+        return records.map(r => r.data);
+    }
+
+    // ─── Schedules ──────────────────────────────────────────────────────────
+
+    async getSchedule(seasonId: string, teamId: string): Promise<ScheduleEntry[]> {
+        const records = await db.schedules
+            .where('[seasonId+teamId+gameweek]')
+            .between([seasonId, teamId, Dexie.minKey], [seasonId, teamId, Dexie.maxKey])
+            .toArray();
+
+        return records.map(r => ({
+            seasonId: r.seasonId,
+            teamId: r.teamId,
+            gameweek: r.gameweek,
+            fixtureId: r.fixtureId
+        }));
+    }
+
+    async getSeasonSchedule(seasonId: string): Promise<Map<string, ScheduleEntry[]>> {
+        const records = await db.schedules
+            .where('seasonId')
+            .equals(seasonId)
+            .toArray();
+
+        const map = new Map<string, ScheduleEntry[]>();
+        for (const r of records) {
+            const list = map.get(r.teamId) || [];
+            list.push({
+                seasonId: r.seasonId,
+                teamId: r.teamId,
+                gameweek: r.gameweek,
+                fixtureId: r.fixtureId
+            });
+            map.set(r.teamId, list);
+        }
+        return map;
+    }
+
+    async saveSchedule(entries: ScheduleEntry[]): Promise<void> {
+        const records: ScheduleRecord[] = entries.map(e => ({
+            id: `${e.seasonId}:${e.teamId}:${e.gameweek}`,
+            seasonId: e.seasonId,
+            teamId: e.teamId,
+            gameweek: e.gameweek,
+            fixtureId: e.fixtureId,
+            updatedAt: Date.now()
+        }));
+
+        await db.schedules.bulkPut(records);
     }
 
     // ─── Teams ─────────────────────────────────────────────────────────────

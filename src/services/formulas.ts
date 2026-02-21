@@ -6,6 +6,7 @@ export const FORMULAS: Record<LeagueRankingFormula, ComparisonFn> = {
     points: (a, b) => b.points - a.points,
     goalDiff: (a, b) => b.goalDifference - a.goalDifference,
     wins: (a, b) => b.won - a.won,
+    goalsFor: (a, b) => b.goalsFor - a.goalsFor,
     awayGoalsScored: (a, b) => b.goalsFor - a.goalsFor, // Simple column lookup for demonstration
     headToHead: (a, b, fixtures) => {
         const h2hMatches = fixtures.filter(f =>

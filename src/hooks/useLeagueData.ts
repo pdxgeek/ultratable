@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { fetchTeams, fetchFixtures } from '../services/apiFootball';
+import { database } from '../services/db';
 import type { League, LeagueSeason } from '../types';
 
 export function useLeagueData(
@@ -10,9 +12,34 @@ export function useLeagueData(
 ) {
     const isEnabled = options.enabled !== false && !!league && !!season;
 
-    // Fetch Teams
+    // Reactively read from Database
+    const teams = useLiveQuery(
+        async () => {
+            if (!season?.id) return null;
+            return database.getTeamsForSeason(season.id);
+        },
+        [season?.id]
+    );
+
+    const fixtures = useLiveQuery(
+        async () => {
+            if (!season?.id) return null;
+            return database.getFixtures(season.id);
+        },
+        [season?.id]
+    );
+
+    const schedules = useLiveQuery(
+        async () => {
+            if (!season?.id) return null;
+            return database.getSeasonSchedule(season.id);
+        },
+        [season?.id]
+    );
+
+    // Fetch Teams (Network trigger)
     const teamsQuery = useQuery({
-        queryKey: ['teams', season?.id],
+        queryKey: ['teams_network', season?.id],
         enabled: isEnabled,
         queryFn: async () => {
             const config = {
@@ -22,16 +49,15 @@ export function useLeagueData(
                 externalReferences: season?.externalReferences || league?.externalReferences
             } as any;
 
-            const data = await fetchTeams(config);
-            return data;
+            return fetchTeams(config);
         },
-        staleTime: 1000 * 60 * 60, // 1 hour
+        staleTime: 1000 * 60 * 60,
         refetchOnWindowFocus: false,
     });
 
-    // Fetch Fixtures
+    // Fetch Fixtures (Network trigger)
     const fixturesQuery = useQuery({
-        queryKey: ['fixtures', season?.id],
+        queryKey: ['fixtures_network', season?.id],
         enabled: isEnabled,
         queryFn: () => {
             const config = {
@@ -42,39 +68,32 @@ export function useLeagueData(
             } as any;
             return fetchFixtures(config);
         },
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 5,
         refetchOnWindowFocus: false,
     });
 
-    const teamsRefetch = teamsQuery.refetch;
-    const fixturesRefetch = fixturesQuery.refetch;
-
     return {
-        teams: teamsQuery.data,
-        fixtures: fixturesQuery.data,
-        isLoading: teamsQuery.isLoading || fixturesQuery.isLoading,
+        teams: teams || null,
+        fixtures: fixtures || null,
+        schedules: schedules || null,
+        isLoading: (!teams || !fixtures) && (teamsQuery.isLoading || fixturesQuery.isLoading),
         error: teamsQuery.error || fixturesQuery.error,
         refetch: useCallback(async (options?: { forceRefresh?: boolean }) => {
+            const config = {
+                id: league?.id || '0',
+                season: season?.season || 0,
+                integrations: league?.integrations,
+                externalReferences: season?.externalReferences || league?.externalReferences
+            } as any;
+
             if (options?.forceRefresh) {
-                // We need to trigger the query with a forceRefresh flag
-                // React Query doesn't easily support passing params to refetch that reach the queryFn
-                // So we can use a trick: invalidate or just call the fetch functions manually if needed, 
-                // but for now let's just use the standard refetch and rely on the fact that if we 
-                // truly need a bypass, we'll implement a state-driven force flag.
-                // Alternatively, we can just call the service functions directly here:
-                const config = {
-                    id: league?.id || '0',
-                    season: season?.season || 0,
-                    integrations: league?.integrations,
-                    externalReferences: season?.externalReferences || league?.externalReferences
-                } as any;
                 await Promise.all([
                     fetchTeams(config, { forceRefresh: true }),
                     fetchFixtures(config, { forceRefresh: true })
                 ]);
             }
-            teamsRefetch();
-            fixturesRefetch();
-        }, [teamsRefetch, fixturesRefetch, league, season])
+            teamsQuery.refetch();
+            fixturesQuery.refetch();
+        }, [teamsQuery, fixturesQuery, league, season])
     };
 }

@@ -26,6 +26,8 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'postponed'
         case 'FT':
         case 'AET':
         case 'PEN':
+        case 'AWD':
+        case 'WO':
             return 'played';
         case 'NS':
             return 'scheduled';
@@ -35,8 +37,6 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'postponed'
             return 'postponed';
         case 'CANC':
         case 'ABD':
-        case 'AWD':
-        case 'WO':
             return 'cancelled';
         case '1H':
         case '2H':

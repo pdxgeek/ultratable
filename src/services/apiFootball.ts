@@ -2,6 +2,7 @@ import { getProvider, providerRegistry } from './integrations';
 import type { LeagueConfig, Team, Fixture, StandingsRow, ApiEvent, MatchLineup } from '../types';
 import { database } from './db';
 import { db } from './dao/schema';
+import { scheduleManager } from './scheduleManager';
 
 // ─── API Key Utilities ──────────────────────────────────────────────────────
 
@@ -61,6 +62,16 @@ export async function fetchTeams(league: { id: string | number, season: number, 
     if (internalSeasonId) {
         await database.saveTeams(internalSeasonId, teams);
         await database.updateSeasonTeams(internalSeasonId, teams.map(t => t.id));
+
+        // Ensure schedule skeleton exists for this season
+        const seasonRecord = await database.getLeagueSeasonById(internalSeasonId);
+        if (seasonRecord) {
+            await scheduleManager.ensureScheduleSkeleton(
+                internalSeasonId,
+                teams.map(t => t.id),
+                seasonRecord.matchesPerSeason || 38 // Fallback to 38 if mission
+            );
+        }
     }
 
     return teams;
@@ -79,6 +90,8 @@ export async function fetchFixtures(league: { id: string | number, season: numbe
     const internalSeasonId = await database.getInternalSeasonId(String(league.id), league.season);
     if (internalSeasonId) {
         await database.saveFixtures(internalSeasonId, fixtures);
+        // Ensure associations are synced
+        await scheduleManager.syncScheduleFromFixtures(internalSeasonId, fixtures);
     }
 
     import('./smartRefresh').then(({ smartRefresh }) => {

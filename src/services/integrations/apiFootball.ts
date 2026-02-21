@@ -30,7 +30,8 @@ export class ApiFootballProvider implements DataProvider {
             'teams',
             { league: leagueId, season },
             `teams_${leagueId}_${season}`,
-            options?.forceRefresh
+            options?.forceRefresh,
+            1000 * 60 * 60 * 24 // 24h TTL
         );
         if (!raw) return [];
         return (await Promise.all(raw.filter(Boolean).map(t => mapTeam('api-football', t)))).filter((t): t is Team => !!t);
@@ -41,7 +42,8 @@ export class ApiFootballProvider implements DataProvider {
             'fixtures',
             { league: leagueId, season },
             `fixtures_${leagueId}_${season}`,
-            options?.forceRefresh
+            options?.forceRefresh,
+            1000 * 60 * 5 // 5m TTL
         );
         console.log(`[ApiFootballProvider] Raw fixtures count: ${raw?.length || 0}`);
         if (!raw || raw.length === 0) return [];
@@ -69,7 +71,8 @@ export class ApiFootballProvider implements DataProvider {
             'standings',
             { league: leagueId, season },
             `standings_${leagueId}_${season}`,
-            options?.forceRefresh
+            options?.forceRefresh,
+            1000 * 60 * 5 // 5m TTL
         );
 
         let standings: ApiStanding[] = [];

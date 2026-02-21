@@ -48,10 +48,12 @@ export class SmartRefreshService {
 
     /**
      * Check if a fixture is overdue for a result update.
-     * Overdue = scheduled AND (now > kickoff + buffer)
+     * Overdue = (scheduled or live) AND (now > kickoff + buffer)
      */
-    isFixtureOverdue(fixture: Fixture, bufferMinutes: number = 115): boolean {
-        if (fixture.status !== 'scheduled') return false;
+    isFixtureOverdue(fixture: Fixture, bufferMinutes: number = 120): boolean {
+        // We check scheduled AND live matches. 
+        // Live matches are checked because they might have ended according to time but still mark as live in data.
+        if (fixture.status !== 'scheduled' && fixture.status !== 'live') return false;
 
         const kickoffTime = fixture.timestamp * 1000;
         const now = Date.now();
@@ -79,17 +81,7 @@ export class SmartRefreshService {
             if (!fixtures) return;
 
             const now = Date.now();
-            const overdueFixtures = fixtures.filter((f: Fixture) => {
-                if (f.status !== 'scheduled') return false;
-
-                const isOverdue = this.isFixtureOverdue(f);
-                if (!isOverdue) return false;
-
-                // Check for backoff expiration if it was already attempted
-                // We'll query direct from DB records to get the expiration field
-                // since it's not in the 'data' JSON blob usually.
-                return true;
-            });
+            const overdueFixtures = fixtures.filter((f: Fixture) => this.isFixtureOverdue(f));
 
             if (overdueFixtures.length > 0) {
                 // We need the raw records to check dataExpiration
@@ -103,13 +95,14 @@ export class SmartRefreshService {
                 });
 
                 if (readyForRetry.length > 0) {
-                    console.log(`[SmartRefresh] Triggering refresh for ${readyForRetry.length} ready entities in ${league.commonName || league.id}`);
-                    await fetchFixtures(league as any);
+                    console.log(`[SmartRefresh] Triggering FORCE refresh for ${readyForRetry.length} ready overdue entities in ${league.commonName || league.id}`);
+                    // BYPASS CACHE when we know something is overdue
+                    await fetchFixtures(league as any, { forceRefresh: true });
 
-                    // After fetch, check if they are still scheduled. If so, apply backoff.
-                    const stillScheduled = await db.fixtures.bulkGet(readyForRetry.map(r => r!.id));
-                    for (const r of stillScheduled) {
-                        if (r && r.data.status === 'scheduled') {
+                    // After fetch, check if they are still scheduled/live. If so, apply backoff.
+                    const stillPending = await db.fixtures.bulkGet(readyForRetry.map(r => r!.id));
+                    for (const r of stillPending) {
+                        if (r && (r.data.status === 'scheduled' || r.data.status === 'live')) {
                             await this.applyBackoff('fixtures', r.id);
                         } else if (r) {
                             await this.clearRefreshMetadata('fixtures', r.id);

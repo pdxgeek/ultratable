@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { gfxRegistry } from '../services/gfxRegistry';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../services/dao/schema';
+import { useEffect, useState } from 'react';
 
 /**
  * Hook to retrieve a cached blob URL for a given Graphic ID.
@@ -8,44 +9,35 @@ import { gfxRegistry } from '../services/gfxRegistry';
 export function useGraphic(graphicId: string | null | undefined): string | null {
     const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
+    const blob = useLiveQuery(
+        async () => {
+            if (!graphicId) return null;
+            const graphic = await db.graphics.get(graphicId);
+            if (!graphic || !graphic.variants) return null;
+
+            const idx = graphic.activeVariantIndex ?? (graphic.variants.length - 1);
+            const variant = graphic.variants[idx];
+            if (!variant || !variant.blobHash) return null;
+
+            const blobRecord = await db.blobs.get(variant.blobHash);
+            return blobRecord?.blob || null;
+        },
+        [graphicId]
+    );
+
     useEffect(() => {
-        if (!graphicId) {
+        if (!blob) {
             setBlobUrl(null);
             return;
         }
 
-        // 1. Try synchronous get (if already loaded)
-        const cached = gfxRegistry.getById(graphicId);
-        if (cached) {
-            setBlobUrl(cached);
-            return;
-        }
-
-        // 2. Load async
-        let isMounted = true;
-        async function load() {
-            try {
-                // If we have an ID, try to load it via the registry
-                // The registry's loadById will check cache again and then load if needed
-                if (!graphicId) return;
-
-                const result = await gfxRegistry.loadById(graphicId);
-                if (isMounted) {
-                    setBlobUrl(result ?? null);
-                }
-            } catch (err) {
-                console.warn(`Failed to load graphic ${graphicId}`, err);
-                if (isMounted) setBlobUrl(null);
-            }
-        }
-
-        load();
+        const url = URL.createObjectURL(blob);
+        setBlobUrl(url);
 
         return () => {
-            isMounted = false;
+            URL.revokeObjectURL(url);
         };
-
-    }, [graphicId]);
+    }, [blob]);
 
     return blobUrl;
 }

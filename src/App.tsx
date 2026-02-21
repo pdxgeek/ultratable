@@ -100,6 +100,20 @@ function AppContent() {
   // Refresh available leagues on mount and when changed
   // MOVED TO LeagueContext
 
+  // Periodic Smart Refresh
+  useEffect(() => {
+    if (!league || !season) return;
+
+    const interval = setInterval(() => {
+      import('./services/smartRefresh').then(({ smartRefresh }) => {
+        smartRefresh.checkLeague(league as any, season.season);
+      }).catch(console.warn);
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [league, season]);
+
+  // Handle API Key check for providers that require it
   // Use setHasKey to avoid lint error (logic could be expanded later)
   useEffect(() => {
     if (hasKey) { /* no-op */ }
@@ -114,7 +128,7 @@ function AppContent() {
   }
 
   // React Query Hook
-  const { teams: apiTeams, fixtures: apiFixtures, isLoading, error: queryError, refetch } = useLeagueData(league, season, { enabled: authInitialized });
+  const { teams: apiTeams, fixtures: apiFixtures, schedules, isLoading, error: queryError, refetch } = useLeagueData(league, season, { enabled: authInitialized });
 
   const { teamPack, seasonPack, fixtures, standings, gfxPack } = useMemo(() => {
     if (!apiTeams || !apiFixtures || !league || !season) {
@@ -142,7 +156,12 @@ function AppContent() {
     const gPack = generateGfxPack(apiTeams);
 
     const fList = apiFixtures; // Already transformed by provider
-    const compiled = compileStandings(tPack, fList, mergedRules, mergedCriteria, standingsFilter);
+    const compiled = compileStandings(tPack, fList, {
+      schedules: schedules || null,
+      rules: sPack?.rules || league?.rules,
+      rankingCriteria: sPack?.rules?.rankingCriteria || league?.rules?.rankingCriteria,
+      filter: standingsFilter
+    });
 
     return {
       teamPack: tPack,
@@ -151,13 +170,14 @@ function AppContent() {
       standings: compiled,
       gfxPack: gPack
     };
-  }, [apiTeams, apiFixtures, league, season, standingsFilter]);
+  }, [apiTeams, apiFixtures, schedules, league, season, standingsFilter]);
 
   // Side Effect: Update GFX Registry (moved from useMemo to avoid side effects in memoization)
   useEffect(() => {
     if (gfxPack.length > 0) {
       gfxRegistry.registerBatch(gfxPack);
-      gfxRegistry.loadAll(gfxPack.filter(g => g && g.id).map(g => g.id)).catch(console.warn);
+      const teamIds = gfxPack.map(g => g.id).filter((id): id is string => !!id);
+      gfxRegistry.loadAll(teamIds).catch(console.warn);
     }
   }, [gfxPack]);
 
@@ -226,6 +246,7 @@ function AppContent() {
                       standings={standings}
                       teams={teamPack}
                       fixtures={fixtures}
+                      schedules={schedules || null}
                       rules={seasonPack.rules}
                       filter={standingsFilter}
                       onFilterChange={setStandingsFilter}
