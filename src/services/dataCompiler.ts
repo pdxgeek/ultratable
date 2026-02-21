@@ -1,6 +1,5 @@
 import type {
     Fixture,
-    FixtureStatus,
     FormResult,
     MatchEvent,
     StandingsRow,
@@ -11,13 +10,6 @@ import type {
 import { compareByFormula } from './formulas';
 
 export type StandingsFilter = 'all' | 'home' | 'away';
-
-// ─── Status map ────────────────────────────────────────────────────────
-
-function mapStatus(shortStatus: string): FixtureStatus {
-    // legacy, consider removing if mappers.ts is fully used
-    return 'unknown';
-}
 
 // ─── Transformers ──────────────────────────────────────────────────────
 
@@ -171,13 +163,12 @@ export function compileStandings(
 
         const recentFixtures = played.slice(0, 5).reverse();
 
+        // Find the absolute next unplayed match. 
+        // We prioritize fixtures in the future or currently live.
         const nextFixture =
-            all.find(
-                (f) =>
-                    (f.status === 'scheduled' || f.status === 'postponed') &&
-                    f.timestamp * 1000 > now &&
-                    (filter === 'all' || (filter === 'home' ? f.homeTeamId === teamId : f.awayTeamId === teamId))
-            ) ?? null;
+            all.find(f => (f.status === 'scheduled' || f.status === 'live') && (f.timestamp * 1000 > now - (2 * 60 * 60 * 1000))) ||
+            all.find(f => f.status === 'postponed') ||
+            null;
 
         const basePoints = s.won * (_rules?.pointsForWin ?? 3) +
             s.drawn * (_rules?.pointsForDraw ?? 1) +

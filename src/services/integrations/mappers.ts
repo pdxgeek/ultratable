@@ -1,4 +1,4 @@
-import type { ApiTeam, ApiFixture, ApiStanding, Team, Fixture, StandingsRow, IntegrationName, MatchLineup, Player } from '../../types';
+import type { ApiTeam, ApiFixture, ApiStanding, Team, Fixture, StandingsRow, IntegrationName, Player } from '../../types';
 import { database } from '../db';
 
 export async function mapTeam(provider: IntegrationName, apiTeam: ApiTeam): Promise<Team> {
@@ -21,7 +21,7 @@ export async function mapTeam(provider: IntegrationName, apiTeam: ApiTeam): Prom
 }
 
 
-function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'cancelled' | 'unknown' {
+function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'postponed' | 'cancelled' | 'unknown' {
     switch (short) {
         case 'FT':
         case 'AET':
@@ -32,6 +32,7 @@ function mapStatus(short: string): 'played' | 'scheduled' | 'live' | 'cancelled'
         case 'TBD':
             return 'unknown';
         case 'PST':
+            return 'postponed';
         case 'CANC':
         case 'ABD':
         case 'AWD':
