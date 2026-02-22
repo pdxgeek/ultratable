@@ -1,0 +1,12 @@
+[
+    {
+        "league": {
+            "id": 1,
+            "name": "Mock League",
+            "logo": "mock-logo-url"
+        },
+        "country": {
+            "name": "Mockland"
+        }
+    }
+]

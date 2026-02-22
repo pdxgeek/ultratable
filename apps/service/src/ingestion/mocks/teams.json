@@ -1,0 +1,13 @@
+[
+    {
+        "team": {
+            "id": 101,
+            "name": "Mock FC",
+            "code": "MFC",
+            "logo": "mfc-logo-url"
+        },
+        "venue": {
+            "name": "Mock Stadium"
+        }
+    }
+]

@@ -5,6 +5,8 @@ import { builder } from './schema/builder';
 // Import schema definitions
 import './schema/config';
 import './schema/football';
+import './schema/workers';
+import './schema/catalog';
 
 const yoga = createYoga({
     schema: builder.toSchema(),
