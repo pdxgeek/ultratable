@@ -159,7 +159,7 @@ function AppContent() {
     const compiled = compileStandings(tPack, fList, {
       schedules: schedules || null,
       rules: sPack?.rules || league?.rules,
-      rankingCriteria: sPack?.rules?.rankingCriteria || league?.rules?.rankingCriteria,
+      rankingCriteria: mergedCriteria,
       filter: standingsFilter
     });
 
@@ -185,10 +185,14 @@ function AppContent() {
   const requiresApiKey = league ? !(league.integrations?.basicTeamInfo?.startsWith('mock-') ?? false) : false;
 
   useEffect(() => {
+    // Only trigger refetch if we have a key and need it. 
+    // We omit 'refetch' from deps to avoid any potential loops if its identity shifts,
+    // although it is now stabilized in useLeagueData.
     if (hasKey && requiresApiKey) {
       refetch();
     }
-  }, [hasKey, requiresApiKey, refetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasKey, requiresApiKey]);
 
   const syncBar = (
     <>

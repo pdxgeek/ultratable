@@ -79,11 +79,16 @@ export function useLeagueData(
         isLoading: (!teams || !fixtures) && (teamsQuery.isLoading || fixturesQuery.isLoading),
         error: teamsQuery.error || fixturesQuery.error,
         refetch: useCallback(async (options?: { forceRefresh?: boolean }) => {
+            const leagueIdStr = league?.id || '0';
+            const seasonNum = season?.season || 0;
+            const integrations = league?.integrations;
+            const externalReferences = season?.externalReferences || league?.externalReferences;
+
             const config = {
-                id: league?.id || '0',
-                season: season?.season || 0,
-                integrations: league?.integrations,
-                externalReferences: season?.externalReferences || league?.externalReferences
+                id: leagueIdStr,
+                season: seasonNum,
+                integrations,
+                externalReferences
             } as any;
 
             if (options?.forceRefresh) {
@@ -94,6 +99,6 @@ export function useLeagueData(
             }
             teamsQuery.refetch();
             fixturesQuery.refetch();
-        }, [teamsQuery, fixturesQuery, league, season])
+        }, [teamsQuery.refetch, fixturesQuery.refetch, league?.id, league?.integrations, season?.season, season?.externalReferences, league?.externalReferences])
     };
 }
