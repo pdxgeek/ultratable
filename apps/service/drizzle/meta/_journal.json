@@ -57,6 +57,13 @@
       "when": 1771740523386,
       "tag": "0007_wild_kylun",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771868646372,
+      "tag": "0008_cute_starhawk",
+      "breakpoints": true
     }
   ]
 }

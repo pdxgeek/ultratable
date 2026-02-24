@@ -1,13 +1,19 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { LogService } from '../services/log.service';
 
 export type JobStatus = 'running' | 'success' | 'failed';
 
 export interface JobResult {
     processedCount?: number;
+    totalCount?: number;
     apiCallsCount?: number;
     context?: Record<string, any>;
+}
+
+export interface JobReporter {
+    updateProgress: (stats: { processedCount?: number; totalCount?: number; apiCallsCount?: number }) => Promise<void>;
 }
 
 export class JobRunner {
@@ -16,7 +22,7 @@ export class JobRunner {
      * @param name The unique name of the job
      * @param task The async function to perform, returns stats
      */
-    static async run(name: string, task: () => Promise<JobResult | void>) {
+    static async run(name: string, task: (reporter: JobReporter) => Promise<JobResult | void>) {
         // 1. Find or create the job definition
         let [job] = await db.select().from(schema.jobs).where(eq(schema.jobs.name, name));
 
@@ -40,10 +46,24 @@ export class JobRunner {
         }).returning();
 
         console.log(`[Job: ${name}] Started (ID: ${execution.id})`);
+        await LogService.info('JobRunner', `Job [${name}] started`, { jobId: job.id, executionId: execution.id });
+
+        const reporter: JobReporter = {
+            updateProgress: async (stats) => {
+                await db.update(schema.jobExecutions)
+                    .set({
+                        processedCount: stats.processedCount,
+                        totalCount: stats.totalCount,
+                        apiCallsCount: stats.apiCallsCount,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(schema.jobExecutions.id, execution.id));
+            }
+        };
 
         try {
             // 3. Perform the task
-            const result = await task();
+            const result = await task(reporter);
             const stats = result || {};
 
             // 4. Record success
@@ -52,6 +72,7 @@ export class JobRunner {
                     status: 'success',
                     finishedAt: new Date(),
                     processedCount: stats.processedCount || 0,
+                    totalCount: stats.totalCount || stats.processedCount || 0,
                     apiCallsCount: stats.apiCallsCount || 0,
                     context: stats.context || null
                 })
@@ -62,6 +83,12 @@ export class JobRunner {
                 .where(eq(schema.jobs.id, job.id));
 
             console.log(`[Job: ${name}] Finished successfully (Count: ${stats.processedCount || 0})`);
+            await LogService.info('JobRunner', `Job [${name}] finished successfully`, {
+                jobId: job.id,
+                executionId: execution.id,
+                processedCount: stats.processedCount,
+                apiCallsCount: stats.apiCallsCount
+            });
         } catch (error: any) {
             // 5. Record failure
             console.error(`[Job: ${name}] Failed:`, error);
@@ -73,6 +100,13 @@ export class JobRunner {
                     errorMessage: error.message || String(error)
                 })
                 .where(eq(schema.jobExecutions.id, execution.id));
+
+            await LogService.error('JobRunner', `Job [${name}] failed: ${error.message || error}`, {
+                jobId: job.id,
+                executionId: execution.id,
+                error: error.message || String(error),
+                stack: error.stack
+            });
 
             throw error; // Re-throw to caller
         }

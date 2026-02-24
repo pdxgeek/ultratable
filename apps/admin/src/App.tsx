@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Activity, Key, Globe, LayoutDashboard, CheckCircle2, AlertCircle, Trophy, Play, History, Settings, Loader2 } from 'lucide-react';
+import { Database, Activity, Key, Globe, LayoutDashboard, CheckCircle2, AlertCircle, Trophy, Play, History, Settings, Loader2, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,7 +7,7 @@ function cn(...inputs: any[]) {
   return twMerge(clsx(inputs));
 }
 
-type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers';
+type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers' | 'logs';
 
 interface ConfigStatus {
   isDatabaseConnected: boolean;
@@ -20,6 +20,38 @@ interface ConfigStatus {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [config, setConfig] = useState<ConfigStatus | null>(null);
+
+  // Worker State (Lifted)
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [executions, setExecutions] = useState<any[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [workersLoading, setWorkersLoading] = useState(true);
+
+  const fetchWorkerData = async () => {
+    try {
+      const resp = await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `
+                        query {
+                            jobs { id name scheduleCron isActive lastRunAt updatedAt }
+                            jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount totalCount apiCallsCount }
+                            systemLogs(limit: 100) { id level module message context createdAt }
+                        }
+                    `
+        })
+      });
+      const json = await resp.json();
+      setJobs(json.data?.jobs || []);
+      setExecutions(json.data?.jobExecutions || []);
+      setLogs(json.data?.systemLogs || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setWorkersLoading(false);
+    }
+  };
 
   const fetchStatus = async () => {
     try {
@@ -39,7 +71,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    fetchWorkerData();
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchWorkerData();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -49,6 +85,7 @@ const App: React.FC = () => {
     { id: 'api-keys', label: 'Integrations', icon: Key },
     { id: 'database', label: 'Infrastructure', icon: Database },
     { id: 'workers', label: 'Workers', icon: Activity },
+    { id: 'logs', label: 'Logs', icon: History },
   ];
 
   return (
@@ -126,8 +163,16 @@ const App: React.FC = () => {
             {activeTab === 'dashboard' && <DashboardView config={config} />}
             {activeTab === 'api-keys' && <ApiKeyView onUpdate={fetchStatus} />}
             {activeTab === 'database' && <DatabaseView config={config} onUpdate={fetchStatus} />}
-            {activeTab === 'leagues' && <LeaguesView />}
-            {activeTab === 'workers' && <WorkersView />}
+            {activeTab === 'leagues' && <LeaguesManagementView jobs={jobs} executions={executions} />}
+            {activeTab === 'workers' && (
+              <WorkersView
+                jobs={jobs}
+                executions={executions}
+                loading={workersLoading}
+                onRefresh={fetchWorkerData}
+              />
+            )}
+            {activeTab === 'logs' && <LogsView logs={logs} onRefresh={fetchWorkerData} />}
           </div>
         </div>
       </main>
@@ -135,41 +180,13 @@ const App: React.FC = () => {
   );
 };
 
-const WorkersView = () => {
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [executions, setExecutions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+const WorkersView = ({ jobs, executions, loading, onRefresh }: {
+  jobs: any[],
+  executions: any[],
+  loading: boolean,
+  onRefresh: () => Promise<void>
+}) => {
   const [runningJob, setRunningJob] = useState<string | null>(null);
-
-  const fetchData = async () => {
-    try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `
-                        query {
-                            jobs { id name scheduleCron isActive lastRunAt updatedAt }
-                            jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount apiCallsCount }
-                        }
-                    `
-        })
-      });
-      const json = await resp.json();
-      setJobs(json.data?.jobs || []);
-      setExecutions(json.data?.jobExecutions || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const runJob = async (name: string) => {
     setRunningJob(name);
@@ -182,7 +199,7 @@ const WorkersView = () => {
           variables: { name }
         })
       });
-      await fetchData();
+      await onRefresh();
     } catch (e) {
       console.error(e);
     } finally {
@@ -677,99 +694,665 @@ const DatabaseView = ({ config, onUpdate }: { config: ConfigStatus | null, onUpd
   );
 };
 
-const LeaguesView = () => {
-  const [leagues, setLeagues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [ingesting, setIngesting] = useState(false);
+const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: any[], executions?: any[] }) => {
+  const [countries, setCountries] = useState<any[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [catalogLeagues, setCatalogLeagues] = useState<any[]>([]);
+  const [managedLeagues, setManagedLeagues] = useState<any[]>([]);
 
-  const fetchLeagues = async () => {
-    setLoading(true);
+  // Box 2 (Importer) State
+  const [selectedCatalogLeagueId, setSelectedCatalogLeagueId] = useState<string>('');
+  const [catalogLeagueMetadata, setCatalogLeagueMetadata] = useState<any | null>(null);
+  const [seasonsForCatalogLeague, setSeasonsForCatalogLeague] = useState<any[]>([]);
+
+  // Box 3 (Config) State
+  const [selectedConfigLeagueId, setSelectedConfigLeagueId] = useState<string>('');
+  const [configSeasons, setConfigSeasons] = useState<any[]>([]);
+  const [selectedConfigSeasonId, setSelectedConfigSeasonId] = useState<string>('');
+
+  const [deductions, setDeductions] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    console.log('LeaguesManagementView: Fetching countries and managed leagues...');
     try {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `{ leagues { id name slug country logo } }`
+          query: `
+            query {
+              catalogCountries { id name code flag }
+              leagues { id name sourceId }
+            }
+          `
         })
       });
       const json = await resp.json();
-      setLeagues(json.data?.leagues || []);
+      setCountries(json.data?.catalogCountries || []);
+      setManagedLeagues(json.data?.leagues || []);
     } catch (e) {
-      console.error(e);
+      console.error('LeaguesManagementView: fetchData error:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const onIngest = async () => {
-    setIngesting(true);
+  const fetchCatalogLeagues = async (countryId: string) => {
+    if (!countryId) return;
     try {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `mutation { ingestLeagues { id name } }`
+          query: `query($id: String!) { catalogLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
+          variables: { id: countryId }
         })
       });
-      if (!resp.ok) throw new Error('Sync Failed');
-      await fetchLeagues();
+      const json = await resp.json();
+      setCatalogLeagues(json.data?.catalogLeagues || []);
     } catch (e) {
-      console.error(e);
-    } finally {
-      setIngesting(false);
+      console.error('LeaguesManagementView: fetchCatalogLeagues error:', e);
     }
   };
 
+  const refreshProviderSeasons = async () => {
+    if (!catalogLeagueMetadata) return;
+    setActionLoading('refresh-catalog');
+    try {
+      const resp = await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!) { refreshCatalogSeasons(catalogId: $id) { id seasons { year current } } }`,
+          variables: { id: catalogLeagueMetadata.id }
+        })
+      });
+      const json = await resp.json();
+      if (json.data?.refreshCatalogSeasons) {
+        setCatalogLeagueMetadata({
+          ...catalogLeagueMetadata,
+          seasons: json.data.refreshCatalogSeasons.seasons
+        });
+      }
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const fetchInternalSeasons = async (leagueId: string, setTask: (seasons: any[]) => void) => {
+    try {
+      const resp = await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount } }`,
+          variables: { id: leagueId }
+        })
+      });
+      const json = await resp.json();
+      setTask(json.data?.seasons || []);
+    } catch (e) {
+      console.error('LeaguesManagementView: fetchInternalSeasons error:', e);
+    }
+  };
+
+  const fetchCatalogMetadataBySourceId = async (sourceId: number) => {
+    try {
+      const resp = await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `query($sourceId: Int!) { catalogLeagues(sourceId: $sourceId) { id seasons { year current } } }`,
+          variables: { sourceId }
+        })
+      });
+      const json = await resp.json();
+      if (json.data?.catalogLeagues?.[0]) {
+        setCatalogLeagueMetadata(json.data.catalogLeagues[0]);
+      }
+    } catch (e) {
+      console.error('LeaguesManagementView: fetchCatalogMetadataBySourceId error:', e);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
   useEffect(() => {
-    fetchLeagues();
-  }, []);
+    if (selectedCountry) fetchCatalogLeagues(selectedCountry);
+    else setCatalogLeagues([]);
+  }, [selectedCountry]);
+
+  // Box 2 Effect
+  useEffect(() => {
+    if (selectedCatalogLeagueId) {
+      fetchInternalSeasons(selectedCatalogLeagueId, setSeasonsForCatalogLeague);
+
+      const league = managedLeagues.find(l => l.id === selectedCatalogLeagueId);
+      if (league?.sourceId) {
+        fetchCatalogMetadataBySourceId(league.sourceId);
+      }
+    } else {
+      setSeasonsForCatalogLeague([]);
+      setCatalogLeagueMetadata(null);
+    }
+  }, [selectedCatalogLeagueId, managedLeagues]); // Added managedLeagues to dependency array
+
+  // Box 3 Effect
+  useEffect(() => {
+    if (selectedConfigLeagueId) {
+      fetchInternalSeasons(selectedConfigLeagueId, setConfigSeasons);
+    } else {
+      setConfigSeasons([]);
+      setSelectedConfigSeasonId('');
+    }
+  }, [selectedConfigLeagueId]);
+
+  useEffect(() => {
+    const season = configSeasons.find(s => s.id === selectedConfigSeasonId);
+    if (season) {
+      const config = JSON.parse(season.configJson || '{}');
+      setDeductions(JSON.stringify(config.deductions || [], null, 2));
+    } else {
+      setDeductions('');
+    }
+  }, [selectedConfigSeasonId, configSeasons]);
+
+  const activateLeague = async (catalogId: string) => {
+    setActionLoading(catalogId);
+    try {
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!) { promoteLeague(catalogId: $id) { id name } }`,
+          variables: { id: catalogId }
+        })
+      });
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const importSeason = async (leagueId: string, year: number) => {
+    const key = `${leagueId}-${year}`;
+    setActionLoading(key);
+    try {
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!, $year: Int!) { importSeason(leagueId: $id, year: $year) { id year } }`,
+          variables: { id: leagueId, year }
+        })
+      });
+      // Refresh local seasons for both boxes if they happen to be showing this league
+      if (selectedCatalogLeagueId === leagueId) {
+        fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
+      }
+      if (selectedConfigLeagueId === leagueId) {
+        fetchInternalSeasons(leagueId, setConfigSeasons);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const syncSeasonData = async (leagueId: string, year: number) => {
+    const key = `sync-${leagueId}-${year}`;
+    setActionLoading(key);
+    try {
+      const league = managedLeagues.find(l => l.id === leagueId);
+      if (!league?.sourceId) {
+        alert('Source ID not found for league.');
+        return;
+      }
+
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: Int!, $year: Int!) { syncFixtures(leagueId: $id, season: $year) { id } }`,
+          variables: { id: league.sourceId, year }
+        })
+      });
+
+      // Refresh to update counts
+      await fetchInternalSeasons(leagueId, setConfigSeasons);
+    } catch (e) {
+      console.error('syncSeasonData error:', e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const removeSeason = async (leagueId: string, seasonId: string, year: number) => {
+    if (!window.confirm(`Are you sure you want to remove the ${year} season? This will delete all associated fixtures and standings data.`)) return;
+    const key = `${leagueId}-${year}`;
+    setActionLoading(key);
+    try {
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!) { removeSeason(seasonId: $id) }`,
+          variables: { id: seasonId }
+        })
+      });
+      // Refresh local seasons for both boxes
+      if (selectedCatalogLeagueId === leagueId) {
+        fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
+      }
+      if (selectedConfigLeagueId === leagueId) {
+        fetchInternalSeasons(leagueId, setConfigSeasons);
+        if (selectedConfigSeasonId === seasonId) {
+          setSelectedConfigSeasonId('');
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const saveConfig = async () => {
+    if (!selectedConfigSeasonId) return;
+    setActionLoading('save-config');
+    try {
+      let parsedDeductions = [];
+      try {
+        parsedDeductions = JSON.parse(deductions);
+      } catch (e) {
+        alert('Invalid JSON for deductions');
+        return;
+      }
+
+      const config = { deductions: parsedDeductions };
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!, $json: String!) { updateSeasonConfig(seasonId: $id, configJson: $json) { id } }`,
+          variables: { id: selectedConfigSeasonId, json: JSON.stringify(config) }
+        })
+      });
+      fetchInternalSeasons(selectedConfigLeagueId, setConfigSeasons);
+      alert('Configuration saved successfully.');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (loading) return (
+    <div className="py-32 text-center bg-slate-900/10 border border-dashed border-slate-800/40 rounded-3xl">
+      <Loader2 className="w-8 h-8 text-sky-500 animate-spin mx-auto mb-6" />
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Waking Registry...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-12 pb-24">
-      <div className="flex justify-between items-center bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
-        <div>
-          <h3 className="text-xl font-semibold text-white">Entity Inventory</h3>
-          <p className="text-sm text-slate-400 mt-1">Manage and inspect synchronized football leagues and seasons.</p>
-        </div>
-        <button
-          onClick={onIngest}
-          disabled={ingesting}
-          className="bg-white text-black px-6 py-2.5 rounded-lg font-semibold text-sm hover:bg-slate-200 transition-all flex items-center gap-3 disabled:opacity-50 shadow-sm"
-        >
-          <Activity className={cn("w-4 h-4", ingesting && "animate-spin")} />
-          {ingesting ? 'Refresing...' : 'Fetch New Entities'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {loading ? (
-          <div className="col-span-full py-32 text-center">
-            <Activity className="w-8 h-8 text-slate-700 animate-spin mx-auto mb-6" />
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest">Accessing Cloud Registry...</p>
+    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-24">
+      {/* Box 1: Catalog Browser */}
+      <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box1 transition-all hover:border-slate-800">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="text-xl font-semibold text-white flex items-center gap-3">
+              <Globe className="w-5 h-5 text-sky-400" />
+              Box 1: Catalog Browser
+            </h3>
+            <p className="text-sm text-slate-400 mt-2">Browse the full provider registry and activate leagues for management.</p>
           </div>
-        ) : leagues.length === 0 ? (
-          <div className="col-span-full py-32 text-center bg-slate-900/10 border border-dashed border-slate-800/40 rounded-2xl">
-            <Trophy className="w-12 h-12 text-slate-800 mx-auto mb-6 opacity-30" />
-            <p className="text-slate-400 text-sm font-medium mb-1">Local database is empty.</p>
-            <p className="text-xs text-slate-600">Run the initialization trigger above to seed your platform.</p>
+          <select
+            value={selectedCountry}
+            onChange={(e) => setSelectedCountry(e.target.value)}
+            className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-all min-w-[200px]"
+          >
+            <option value="">Select Country...</option>
+            {countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        {selectedCountry ? (
+          <div className="overflow-hidden border border-slate-800/40 rounded-xl bg-slate-900/20 relative z-10 backdrop-blur-sm">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-slate-900/50 border-b border-slate-800/60">
+                  <th className="px-6 py-4 font-semibold text-slate-400">League</th>
+                  <th className="px-6 py-4 font-semibold text-slate-400 text-center">Type</th>
+                  <th className="px-6 py-4 font-semibold text-slate-400 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/40">
+                {catalogLeagues.map(l => {
+                  const isManaged = managedLeagues.some(ml => ml.sourceId === l.sourceId);
+                  return (
+                    <tr key={l.id} className="hover:bg-slate-800/20 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {l.logo ? <img src={l.logo} className="w-6 h-6 rounded bg-white p-0.5" alt={l.name} /> : <div className="w-6 h-6 bg-slate-800 rounded" />}
+                          <span className="font-medium text-slate-200">{l.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded border border-slate-700/30 font-mono">
+                          {l.type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {isManaged ? (
+                          <span className="text-emerald-400 text-xs font-semibold flex items-center justify-end gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Active
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => activateLeague(l.id)}
+                            disabled={actionLoading === l.id}
+                            className="text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-sky-500/30 transition-all disabled:opacity-30"
+                          >
+                            {actionLoading === l.id ? 'Activating...' : 'Activate'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
-          leagues.map((league) => (
-            <div key={league.id} className="bg-[#0d1117] border border-slate-800/60 p-8 rounded-2xl shadow-sm hover:border-slate-700 transition-all group">
-              <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center p-3 mb-8 shadow-sm group-hover:scale-105 transition-transform">
-                <img src={league.logo} alt={league.name} className="w-full h-full object-contain" />
+          <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10 group/empty">
+            <Globe className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-20 group-hover/empty:scale-110 group-hover/empty:text-sky-500 transition-all duration-500" />
+            <p className="text-sm text-slate-500 font-medium tracking-tight">Select a country above to browse and activate leagues.</p>
+          </div>
+        )}
+      </section>
+
+      {/* Box 2: Catalog Seasons */}
+      <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box2 transition-all hover:border-slate-800">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="text-xl font-semibold text-white flex items-center gap-3">
+              <History className="w-5 h-5 text-indigo-400" />
+              Box 2: Catalog Seasons
+            </h3>
+            <p className="text-sm text-slate-400 mt-2">Browse provider years and import them as local seasons.</p>
+          </div>
+          <select
+            value={selectedCatalogLeagueId}
+            onChange={(e) => setSelectedCatalogLeagueId(e.target.value)}
+            className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all min-w-[200px]"
+          >
+            <option value="">Select League...</option>
+            {managedLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </div>
+
+        {selectedCatalogLeagueId ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 relative z-10">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center p-1.5 overflow-hidden">
+                  {managedLeagues.find(l => l.id === selectedCatalogLeagueId)?.logo ? (
+                    <img
+                      src={managedLeagues.find(l => l.id === selectedCatalogLeagueId)?.logo}
+                      className="w-full h-full object-contain opacity-80"
+                      alt=""
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-slate-800/50 flex items-center justify-center">
+                      <Globe className="w-5 h-5 text-slate-700" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Provider Catalog</h4>
+                  <p className="text-xs text-white font-medium">{managedLeagues.find(l => l.id === selectedCatalogLeagueId)?.name}</p>
+                </div>
               </div>
-              <div className="mb-8">
-                <h4 className="font-semibold text-white group-hover:text-sky-400 transition-colors">{league.name}</h4>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">{league.country}</p>
-              </div>
-              <button className="w-full border border-slate-800/80 bg-slate-800/20 hover:bg-slate-800/50 py-2.5 rounded-lg text-xs font-semibold text-slate-400 transition-all">
-                Inspect Data
+              <button
+                onClick={refreshProviderSeasons}
+                disabled={actionLoading === 'refresh-catalog'}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-all group/ref"
+              >
+                {actionLoading === 'refresh-catalog' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-500 group-hover/ref:text-indigo-400 transition-colors" />
+                )}
+                <span className="text-[10px] font-bold text-slate-400 group-hover/ref:text-slate-200">Catalog Refresh</span>
               </button>
             </div>
-          ))
+
+            <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl overflow-hidden backdrop-blur-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800/60 bg-slate-900/40">
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Year</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {catalogLeagueMetadata?.seasons?.slice().reverse().map((s: any) => {
+                    const isImported = seasonsForCatalogLeague.some(ms => ms.year === s.year);
+                    const isLoading = actionLoading === `${selectedCatalogLeagueId}-${s.year}`;
+                    return (
+                      <tr key={s.year} className="group/row hover:bg-slate-900/40 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <span className={cn(
+                              "text-sm font-semibold",
+                              isImported ? "text-indigo-400" : "text-white"
+                            )}>
+                              {s.year}
+                            </span>
+                            {s.current && (
+                              <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-[9px] font-bold text-sky-400 tracking-wider uppercase">Active</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {isImported ? (
+                            <div className="flex items-center justify-end gap-4">
+                              <div className="flex items-center gap-2 text-indigo-400/60 font-semibold text-[10px] uppercase tracking-wider">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Imported
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const seasonId = seasonsForCatalogLeague.find(ms => ms.year === s.year)?.id;
+                                  if (seasonId) removeSeason(selectedCatalogLeagueId, seasonId, s.year);
+                                }}
+                                disabled={isLoading}
+                                className="px-3 py-1 bg-slate-900 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/50 text-slate-500 hover:text-red-400 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                              >
+                                {isLoading ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Remove'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => importSeason(selectedCatalogLeagueId, s.year)}
+                              disabled={isLoading}
+                              className="px-5 py-1.5 bg-slate-900 hover:bg-white border border-slate-700 hover:border-white text-slate-300 hover:text-black rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                            >
+                              {isLoading ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Import'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!catalogLeagueMetadata && (
+                <div className="p-12 text-center italic text-slate-500 text-xs">
+                  Awaiting catalog metadata...
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10 group/empty2">
+            <History className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-20 group-hover/empty2:scale-110 group-hover/empty2:text-indigo-400 transition-all duration-500" />
+            <p className="text-sm text-slate-500 font-medium tracking-tight">Select a league to see importable years.</p>
+          </div>
         )}
-      </div>
+      </section>
+
+      {/* Box 3: Season Configuration */}
+      <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box3 transition-all hover:border-slate-800">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="text-xl font-semibold text-white flex items-center gap-3">
+              <Settings className="w-5 h-5 text-amber-400" />
+              Box 3: Season Config
+            </h3>
+            <p className="text-sm text-slate-400 mt-2">Manage settings for imported seasons.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedConfigLeagueId}
+              onChange={(e) => setSelectedConfigLeagueId(e.target.value)}
+              className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 transition-all min-w-[200px]"
+            >
+              <option value="">Select League...</option>
+              {managedLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <select
+              value={selectedConfigSeasonId}
+              onChange={(e) => setSelectedConfigSeasonId(e.target.value)}
+              disabled={!selectedConfigLeagueId || configSeasons.length === 0}
+              className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 transition-all min-w-[150px] disabled:opacity-30"
+            >
+              <option value="">Select Season...</option>
+              {configSeasons.map(s => <option key={s.id} value={s.id}>{s.year}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {selectedConfigSeasonId ? (
+          <div className="space-y-8 relative z-10 animate-in fade-in duration-300">
+            <div className="flex flex-col gap-4 w-full">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-8">
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                      <Database className="w-3 h-3" /> Data Volume
+                    </h4>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-bold text-white">
+                          {configSeasons.find(s => s.id === selectedConfigSeasonId)?.fixtureCount || 0}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">Fixtures</span>
+                      </div>
+                      <div className="w-px h-4 bg-slate-800" />
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-bold text-white">
+                          {configSeasons.find(s => s.id === selectedConfigSeasonId)?.teamCount || 0}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">Teams</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const s = configSeasons.find(s => s.id === selectedConfigSeasonId);
+                    if (s) syncSeasonData(selectedConfigLeagueId, s.year);
+                  }}
+                  disabled={actionLoading?.startsWith('sync-')}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 rounded-lg transition-all font-bold text-xs uppercase tracking-wider disabled:opacity-30"
+                >
+                  {actionLoading?.startsWith('sync-') ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {actionLoading?.startsWith('sync-') ? 'Syncing...' : 'Sync Data'}
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              {(() => {
+                const s = configSeasons.find(s => s.id === selectedConfigSeasonId);
+                const activeJob = executions.find(ex =>
+                  ex.status === 'running' &&
+                  ex.jobId === jobs.find(j => j.name === `sync-fixtures-${managedLeagues.find(l => l.id === selectedConfigLeagueId)?.sourceId}-${s?.year}`)?.id
+                );
+
+                if (activeJob && activeJob.totalCount > 0) {
+                  const percent = Math.round((activeJob.processedCount / activeJob.totalCount) * 100);
+                  return (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">
+                        <span>Synchronizing Fixtures...</span>
+                        <span className="font-mono">{activeJob.processedCount} / {activeJob.totalCount} ({percent}%)</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/30">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-500 to-sky-500 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Points Deductions (JSON)</h4>
+                <span className="text-[9px] text-slate-600 font-mono italic">Format: [ {"{"} "teamId": 123, "points": 4, "reason": "..." {"}"} ]</span>
+              </div>
+              <textarea
+                value={deductions}
+                onChange={(e) => setDeductions(e.target.value)}
+                className="w-full h-48 bg-slate-950/80 border border-slate-800/80 rounded-xl p-6 font-mono text-xs text-sky-300 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/10 transition-all"
+                placeholder='[ { "teamId": 0, "points": 0, "reason": "" } ]'
+              />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800/40 pt-8">
+              <div className="flex items-center gap-4 text-slate-500 text-xs italic">
+                <AlertCircle className="w-4 h-4" />
+                Changes affect standings compile immediately.
+              </div>
+              <button
+                onClick={saveConfig}
+                disabled={actionLoading === 'save-config'}
+                className="bg-amber-500 hover:bg-amber-400 text-black px-8 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_4px_12px_rgba(245,158,11,0.2)] disabled:opacity-50"
+              >
+                {actionLoading === 'save-config' ? 'Saving...' : 'Apply Configuration'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
+            <Settings className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-20" />
+            <p className="text-sm text-slate-500 font-medium tracking-tight">
+              {configSeasons.length === 0 && selectedConfigLeagueId ? "No imported seasons found for this league." : "Select a league and season to manage its settings."}
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
 };
@@ -797,6 +1380,105 @@ const StatCard = ({ label, value, subValue, isError, icon: Icon }: any) => {
           isError ? "text-red-400" : "text-white"
         )}>{value}</p>
         <p className="text-[11px] text-slate-500 font-normal truncate leading-relaxed">{subValue}</p>
+      </div>
+    </div>
+  );
+};
+
+const LogsView = ({ logs, onRefresh }: { logs: any[], onRefresh: () => Promise<void> }) => {
+  const [filter, setFilter] = useState<'all' | 'error' | 'warn' | 'info'>('all');
+
+  const filteredLogs = logs.filter(log => filter === 'all' || log.level === filter);
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex justify-between items-center bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+        <div className="relative z-10">
+          <h3 className="text-xl font-semibold text-white flex items-center gap-3">
+            <History className="w-5 h-5 text-indigo-400" />
+            System Event Explorer
+          </h3>
+          <p className="text-sm text-slate-400 mt-2 font-normal leading-relaxed max-w-lg">
+            Real-time diagnostic logs from the background workers and API services. Monitor data ingestion and infrastructure health.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl border border-slate-800/50 relative z-10">
+          {(['all', 'error', 'warn', 'info'] as const).map(lvl => (
+            <button
+              key={lvl}
+              onClick={() => setFilter(lvl)}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                filter === lvl
+                  ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                  : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/40"
+              )}
+            >
+              {lvl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[#0b0f15]/80 border border-slate-800/60 rounded-3xl overflow-hidden backdrop-blur-xl shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-800/60">
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/40">Timestamp</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/40">Level</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/40">Module</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/40">Message</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/40 text-right">Context</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/30">
+              {filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-24 text-center">
+                    <History className="w-8 h-8 text-slate-800 mx-auto mb-4 opacity-20" />
+                    <p className="text-xs font-medium text-slate-600 uppercase tracking-widest">No matching logs found</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map(log => (
+                  <tr key={log.id} className="group hover:bg-slate-800/20 transition-colors">
+                    <td className="px-6 py-4 text-[11px] font-mono text-slate-500 whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleTimeString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={cn(
+                        "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                        log.level === 'info' ? "bg-sky-500/10 text-sky-400" :
+                          log.level === 'warn' ? "bg-amber-500/10 text-amber-400" :
+                            "bg-red-500/10 text-red-400"
+                      )}>
+                        {log.level}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-tight whitespace-nowrap">
+                      {log.module}
+                    </td>
+                    <td className="px-6 py-4 text-xs text-slate-300 max-w-md truncate group-hover:whitespace-normal group-hover:overflow-visible transition-all">
+                      {log.message}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {log.context && (
+                        <button
+                          onClick={() => console.log(log.context)}
+                          className="text-[10px] font-bold text-indigo-400/60 hover:text-indigo-400 transition-colors uppercase tracking-widest"
+                        >
+                          View JSON
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

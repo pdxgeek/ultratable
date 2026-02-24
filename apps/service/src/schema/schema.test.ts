@@ -2,7 +2,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
 import { repository } from '../repositories/supabase.repository';
+import { db } from '../db';
+import * as schema from '../db/schema';
 import './football'; // Ensure football schema is registered
+
+// Mock the database
+vi.mock('../db', () => ({
+    db: {
+        select: vi.fn(),
+        insert: vi.fn(),
+    }
+}));
+
+// Mock JobRunner
+vi.mock('../workers/runner', () => ({
+    JobRunner: {
+        run: vi.fn().mockImplementation((name, task) => task())
+    }
+}));
 
 // Mock the repository
 vi.mock('../repositories/supabase.repository', () => ({
@@ -11,6 +28,8 @@ vi.mock('../repositories/supabase.repository', () => ({
             getLeagues: vi.fn(),
             getFixtures: vi.fn(),
             syncFixtures: vi.fn(),
+            getInternalSeasons: vi.fn(),
+            getAllInternalSeasons: vi.fn(),
         }
     }
 }));
@@ -84,7 +103,10 @@ describe('GraphQL Schema', () => {
 
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
         // This test verifies the mutation wiring
-        vi.mocked(repository.football.syncFixtures).mockResolvedValue([{ id: 'mock-fixture' }]);
+        vi.mocked(repository.football.syncFixtures).mockResolvedValue({
+            data: [{ id: 'mock-fixture' }],
+            stats: { processedCount: 1, apiCallsCount: 1 }
+        });
 
         const response = await yoga.fetch('http://localhost:4000/graphql', {
             method: 'POST',
@@ -103,5 +125,65 @@ describe('GraphQL Schema', () => {
         const result = await response.json();
         expect(result.data.syncFixtures).toBeDefined();
         expect(repository.football.syncFixtures).toHaveBeenCalled();
+    });
+
+    it('should query season with teams and venue', async () => {
+        const mockSeasons = [
+            { id: 'season-1', year: 2024, leagueId: 'league-1', updatedAt: new Date().toISOString() }
+        ];
+        const mockLeague = [{ id: 'league-1', sourceId: 39 }];
+        const leagueMock = [{ id: 'league-1', sourceId: 39 }];
+        const seasonMock = [{ id: 'season-1', year: 2024, leagueId: 'league-1', updatedAt: new Date().toISOString() }];
+        const venueMock = [{ id: 'venue-1', name: 'Emirates Stadium' }];
+        const teamMock = [{ id: 'team-1', name: 'Arsenal', venueId: 'venue-1' }];
+
+        // Refined mock to handle sequential calls
+        const m = vi.fn();
+        (m as any).mockReturnValue({
+            from: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }]),
+                innerJoin: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ team: { id: 'team-1', name: 'Arsenal', venueId: 'venue-1' } }])
+                })
+            })
+        });
+
+        // Also need to handle the count(*) call for teamCount
+        (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }]) }) }); // league lookup
+        (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ val: 20 }]) }) }); // teamCount
+        (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: { id: 'team-1', name: 'Arsenal', venueId: 'venue-1' } }]) }) }) }); // teams field
+        (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'venue-1', name: 'Emirates Stadium' }]) }) }); // venue field (nested)
+
+        vi.mocked(db.select).mockImplementation(m);
+
+        vi.mocked(repository.football.getInternalSeasons).mockResolvedValue(mockSeasons);
+
+        const response = await yoga.fetch('http://localhost:4000/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `
+                    query {
+                        seasons(leagueId: "some-uuid") {
+                            id
+                            year
+                            teamCount
+                            teams {
+                                name
+                                venue {
+                                    name
+                                }
+                            }
+                        }
+                    }
+                `
+            })
+        });
+
+        // Note: For full integration testing we need a real DB or more complex mocks
+        // Since we mock repository.football results, this mainly tests GraphQL wiring
+        const result = await response.json();
+        expect(result.data.seasons).toHaveLength(1);
+        expect(result.data.seasons[0].year).toBe(2024);
     });
 });

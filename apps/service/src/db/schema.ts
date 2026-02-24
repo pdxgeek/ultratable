@@ -59,13 +59,28 @@ export const leagues = pgTable('leagues', {
     unq: unique().on(table.sourceName, table.sourceId),
 }));
 
+export const venues = pgTable('venues', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    city: varchar('city', { length: 255 }),
+    capacity: integer('capacity'),
+    surface: varchar('surface', { length: 100 }),
+    image: varchar('image', { length: 500 }),
+    sourceName: varchar('source_name', { length: 50 }).notNull(),
+    sourceId: integer('source_id').notNull(),
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.sourceName, table.sourceId),
+}));
+
 export const teams = pgTable('teams', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 255 }).notNull(),
     shortName: varchar('short_name', { length: 100 }),
     tla: varchar('tla', { length: 10 }), // e.g. "ARS", "CHE"
     logo: varchar('logo', { length: 500 }),
-    venue: varchar('venue', { length: 255 }),
+    venueId: uuid('venue_id').references(() => venues.id),
     sourceName: varchar('source_name', { length: 50 }).notNull(),
     sourceId: integer('source_id').notNull(),
     metadata: jsonb('metadata'), // provider specific extras
@@ -85,7 +100,9 @@ export const seasons = pgTable('seasons', {
     metadata: jsonb('metadata'),
     createdAt: utcTimestamp('created_at').defaultNow().notNull(),
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    unq: unique().on(table.leagueId, table.year),
+}));
 
 export const fixtures = pgTable('fixtures', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -93,6 +110,7 @@ export const fixtures = pgTable('fixtures', {
     seasonId: uuid('season_id').references(() => seasons.id).notNull(),
     homeTeamId: uuid('home_team_id').references(() => teams.id).notNull(),
     awayTeamId: uuid('away_team_id').references(() => teams.id).notNull(),
+    venueId: uuid('venue_id').references(() => venues.id),
     status: fixtureStatusEnum('status').default('scheduled').notNull(),
     scheduledAt: utcTimestamp('scheduled_at').notNull(),
     homeGoals: integer('home_goals'),
@@ -125,6 +143,14 @@ export const standingsRows = pgTable('standings_rows', {
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
 
+export const seasonsToTeams = pgTable('seasons_to_teams', {
+    seasonId: uuid('season_id').references(() => seasons.id).notNull(),
+    teamId: uuid('team_id').references(() => teams.id).notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.seasonId, table.teamId),
+}));
+
 export const jobs = pgTable('jobs', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 255 }).unique().notNull(),
@@ -144,5 +170,39 @@ export const jobExecutions = pgTable('job_executions', {
     errorMessage: text('error_message'),
     context: jsonb('context'),
     processedCount: integer('processed_count').default(0),
+    totalCount: integer('total_count').default(0),
     apiCallsCount: integer('api_calls_count').default(0),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
+
+export const systemLogs = pgTable('system_logs', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    level: varchar('level', { length: 20 }).notNull(), // info, warn, error
+    module: varchar('module', { length: 100 }).notNull(),
+    message: text('message').notNull(),
+    context: jsonb('context'),
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+});
+
+export const rankingFormulas = pgTable('ranking_formulas', {
+    id: varchar('id', { length: 50 }).primaryKey(), // e.g. "points", "goalDiff"
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    logicType: varchar('logic_type', { length: 50 }).notNull(), // "standard", "headToHead"
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+});
+
+export const graphics = pgTable('graphics', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    entityType: varchar('entity_type', { length: 50 }).notNull(), // "team", "league", "player", "venue"
+    entityId: uuid('entity_id').notNull(),
+    variantName: varchar('variant_name', { length: 100 }).default('default').notNull(),
+    blobPath: varchar('blob_path', { length: 500 }).notNull(), // The deterministic path: gfx/blobs/{hash}.png
+    mimeType: varchar('mime_type', { length: 100 }).default('image/png').notNull(),
+    metadata: jsonb('metadata'), // dimensions, alt text, etc.
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.entityType, table.entityId, table.variantName),
+}));
