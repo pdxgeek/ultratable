@@ -33,6 +33,7 @@ const LIST_LEAGUES_QUERY = gql`
         leagueId
         year
         updatedAt
+        configJson
         rankingCriteria {
           id
           name
@@ -98,7 +99,8 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
                                     leagueId: s.leagueId,
                                     year: s.year,
                                     updatedAt: s.updatedAt,
-                                    rankingCriteria: s.rankingCriteria
+                                    rankingCriteria: s.rankingCriteria,
+                                    metadata: s.configJson ? JSON.parse(s.configJson) : {}
                                 });
                             }
                         }

@@ -12,6 +12,7 @@ GraphicType.implement({
         id: t.exposeString('id'),
         entityType: t.exposeString('entityType'),
         entityId: t.exposeString('entityId'),
+        sourceUrl: t.exposeString('sourceUrl', { nullable: true }),
         blobPath: t.exposeString('blobPath'),
         mimeType: t.exposeString('mimeType'),
         metadata: t.expose('metadata', { type: 'JSON', nullable: true }),

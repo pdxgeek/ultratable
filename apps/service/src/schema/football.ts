@@ -65,6 +65,10 @@ builder.objectType(LeagueRef, {
                 sourceId: parent.sourceId,
             }),
         }),
+        configJson: t.field({
+            type: 'String',
+            resolve: (parent) => JSON.stringify(parent.metadata || {}),
+        }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     }),
 });
@@ -404,3 +408,56 @@ builder.queryField('player', (t) =>
         },
     })
 );
+
+builder.mutationField('saveLeagueConfig', (t) =>
+    t.field({
+        type: LeagueRef,
+        args: {
+            id: t.arg.string({ required: true }),
+            configJson: t.arg.string({ required: true }),
+        },
+        resolve: async (_, { id, configJson }) => {
+            let metadata = {};
+            try {
+                metadata = JSON.parse(configJson);
+            } catch (e) {
+                throw new Error("Invalid JSON configuration");
+            }
+            const [updated] = await db.update(schema.leagues)
+                .set({ metadata, updatedAt: new Date() })
+                .where(eq(schema.leagues.id, id))
+                .returning();
+            return updated;
+        }
+    })
+);
+
+builder.mutationField('saveSeasonConfig', (t) =>
+    t.field({
+        type: SeasonRef,
+        args: {
+            id: t.arg.string({ required: true }),
+            configJson: t.arg.string({ required: true }),
+            rankingCriteria: t.arg.stringList({ required: false }),
+        },
+        resolve: async (_, { id, configJson, rankingCriteria }) => {
+            let metadata: any = {};
+            try {
+                metadata = JSON.parse(configJson);
+            } catch (e) {
+                throw new Error("Invalid JSON configuration");
+            }
+
+            if (rankingCriteria && rankingCriteria.length > 0) {
+                metadata.rankingCriteria = rankingCriteria;
+            }
+
+            const [updated] = await db.update(schema.seasons)
+                .set({ metadata, updatedAt: new Date() })
+                .where(eq(schema.seasons.id, id))
+                .returning();
+            return updated;
+        }
+    })
+);
+

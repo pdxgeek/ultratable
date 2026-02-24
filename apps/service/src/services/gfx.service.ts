@@ -2,7 +2,9 @@ import axios from 'axios';
 import crypto from 'node:crypto';
 import { supabase } from '../db';
 import { repository } from '../repositories/supabase.repository';
-import { LogService } from './log.service';
+import { globalLogger } from '../services/log.service';
+
+const logger = globalLogger.child({ module: 'GfxService' });
 
 export class GfxService {
     private static BUCKET_NAME = 'gfx';
@@ -55,7 +57,7 @@ export class GfxService {
 
             return blobPath;
         } catch (error: any) {
-            await LogService.error('GfxService', `Failed to sideload graphic for ${entityType}:${entityId}`, {
+            logger.error(`Failed to sideload graphic for ${entityType}:${entityId}`, {
                 url,
                 error: error.message
             });

@@ -3,7 +3,7 @@ import * as schema from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import axios from 'axios';
 import { storageProvider } from '../providers/supabase-storage.provider';
-import { generateContentId } from '../utils/idUtils';
+import crypto from 'node:crypto';
 
 export class GraphicsService {
     private readonly BUCKET_NAME = 'graphics';
@@ -24,7 +24,7 @@ export class GraphicsService {
             const mimeType = response.headers['content-type'] || 'image/png';
 
             // 2. Hash for deduplication
-            const contentId = await generateContentId(buffer);
+            const contentId = crypto.createHash('sha256').update(buffer).digest('hex');
             const blobPath = `blobs/${contentId}`;
 
             // 3. Upload to Supabase Storage
@@ -36,12 +36,14 @@ export class GraphicsService {
                 .values({
                     entityType,
                     entityId,
+                    sourceUrl: url,
                     blobPath,
                     mimeType
                 })
                 .onConflictDoUpdate({
                     target: [schema.graphics.entityType, schema.graphics.entityId],
                     set: {
+                        sourceUrl: url,
                         blobPath,
                         mimeType,
                         updatedAt: new Date()

@@ -10,7 +10,7 @@ export interface StandingsOptions {
     pointsForWin?: number;
     pointsForDraw?: number;
     pointsForLoss?: number;
-    deductions?: Array<{ teamId: string; modification: number }>;
+    deductions?: Array<{ teamId: string; points: number; reason: string }>;
 }
 
 export function compileStandings(
@@ -86,7 +86,6 @@ export function compileStandings(
         }
     });
 
-    const now = new Date();
     const rows: StandingsRow[] = teams.map(team => {
         const s = statsMap.get(team.id)!;
         const allFixtures = teamFixturesMap.get(team.id) || [];
@@ -113,12 +112,15 @@ export function compileStandings(
 
         const nextFixture = allFixtures.find(f =>
             ['scheduled', 'live'].includes(f.status) &&
-            new Date(f.scheduledAt).getTime() > now.getTime() - (2 * 60 * 60 * 1000)
+            new Date(f.scheduledAt).getTime() > new Date().getTime() - (2 * 60 * 60 * 1000)
         ) || null;
 
         const basePoints = s.won * pointsForWin + s.drawn * pointsForDraw + s.lost * pointsForLoss;
         const teamDeductions = options.deductions?.filter(d => d.teamId === team.id) || [];
-        const modifiedPoints = teamDeductions.reduce((acc, d) => acc + d.modification, basePoints);
+
+        // Only apply deductions when viewing 'all' fixtures
+        const deductionPoints = filter === 'all' ? teamDeductions.reduce((acc, d) => acc + d.points, 0) : 0;
+        const modifiedPoints = basePoints + deductionPoints;
 
         return {
             position: 0,
@@ -136,7 +138,8 @@ export function compileStandings(
             recentFixtures: played.slice(0, 5).reverse(),
             nextFixture,
             description: null,
-            lastRefreshed: new Date().toISOString()
+            lastRefreshed: new Date().toISOString(),
+            deductions: filter === 'all' ? teamDeductions : []
         };
     });
 
