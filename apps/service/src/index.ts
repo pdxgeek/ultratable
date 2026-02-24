@@ -7,6 +7,7 @@ import './schema/config';
 import './schema/football';
 import './schema/workers';
 import './schema/catalog';
+import './schema/graphics';
 
 const yoga = createYoga({
     schema: builder.toSchema(),

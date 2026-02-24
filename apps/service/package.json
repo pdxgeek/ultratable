@@ -7,6 +7,7 @@
     "dev": "nodemon --watch src --watch .env --ext ts --exec ts-node src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "db:reset": "ts-node src/scripts/wipe_and_seed.ts",
     "test": "vitest run"
   },
   "keywords": [],

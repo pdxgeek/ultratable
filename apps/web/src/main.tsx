@@ -4,7 +4,9 @@ import { Provider as UrqlProvider } from 'urql';
 import { client } from './api/client';
 import { SettingsProvider } from './context/SettingsContext';
 import { LeagueProvider } from './context/LeagueContext';
+import { PopupProvider } from './context/PopupContext';
 import App from './App';
+import PopupOverlay from './components/PopupOverlay';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -12,7 +14,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <UrqlProvider value={client}>
       <SettingsProvider>
         <LeagueProvider>
-          <App />
+          <PopupProvider>
+            <App />
+            <PopupOverlay />
+          </PopupProvider>
         </LeagueProvider>
       </SettingsProvider>
     </UrqlProvider>

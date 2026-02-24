@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import type { Fixture, Team } from '../db';
 import { compileStandings } from '../logic/dataCompiler';
 import type { StandingsOptions } from '../logic/dataCompiler';
 
@@ -22,6 +23,8 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
             ? await db.teams.where('id').anyOf([...teamIds]).toArray()
             : [];
 
+        const teamsMap = new Map<string, Team>(teams.map(t => [t.id, t]));
+
         const criteria = season.rankingCriteria || options.criteria;
         const deductions = season.metadata?.deductions || [];
 
@@ -33,13 +36,17 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
 
         return {
             standings,
+            fixtures,
+            teamsMap,
             season,
             lastUpdated: new Date().toISOString()
         };
-    }, [seasonId, options.criteria]);
+    }, [seasonId, options.criteria, options.filter]);
 
     return {
         standings: data?.standings || [],
+        fixtures: data?.fixtures || [],
+        teamsMap: data?.teamsMap || new Map<string, Team>(),
         season: data?.season,
         isLoading: data === undefined,
         lastUpdated: data?.lastUpdated
