@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLeague } from './context/LeagueContext';
 import { useStandings } from './hooks/useStandings';
 import StandingsTable from './components/StandingsTable';
 import LeagueSelector from './components/LeagueSelector';
+import type { StandingsFilter } from './logic/dataCompiler';
 
 const App: React.FC = () => {
   const { activeSeason, isLoading } = useLeague();
-  const { standings, lastUpdated } = useStandings(activeSeason?.id || '');
+  const [filter, setFilter] = useState<StandingsFilter>('all');
+  const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', { filter });
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
@@ -19,7 +21,7 @@ const App: React.FC = () => {
         <div>
           <h1 style={{ fontSize: '2rem', marginBottom: '4px' }}>UltraTable</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Live Standings & Data Sync
+            Live Standings &amp; Data Sync
           </p>
         </div>
         <LeagueSelector />
@@ -44,7 +46,13 @@ const App: React.FC = () => {
               </span>
             )}
           </div>
-          <StandingsTable standings={standings} />
+          <StandingsTable
+            standings={standings}
+            fixtures={fixtures}
+            teamsMap={teamsMap}
+            filter={filter}
+            onFilterChange={setFilter}
+          />
         </main>
       ) : (
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

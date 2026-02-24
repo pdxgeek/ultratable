@@ -1,63 +1,141 @@
-import React, { useEffect } from 'react';
-import type { Fixture } from '../db';
-import { db } from '../db';
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import type { Fixture, Team } from '../db';
+import { db } from '../db';
+import { usePopup } from '../context/PopupContext';
 
 interface MatchPopupProps {
     fixture: Fixture;
-    anchorRect: DOMRect | null;
-    onClose: () => void;
+    teamsMap: Map<string, Team>;
+    anchorRect: DOMRect;
 }
 
-const MatchPopup: React.FC<MatchPopupProps> = ({ fixture, anchorRect, onClose }) => {
-    const homeTeam = useLiveQuery(() => db.teams.get(fixture.homeTeamId), [fixture.homeTeamId]);
-    const awayTeam = useLiveQuery(() => db.teams.get(fixture.awayTeamId), [fixture.awayTeamId]);
+function getPopupPosition(anchorRect: DOMRect): React.CSSProperties {
+    const popupWidth = 340;
+    const popupHeight = 280;
+    const margin = 8;
 
-    useEffect(() => {
-        if (fixture.status === 'played') {
-            // Logic for future event fetching could go here
-        }
-    }, [fixture.id, fixture.status]);
+    let left = anchorRect.left + anchorRect.width / 2 - popupWidth / 2;
+    let top = anchorRect.top - popupHeight - margin;
 
-    if (!anchorRect) return null;
+    if (left < margin) left = margin;
+    if (left + popupWidth > window.innerWidth - margin) {
+        left = window.innerWidth - popupWidth - margin;
+    }
+    if (top < margin) {
+        top = anchorRect.bottom + margin;
+    }
 
-    const style: React.CSSProperties = {
+    return {
         position: 'fixed',
-        top: Math.max(10, anchorRect.top - 200),
-        left: Math.max(10, anchorRect.left + anchorRect.width / 2 - 150),
-        width: '300px',
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${popupWidth}px`,
         zIndex: 1000,
+    };
+}
+
+export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopupProps) {
+    const { cancelHide, scheduleHide } = usePopup();
+    const [venueImgError, setVenueImgError] = useState(false);
+
+    const homeTeam = teamsMap.get(fixture.homeTeamId);
+    const awayTeam = teamsMap.get(fixture.awayTeamId);
+
+    // Look up venue from Dexie
+    const venue = useLiveQuery(async () => {
+        if (!fixture.venueId) return null;
+        return await db.venues.get(fixture.venueId);
+    }, [fixture.venueId]);
+
+    const style = getPopupPosition(anchorRect);
+    const isPlayed = fixture.status === 'played';
+    const isUpcoming = fixture.status === 'scheduled';
+
+    const formatDate = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString(undefined, {
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
     };
 
     return (
-        <div className="glass-card match-popup" style={style} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent-main)' }}>{fixture.status.toUpperCase()}</span>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+        <div
+            className="match-popup"
+            style={style}
+            onMouseEnter={cancelHide}
+            onMouseLeave={scheduleHide}
+        >
+            {/* Venue Image Banner */}
+            {venue && (
+                <div className="match-popup__venue">
+                    {venue.image && !venueImgError ? (
+                        <img
+                            key={venue.image}
+                            src={venue.image}
+                            alt={venue.name}
+                            className="match-popup__venue-image"
+                            onError={() => setVenueImgError(true)}
+                        />
+                    ) : (
+                        <div className="match-popup__venue-placeholder">
+                            <span style={{ fontSize: '2rem' }}>🏟️</span>
+                        </div>
+                    )}
+                    <div className="match-popup__venue-name">
+                        📍 {venue.name}{venue.city ? `, ${venue.city}` : ''}
+                    </div>
+                </div>
+            )}
+
+            <div className="match-popup__status">
+                {isUpcoming && <span className="badge badge--upcoming">Upcoming</span>}
+                {fixture.status === 'postponed' && <span className="badge badge--postponed">Postponed</span>}
+                {isPlayed && <span className="badge badge--played">Full Time</span>}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                    <img src={homeTeam?.logo} alt={homeTeam?.name} style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
-                    <div style={{ fontSize: '0.9rem', marginTop: '8px', fontWeight: 500 }}>{homeTeam?.name}</div>
+            <div className="match-popup__header">
+                <div className="match-popup__team">
+                    {homeTeam?.logo && (
+                        <img
+                            src={homeTeam.logo}
+                            alt=""
+                            className="match-popup__logo"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                    )}
+                    <span className="match-popup__team-name">{homeTeam?.name ?? 'Unknown'}</span>
                 </div>
 
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0 20px', color: 'var(--text-main)' }}>
-                    {fixture.status === 'played' ? `${fixture.goalsHome} - ${fixture.goalsAway}` : 'VS'}
+                <div className="match-popup__score">
+                    {isPlayed ? (
+                        <span className="match-popup__score-text">
+                            {fixture.goalsHome} – {fixture.goalsAway}
+                        </span>
+                    ) : (
+                        <span className="match-popup__score-text match-popup__score-text--vs">
+                            vs
+                        </span>
+                    )}
                 </div>
 
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                    <img src={awayTeam?.logo} alt={awayTeam?.name} style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
-                    <div style={{ fontSize: '0.9rem', marginTop: '8px', fontWeight: 500 }}>{awayTeam?.name}</div>
+                <div className="match-popup__team">
+                    {awayTeam?.logo && (
+                        <img
+                            src={awayTeam.logo}
+                            alt=""
+                            className="match-popup__logo"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                    )}
+                    <span className="match-popup__team-name">{awayTeam?.name ?? 'Unknown'}</span>
                 </div>
             </div>
 
-            <div style={{ marginTop: '20px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                <div style={{ marginBottom: '4px' }}>📅 {new Date(fixture.scheduledAt).toLocaleDateString()}</div>
-                <div>⏰ {new Date(fixture.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            <div className="match-popup__date">
+                📅 {formatDate(fixture.scheduledAt)}
             </div>
         </div>
     );
-};
-
-export default MatchPopup;
+}

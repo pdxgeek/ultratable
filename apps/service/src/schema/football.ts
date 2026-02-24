@@ -145,6 +145,9 @@ builder.objectType(FixtureRef, {
     fields: (t) => ({
         id: t.exposeString('id'),
         seasonId: t.exposeString('seasonId'),
+        homeTeamId: t.exposeString('homeTeamId'),
+        awayTeamId: t.exposeString('awayTeamId'),
+        venueId: t.exposeString('venueId', { nullable: true }),
         scheduledAt: t.expose('scheduledAt', { type: 'DateTime' }),
         status: t.exposeString('status'),
         goalsHome: t.int({
@@ -260,27 +263,7 @@ builder.queryField('allSeasons', (t) =>
     })
 );
 
-const GraphicRef = builder.objectRef<any>('Graphic');
 const RankingFormulaRef = builder.objectRef<any>('RankingFormula');
-
-builder.objectType(GraphicRef, {
-    fields: (t) => ({
-        id: t.exposeString('id'),
-        entityType: t.exposeString('entityType'),
-        entityId: t.exposeString('entityId'),
-        variantName: t.exposeString('variantName'),
-        blobPath: t.exposeString('blobPath'),
-        mimeType: t.exposeString('mimeType'),
-        metadata: t.expose('metadata', { type: 'JSON', nullable: true }),
-        url: t.field({
-            type: 'String',
-            resolve: (parent) => {
-                const supabaseUrl = process.env.SUPABASE_URL || '';
-                return `${supabaseUrl}/storage/v1/object/public/gfx/${parent.blobPath}`;
-            },
-        }),
-    }),
-});
 
 builder.objectType(RankingFormulaRef, {
     fields: (t) => ({
@@ -298,19 +281,6 @@ builder.queryField('rankingFormulas', (t) =>
     }),
 );
 
-builder.queryField('graphics', (t) =>
-    t.field({
-        type: [GraphicRef],
-        args: {
-            entityType: t.arg.string({ required: true }),
-            entityId: t.arg.string({ required: true }),
-        },
-        resolve: (_: any, { entityType, entityId }: any) => {
-            return repository.football.getGraphics(entityType, entityId);
-        },
-    }),
-);
-
 builder.queryField('fixtures', (t) =>
     t.field({
         type: [FixtureRef],
@@ -321,6 +291,32 @@ builder.queryField('fixtures', (t) =>
         },
         resolve: async (_: any, { leagueId, season, since }: any) => {
             return repository.football.getFixtures(leagueId, season, since || undefined);
+        },
+    })
+);
+
+builder.queryField('venues', (t) =>
+    t.field({
+        type: [VenueRef],
+        args: {
+            leagueId: t.arg.int({ required: true }),
+            season: t.arg.int({ required: true }),
+        },
+        resolve: async (_, { leagueId, season }) => {
+            // Get all venue IDs referenced by fixtures for this league/season
+            const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+            if (!localLeague) return [];
+
+            const [localSeason] = await db.select().from(schema.seasons)
+                .where(and(eq(schema.seasons.leagueId, localLeague.id), eq(schema.seasons.year, season)));
+            if (!localSeason) return [];
+
+            const result = await db.selectDistinct({ venue: schema.venues })
+                .from(schema.venues)
+                .innerJoin(schema.fixtures, eq(schema.fixtures.venueId, schema.venues.id))
+                .where(eq(schema.fixtures.seasonId, localSeason.id));
+
+            return result.map((r: any) => r.venue);
         },
     })
 );

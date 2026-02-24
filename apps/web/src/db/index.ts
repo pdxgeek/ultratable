@@ -41,10 +41,19 @@ export interface Fixture {
     seasonId: string;
     homeTeamId: string;
     awayTeamId: string;
+    venueId?: string;
     scheduledAt: string;
     status: string;
     goalsHome?: number;
     goalsAway?: number;
+    updatedAt: string;
+}
+
+export interface Venue {
+    id: string;
+    name: string;
+    city?: string;
+    image?: string;
     updatedAt: string;
 }
 
@@ -64,6 +73,7 @@ export class UltraWebDB extends Dexie {
     seasons!: Table<Season, string>;
     teams!: Table<Team, string>;
     fixtures!: Table<Fixture, string>;
+    venues!: Table<Venue, string>;
     graphics!: Table<Graphic, string>;
 
     constructor() {
@@ -75,6 +85,9 @@ export class UltraWebDB extends Dexie {
             teams: 'id, updatedAt',
             fixtures: 'id, seasonId, scheduledAt, updatedAt',
             graphics: 'id, [entityType+entityId], updatedAt',
+        });
+        this.version(2).stores({
+            venues: 'id, updatedAt',
         });
     }
 }

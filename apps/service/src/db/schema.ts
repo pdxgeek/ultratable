@@ -197,12 +197,11 @@ export const graphics = pgTable('graphics', {
     id: uuid('id').primaryKey().defaultRandom(),
     entityType: varchar('entity_type', { length: 50 }).notNull(), // "team", "league", "player", "venue"
     entityId: uuid('entity_id').notNull(),
-    variantName: varchar('variant_name', { length: 100 }).default('default').notNull(),
     blobPath: varchar('blob_path', { length: 500 }).notNull(), // The deterministic path: gfx/blobs/{hash}.png
     mimeType: varchar('mime_type', { length: 100 }).default('image/png').notNull(),
     metadata: jsonb('metadata'), // dimensions, alt text, etc.
     createdAt: utcTimestamp('created_at').defaultNow().notNull(),
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    unq: unique().on(table.entityType, table.entityId, table.variantName),
+    unq: unique().on(table.entityType, table.entityId),
 }));

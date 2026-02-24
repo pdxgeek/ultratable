@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Activity, Key, Globe, LayoutDashboard, CheckCircle2, AlertCircle, Trophy, Play, History, Settings, Loader2, RefreshCw } from 'lucide-react';
+import { Database, Activity, Key, Globe, LayoutDashboard, CheckCircle2, AlertCircle, Trophy, Play, History, Settings, Loader2, RefreshCw, Image as ImageIcon } from 'lucide-react';
+import { GraphicsView } from './components/GraphicsView';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,7 +8,7 @@ function cn(...inputs: any[]) {
   return twMerge(clsx(inputs));
 }
 
-type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers' | 'logs';
+type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers' | 'graphics' | 'logs';
 
 interface ConfigStatus {
   isDatabaseConnected: boolean;
@@ -85,6 +86,7 @@ const App: React.FC = () => {
     { id: 'api-keys', label: 'Integrations', icon: Key },
     { id: 'database', label: 'Infrastructure', icon: Database },
     { id: 'workers', label: 'Workers', icon: Activity },
+    { id: 'graphics', label: 'Graphics', icon: ImageIcon },
     { id: 'logs', label: 'Logs', icon: History },
   ];
 
@@ -172,6 +174,7 @@ const App: React.FC = () => {
                 onRefresh={fetchWorkerData}
               />
             )}
+            {activeTab === 'graphics' && <GraphicsView />}
             {activeTab === 'logs' && <LogsView logs={logs} onRefresh={fetchWorkerData} />}
           </div>
         </div>

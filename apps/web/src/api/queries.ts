@@ -13,12 +13,20 @@ export const SYNC_DATA_QUERY = gql`
     fixtures(leagueId: $leagueId, season: $season, since: $since) {
       id
       seasonId
+      homeTeamId
+      awayTeamId
+      venueId
       scheduledAt
       status
       goalsHome
       goalsAway
-      homeTeam { id }
-      awayTeam { id }
+      updatedAt
+    }
+    venues(leagueId: $leagueId, season: $season) {
+      id
+      name
+      city
+      image
       updatedAt
     }
   }

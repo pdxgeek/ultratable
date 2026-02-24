@@ -27,10 +27,10 @@ export function useDeltaSync() {
 
             if (result.error) throw result.error;
 
-            const { teams, fixtures } = result.data;
+            const { teams, fixtures, venues } = result.data;
 
             // 3. Batch updates into Dexie
-            await db.transaction('rw', [db.teams, db.fixtures, db.syncState], async () => {
+            await db.transaction('rw', [db.teams, db.fixtures, db.venues, db.syncState], async () => {
                 if (teams?.length > 0) {
                     await db.teams.bulkPut(teams.map((t: any) => ({
                         id: t.id,
@@ -46,13 +46,24 @@ export function useDeltaSync() {
                     await db.fixtures.bulkPut(fixtures.map((f: any) => ({
                         id: f.id,
                         seasonId: f.seasonId,
-                        homeTeamId: f.homeTeam.id,
-                        awayTeamId: f.awayTeam.id,
+                        homeTeamId: f.homeTeamId,
+                        awayTeamId: f.awayTeamId,
+                        venueId: f.venueId || undefined,
                         scheduledAt: f.scheduledAt,
                         status: f.status,
                         goalsHome: f.goalsHome,
                         goalsAway: f.goalsAway,
                         updatedAt: f.updatedAt
+                    })));
+                }
+
+                if (venues?.length > 0) {
+                    await db.venues.bulkPut(venues.map((v: any) => ({
+                        id: v.id,
+                        name: v.name,
+                        city: v.city || undefined,
+                        image: v.image || undefined,
+                        updatedAt: v.updatedAt
                     })));
                 }
 

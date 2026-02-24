@@ -6,7 +6,7 @@ import { IFootballProvider } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
 import { MockFootballProvider } from '../integrations/mock';
-import { GfxService } from '../services/gfx.service';
+import { graphicsService } from '../services/graphics.service';
 import { LogService } from '../services/log.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -198,8 +198,19 @@ export class SupabaseFootballRepository implements FootballRepository {
             if (t.logo) {
                 const teamId = teamMap.get(t.sourceId);
                 if (teamId) {
-                    GfxService.sideload('team', teamId, t.logo).catch((e: any) =>
+                    graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: any) =>
                         LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for team ${teamId}`, { error: e.message })
+                    );
+                }
+            }
+        }
+
+        for (const v of venues) {
+            if (v.image) {
+                const venueId = venueMap.get(v.sourceId);
+                if (venueId) {
+                    graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: any) =>
+                        LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for venue ${venueId}`, { error: e.message })
                     );
                 }
             }
@@ -264,10 +275,10 @@ export class SupabaseFootballRepository implements FootballRepository {
                 target: [schema.venues.sourceName, schema.venues.sourceId],
                 set: {
                     name: sql`EXCLUDED.name`,
-                    city: sql`EXCLUDED.city`,
-                    capacity: sql`EXCLUDED.capacity`,
-                    surface: sql`EXCLUDED.surface`,
-                    image: sql`EXCLUDED.image`,
+                    city: sql`COALESCE(EXCLUDED.city, ${schema.venues.city})`,
+                    capacity: sql`COALESCE(EXCLUDED.capacity, ${schema.venues.capacity})`,
+                    surface: sql`COALESCE(EXCLUDED.surface, ${schema.venues.surface})`,
+                    image: sql`COALESCE(EXCLUDED.image, ${schema.venues.image})`,
                     updatedAt: sql`now()`
                 }
             });
@@ -563,7 +574,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // 3. Sideload Logo (CAS)
         if (managed.logo) {
-            GfxService.sideload('league', managed.id, managed.logo).catch(e =>
+            graphicsService.registerFromUrl(managed.id, 'league', managed.logo).catch(e =>
                 LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for league ${managed.id}`, { error: e.message })
             );
         }
@@ -639,7 +650,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         const [upserted] = await db.insert(schema.graphics)
             .values({ ...graphic, updatedAt: new Date() })
             .onConflictDoUpdate({
-                target: [schema.graphics.entityType, schema.graphics.entityId, schema.graphics.variantName],
+                target: [schema.graphics.entityType, schema.graphics.entityId],
                 set: {
                     blobPath: sql`excluded.blob_path`,
                     mimeType: sql`excluded.mime_type`,
