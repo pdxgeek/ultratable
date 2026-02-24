@@ -17,6 +17,7 @@ export interface StandingsRow {
     nextFixture: Fixture | null;
     description: string | null;
     lastRefreshed: string;
+    deductions?: Array<{ points: number; reason: string }>;
 }
 
 export type ComparisonFn = (a: StandingsRow, b: StandingsRow, fixtures: Fixture[]) => number;

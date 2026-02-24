@@ -1,37 +1,90 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
+import winston from 'winston';
+import Transport from 'winston-transport';
 
+// 1. Types for Winston
 export enum LogLevel {
     INFO = 'info',
     WARN = 'warn',
     ERROR = 'error'
 }
 
+// 2. Custom Winston Transport for Postgres
+class DrizzleTransport extends Transport {
+    constructor(opts?: Transport.TransportStreamOptions) {
+        super(opts);
+    }
+
+    log(info: any, callback: () => void) {
+        setImmediate(() => {
+            this.emit('logged', info);
+        });
+
+        // Ensure we gracefully format to database schema
+        const lvl = info.level as LogLevel;
+        const msg = info.message;
+        const mod = info.module || 'System';
+
+        // Filter out winston core symbols for the context JSON payload
+        const context = { ...info };
+        delete context.level;
+        delete context.message;
+        delete context.module;
+        const cleanContext = Object.keys(context).length > 0 ? context : null;
+
+        db.insert(schema.systemLogs).values({
+            level: lvl,
+            module: mod,
+            message: msg,
+            context: cleanContext
+        }).catch((e: any) => {
+            console.error('[Logger] Failed to write system_log to database:', e.message);
+        });
+
+        callback();
+    }
+}
+
+// 3. Central Logger Configuration
+export const globalLogger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+    ),
+    transports: [
+        // Standard Output formatting
+        new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.printf((info) => {
+                    const mod = info.module ? `[${info.module}] ` : '';
+                    return `${info.timestamp} ${info.level}: ${mod}${info.message}`;
+                })
+            )
+        }),
+        // Postgres / Admin UI Intercept
+        new DrizzleTransport()
+    ]
+});
+
+// Polyfill old static methods so we don't break un-migrated code instantly
 export class LogService {
     static async log(level: LogLevel, module: string, message: string, context?: any) {
-        console.log(`[${level.toUpperCase()}][${module}] ${message}`, context ? JSON.stringify(context) : '');
-
-        try {
-            await db.insert(schema.systemLogs).values({
-                level,
-                module,
-                message,
-                context: context || null
-            });
-        } catch (e) {
-            console.error('Failed to write to system_logs table:', e);
-        }
+        globalLogger.log(level, message, { module, ...context });
     }
 
     static async info(module: string, message: string, context?: any) {
-        await this.log(LogLevel.INFO, module, message, context);
+        globalLogger.info(message, { module, ...context });
     }
 
     static async warn(module: string, message: string, context?: any) {
-        await this.log(LogLevel.WARN, module, message, context);
+        globalLogger.warn(message, { module, ...context });
     }
 
     static async error(module: string, message: string, context?: any) {
-        await this.log(LogLevel.ERROR, module, message, context);
+        globalLogger.error(message, { module, ...context });
     }
 }

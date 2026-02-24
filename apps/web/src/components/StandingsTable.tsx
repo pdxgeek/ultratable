@@ -81,6 +81,29 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
         return <span className="sort-icon">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
     };
 
+    // Calculate unique deductions across all teams to assign asterisk legends
+    const deductionMap = useMemo(() => {
+        const dMap = new Map<string, { teamName: string; reason: string; points: number; asterisks: string }>();
+        let asteriskCount = 1;
+
+        sortedStandings.forEach(row => {
+            if (row.deductions && row.deductions.length > 0) {
+                row.deductions.forEach(deduction => {
+                    const key = `${row.teamId}-${deduction.reason}`;
+                    if (!dMap.has(key)) {
+                        dMap.set(key, {
+                            teamName: row.team.name,
+                            reason: deduction.reason,
+                            points: deduction.points,
+                            asterisks: `${asteriskCount++}`
+                        });
+                    }
+                });
+            }
+        });
+        return Array.from(dMap.values());
+    }, [sortedStandings]);
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* All / Home / Away filter */}
@@ -186,6 +209,11 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                                     </td>
                                     <td className="col-pts">
                                         <span className="pts-value">{row.points}</span>
+                                        {row.deductions && row.deductions.length > 0 && (
+                                            <span className="pts-asterisk">
+                                                {row.deductions.map(d => deductionMap.find(m => m.teamName === row.team.name && m.reason === d.reason)?.asterisks).join(',')}
+                                            </span>
+                                        )}
                                     </td>
                                     {settings.showForm && (
                                         <td className="col-form">
@@ -218,6 +246,17 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                         })}
                     </tbody>
                 </table>
+                {deductionMap.length > 0 && (
+                    <div className="standings-footnotes">
+                        <ul>
+                            {deductionMap.map((d, i) => (
+                                <li key={i}>
+                                    <span className="pts-asterisk">{d.asterisks}</span> {d.teamName} had {Math.abs(d.points)} points deducted: {d.reason}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
             </div>
         </div>
     );

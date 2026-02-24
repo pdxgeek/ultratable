@@ -1,7 +1,9 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { LogService } from '../services/log.service';
+import { globalLogger } from '../services/log.service';
+
+const logger = globalLogger.child({ module: 'JobRunner' });
 
 export type JobStatus = 'running' | 'success' | 'failed';
 
@@ -46,7 +48,7 @@ export class JobRunner {
         }).returning();
 
         console.log(`[Job: ${name}] Started (ID: ${execution.id})`);
-        await LogService.info('JobRunner', `Job [${name}] started`, { jobId: job.id, executionId: execution.id });
+        logger.info(`Job [${name}] started`, { jobId: job.id, executionId: execution.id });
 
         const reporter: JobReporter = {
             updateProgress: async (stats) => {
@@ -83,7 +85,7 @@ export class JobRunner {
                 .where(eq(schema.jobs.id, job.id));
 
             console.log(`[Job: ${name}] Finished successfully (Count: ${stats.processedCount || 0})`);
-            await LogService.info('JobRunner', `Job [${name}] finished successfully`, {
+            logger.info(`Job [${name}] finished successfully`, {
                 jobId: job.id,
                 executionId: execution.id,
                 processedCount: stats.processedCount,
@@ -101,7 +103,7 @@ export class JobRunner {
                 })
                 .where(eq(schema.jobExecutions.id, execution.id));
 
-            await LogService.error('JobRunner', `Job [${name}] failed: ${error.message || error}`, {
+            logger.error(`Job [${name}] failed: ${error.message || error}`, {
                 jobId: job.id,
                 executionId: execution.id,
                 error: error.message || String(error),

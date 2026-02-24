@@ -7,7 +7,7 @@ import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
 import { MockFootballProvider } from '../integrations/mock';
 import { graphicsService } from '../services/graphics.service';
-import { LogService } from '../services/log.service';
+import { globalLogger } from '../services/log.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -79,6 +79,8 @@ export class SupabaseConfigRepository implements ConfigRepository {
         } catch { return false; }
     }
 }
+
+const logger = globalLogger.child({ module: 'SupabaseFootballRepository' });
 
 export class SupabaseFootballRepository implements FootballRepository {
     private provider: IFootballProvider;
@@ -199,7 +201,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 const teamId = teamMap.get(t.sourceId);
                 if (teamId) {
                     graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: any) =>
-                        LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for team ${teamId}`, { error: e.message })
+                        logger.warn(`Soft-fail on sideload for team ${teamId}`, { error: e.message })
                     );
                 }
             }
@@ -210,7 +212,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 const venueId = venueMap.get(v.sourceId);
                 if (venueId) {
                     graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: any) =>
-                        LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for venue ${venueId}`, { error: e.message })
+                        logger.warn(`Soft-fail on sideload for venue ${venueId}`, { error: e.message })
                     );
                 }
             }
@@ -575,7 +577,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         // 3. Sideload Logo (CAS)
         if (managed.logo) {
             graphicsService.registerFromUrl(managed.id, 'league', managed.logo).catch(e =>
-                LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for league ${managed.id}`, { error: e.message })
+                logger.warn(`Soft-fail on sideload for league ${managed.id}`, { error: e.message })
             );
         }
 
