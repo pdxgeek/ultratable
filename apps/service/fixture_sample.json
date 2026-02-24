@@ -1,0 +1,92 @@
+{
+    "fixture": {
+        "id": 1208033,
+        "referee": "Simon Hooper, England",
+        "timezone": "UTC",
+        "date": "2024-08-16T19:00:00+00:00",
+        "timestamp": 1723834800,
+        "periods": {
+            "first": 1723834800,
+            "second": 1723838400
+        },
+        "venue": {
+            "id": 562,
+            "name": "Old Trafford",
+            "city": "Manchester"
+        },
+        "status": {
+            "long": "Match Finished",
+            "short": "FT",
+            "elapsed": 90
+        }
+    },
+    "league": {
+        "id": 39,
+        "name": "Premier League",
+        "country": "England",
+        "logo": "https://media.api-sports.io/football/leagues/39.png",
+        "flag": "https://media.api-sports.io/flags/gb.svg",
+        "season": 2024,
+        "round": "Regular Season - 1"
+    },
+    "teams": {
+        "home": {
+            "id": 33,
+            "name": "Manchester United",
+            "logo": "https://media.api-sports.io/football/teams/33.png",
+            "winner": true
+        },
+        "away": {
+            "id": 36,
+            "name": "Fulham",
+            "logo": "https://media.api-sports.io/football/teams/36.png",
+            "winner": false
+        }
+    },
+    "goals": {
+        "home": 1,
+        "away": 0
+    },
+    "score": {
+        "halftime": {
+            "home": 0,
+            "away": 0
+        },
+        "fulltime": {
+            "home": 1,
+            "away": 0
+        },
+        "extratime": {
+            "home": null,
+            "away": null
+        },
+        "penalty": {
+            "home": null,
+            "away": null
+        }
+    },
+    "events": [
+        {
+            "time": {
+                "elapsed": 18,
+                "extra": null
+            },
+            "team": {
+                "id": 33,
+                "name": "Manchester United",
+                "logo": "https://media.api-sports.io/football/teams/33.png"
+            },
+            "player": {
+                "id": 19034,
+                "name": "M. Mount"
+            },
+            "assist": {
+                "id": null,
+                "name": null
+            },
+            "type": "Card",
+            "detail": "Yellow Card",
+            "comments": "Foul"
+        }
+    ]
+}

@@ -1,44 +1,7 @@
-export interface IngestedLeague {
-    name: string;
-    slug: string;
-    country: string | null;
-    logo: string | null;
-    sourceId: number;
-    sourceName: string;
-}
-
-export interface IngestedTeam {
-    name: string;
-    shortName: string | null;
-    tla: string | null;
-    logo: string | null;
-    venue: string | null;
-    sourceId: number;
-    sourceName: string;
-}
-
-export interface IngestedSeason {
-    year: number;
-    startDate: string | null;
-    endDate: string | null;
-    sourceId: number; // For API-Football, this is often the league ID since sequels are nested
-    sourceName: string;
-}
-
-export interface IngestedFixture {
-    sourceId: number;
-    sourceName: string;
-    scheduledAt: string;
-    status: 'scheduled' | 'played' | 'postponed' | 'cancelled' | 'live';
-    homeTeamSourceId: number;
-    awayTeamSourceId: number;
-    homeGoals: number | null;
-    awayGoals: number | null;
-}
+import { IngestedLeague, IngestedTeam, IngestedVenue, IngestedSeason, IngestedFixture } from '../types';
 
 export class Normalizer {
     static normalizeLeague(item: any, sourceName: string = 'api-football'): IngestedLeague {
-        // Handle API-Football format or Mock format
         const league = item.league || item;
         const country = item.country?.name || item.country || null;
 
@@ -54,15 +17,28 @@ export class Normalizer {
 
     static normalizeTeam(item: any, sourceName: string = 'api-football'): IngestedTeam {
         const team = item.team || item;
-        const venue = item.venue?.name || item.venue || null;
+        const venue = item.venue || {};
 
         return {
             name: team.name,
-            shortName: team.name, // API-Football doesn't always provide shortName in the teams response
+            shortName: team.name,
             tla: team.code,
             logo: team.logo,
-            venue: venue,
+            venueSourceId: venue.id || null,
             sourceId: team.id,
+            sourceName: sourceName
+        };
+    }
+
+    static normalizeVenue(item: any, sourceName: string = 'api-football'): IngestedVenue {
+        const venue = item.venue || item;
+        return {
+            name: venue.name,
+            city: venue.city || null,
+            capacity: venue.capacity || null,
+            surface: venue.surface || null,
+            image: venue.image || null,
+            sourceId: venue.id,
             sourceName: sourceName
         };
     }
@@ -82,7 +58,6 @@ export class Normalizer {
         const goals = item.goals;
         const teams = item.teams;
 
-        // Map API-Football status to our enum
         let status: IngestedFixture['status'] = 'scheduled';
         const shortStatus = fixture.status.short;
         if (['FT', 'AET', 'PEN'].includes(shortStatus)) status = 'played';
@@ -96,8 +71,40 @@ export class Normalizer {
             status,
             homeTeamSourceId: teams.home.id,
             awayTeamSourceId: teams.away.id,
+            venueSourceId: fixture.venue?.id || null,
             homeGoals: goals.home,
             awayGoals: goals.away
+        };
+    }
+
+    static normalizeEvent(item: any, fixtureId: number): any {
+        return {
+            fixtureId,
+            teamId: item.team.id,
+            playerName: item.player.name,
+            playerSourceId: item.player.id,
+            type: item.type,
+            detail: item.detail,
+            comments: item.comments,
+            minute: item.time.elapsed,
+            extraMinute: item.time.extra
+        };
+    }
+
+    static normalizePlayer(item: any): any {
+        const p = item.player;
+        return {
+            sourceId: p.id,
+            name: p.name,
+            firstname: p.firstname,
+            lastname: p.lastname,
+            age: p.age,
+            nationality: p.nationality,
+            height: p.height,
+            weight: p.weight,
+            injured: p.injured,
+            photo: p.photo,
+            statistics: item.statistics
         };
     }
 }

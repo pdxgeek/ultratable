@@ -11,8 +11,16 @@ if (!dbUrl) {
 }
 
 // Relational DB client (Drizzle)
-export const db = dbUrl
-    ? drizzle(postgres(dbUrl), { schema })
+const pgClient = dbUrl
+    ? postgres(dbUrl, {
+        max: 10,
+        idle_timeout: 30,
+        connect_timeout: 10,
+    })
+    : null;
+
+export const db = pgClient
+    ? drizzle(pgClient, { schema })
     : (null as any);
 
 // Supabase "Full Stack" Client

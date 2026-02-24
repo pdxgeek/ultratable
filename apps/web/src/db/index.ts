@@ -1,0 +1,82 @@
+import Dexie, { type Table } from 'dexie';
+
+export interface SyncState {
+    key: string; // e.g., "teams:39:2024" or "fixtures:39:2024"
+    lastUpdatedAt: string;
+    metadata?: any;
+}
+
+export interface League {
+    id: string;
+    sourceId: number;
+    name: string;
+    country?: string;
+    logo?: string;
+    slug: string;
+    updatedAt: string;
+    metadata?: any;
+}
+
+export interface Season {
+    id: string;
+    leagueId: string;
+    sourceId?: number; // Optional as backend might only provide it via league parent
+    year: number;
+    updatedAt: string;
+    rankingCriteria?: any[];
+    metadata?: any;
+}
+
+export interface Team {
+    id: string;
+    name: string;
+    shortName?: string;
+    tla?: string;
+    logo?: string;
+    updatedAt: string;
+}
+
+export interface Fixture {
+    id: string;
+    seasonId: string;
+    homeTeamId: string;
+    awayTeamId: string;
+    scheduledAt: string;
+    status: string;
+    goalsHome?: number;
+    goalsAway?: number;
+    updatedAt: string;
+}
+
+export interface Graphic {
+    id: string;
+    entityType: string;
+    entityId: string;
+    variantName: string;
+    blobPath: string;
+    url: string;
+    updatedAt: string;
+}
+
+export class UltraWebDB extends Dexie {
+    syncState!: Table<SyncState, string>;
+    leagues!: Table<League, string>;
+    seasons!: Table<Season, string>;
+    teams!: Table<Team, string>;
+    fixtures!: Table<Fixture, string>;
+    graphics!: Table<Graphic, string>;
+
+    constructor() {
+        super('UltraWebDB');
+        this.version(1).stores({
+            syncState: 'key',
+            leagues: 'id, sourceId, slug, updatedAt',
+            seasons: 'id, leagueId, [leagueId+year], updatedAt',
+            teams: 'id, updatedAt',
+            fixtures: 'id, seasonId, scheduledAt, updatedAt',
+            graphics: 'id, [entityType+entityId], updatedAt',
+        });
+    }
+}
+
+export const db = new UltraWebDB();

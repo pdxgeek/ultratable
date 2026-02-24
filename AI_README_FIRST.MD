@@ -1,12 +1,16 @@
 # 🚨 AI AGENT ARCHITECTURE GUIDE
-
+ **NEVER TAKE CONTROL OF A BROWSER FOR VERIFYING UNLESS CLEARLY ASKED**
+ 
 > [!IMPORTANT]
-> **EVERY ID IS A NANOID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**
-> **EVERY ID IS A NANOID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**
-> **EVERY ID IS A NANOID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**
+> **DIRECTORY ISOLATION RULES**
+> - **Legacy Reference**: `/src` contains the original demo/reference implementation. **NEVER TOUCH OR MODIFY /src**. It is for reference only.
+> - **Active Development**: All new projects, backends, and frontends live under `/apps/`.
+> - **BFF (Back-end for Front-end)**: We are building a new GraphQL service in `/apps/service`.
+> - **Rewriting Strategy**: When building new frontends, we use `/src` as a blueprint but rewrite it from scratch in a new `/apps/[app-name]` directory.
 >
-> **IF YOU ARE NOT DOING NANO IDS AND YOU ARE NOT CALLING A REMOTE API YOU ARE DOING IT WRONG**
-> **IF YOU ARE NOT DOING NANO IDS AND YOU ARE NOT CALLING A REMOTE API YOU ARE DOING IT WRONG**
+> **ID GENERATION RULES**
+> - **EVERY ID IS A NANOID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**
+> - **IF YOU ARE NOT DOING NANO IDS AND YOU ARE NOT CALLING A REMOTE API YOU ARE DOING IT WRONG**
 
 This document is **CRITICAL** for any AI agent working on UltraTable. Read this before touching the ID system or data layer.
 

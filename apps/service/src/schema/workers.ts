@@ -28,7 +28,20 @@ builder.objectType(JobExecutionRef, {
         finishedAt: t.expose('finishedAt', { type: 'DateTime', nullable: true }),
         errorMessage: t.exposeString('errorMessage', { nullable: true }),
         processedCount: t.exposeInt('processedCount', { nullable: true }),
+        totalCount: t.exposeInt('totalCount', { nullable: true }),
         apiCallsCount: t.exposeInt('apiCallsCount', { nullable: true }),
+        updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+    }),
+});
+
+const SystemLog = builder.simpleObject('SystemLog', {
+    fields: (t) => ({
+        id: t.string(),
+        level: t.string(),
+        module: t.string(),
+        message: t.string(),
+        context: t.field({ type: 'JSON', nullable: true }),
+        createdAt: t.field({ type: 'DateTime' }),
     }),
 });
 
@@ -51,7 +64,6 @@ builder.queryField('jobExecutions', (t) =>
         resolve: async (_, { jobId, limit }) => {
             let query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
             if (jobId) {
-                // Re-bind query with where
                 const res = await db.select().from(schema.jobExecutions)
                     .where(eq(schema.jobExecutions.jobId, jobId))
                     .orderBy(desc(schema.jobExecutions.startedAt))
@@ -63,6 +75,18 @@ builder.queryField('jobExecutions', (t) =>
     })
 );
 
+builder.queryField('systemLogs', (t) =>
+    t.field({
+        type: [SystemLog],
+        args: {
+            limit: t.arg.int({ required: false }),
+        },
+        resolve: async (_, { limit }) => {
+            return db.select().from(schema.systemLogs).orderBy(desc(schema.systemLogs.createdAt)).limit(limit || 100);
+        },
+    })
+);
+
 builder.mutationField('runJob', (t) =>
     t.field({
         type: JobExecutionRef,
@@ -70,14 +94,15 @@ builder.mutationField('runJob', (t) =>
             name: t.arg.string({ required: true }),
         },
         resolve: async (_, { name }) => {
-            await JobRunner.run(name, async () => {
+            await JobRunner.run(name, async (reporter) => {
                 if (name.startsWith('sync-fixtures-')) {
                     const parts = name.split('-');
                     const leagueId = parseInt(parts[2]);
                     const season = parseInt(parts[3]);
-                    const syncRes = await repository.football.syncFixtures(leagueId, season);
+                    const syncRes = await repository.football.syncFixtures(leagueId, season, reporter);
                     return {
                         processedCount: syncRes.stats.processedCount,
+                        totalCount: syncRes.stats.totalCount,
                         apiCallsCount: syncRes.stats.apiCallsCount,
                         context: { leagueId, season }
                     };

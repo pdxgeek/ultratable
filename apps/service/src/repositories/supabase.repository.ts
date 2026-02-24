@@ -1,8 +1,13 @@
 import { ConfigRepository, FootballRepository, IRepository, SyncResult } from './interfaces';
 import { db, supabase } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql } from 'drizzle-orm';
-import axios from 'axios';
+import { eq, sql, and, gt } from 'drizzle-orm';
+import { IFootballProvider } from '../integrations/types';
+import { JobReporter } from '../workers/runner';
+import { ApiFootballProvider } from '../integrations/api-football';
+import { MockFootballProvider } from '../integrations/mock';
+import { GfxService } from '../services/gfx.service';
+import { LogService } from '../services/log.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -75,19 +80,20 @@ export class SupabaseConfigRepository implements ConfigRepository {
     }
 }
 
-import { Normalizer } from '../ingestion/normalizer';
-
 export class SupabaseFootballRepository implements FootballRepository {
-    private async getClient() {
-        const apiKey = process.env.API_FOOTBALL_KEY;
-        if (!apiKey) throw new Error('API-Football Key not configured');
-        return axios.create({
-            baseURL: 'https://v3.football.api-sports.io',
-            headers: {
-                'x-rapidapi-key': apiKey,
-                'x-rapidapi-host': 'v3.football.api-sports.io'
+    private provider: IFootballProvider;
+
+    constructor(providerOverride?: IFootballProvider) {
+        if (providerOverride) {
+            this.provider = providerOverride;
+        } else {
+            const providerName = process.env.FOOTBALL_PROVIDER || 'api-football';
+            if (providerName === 'mock') {
+                this.provider = new MockFootballProvider();
+            } else {
+                this.provider = new ApiFootballProvider();
             }
-        });
+        }
     }
 
     async getLeagues(): Promise<any[]> {
@@ -95,75 +101,193 @@ export class SupabaseFootballRepository implements FootballRepository {
         const existing = await db.select().from(schema.leagues);
         if (existing.length > 0) return existing;
 
-        const client = await this.getClient();
-        const resp = await client.get('/leagues');
-        const externalLeagues = resp.data.response;
+        const ingested = await this.provider.getLeagues();
 
-        const leaguesToInsert = externalLeagues.map((item: any) => {
-            const normalized = Normalizer.normalizeLeague(item, 'api-football');
-            return {
-                name: normalized.name,
-                slug: normalized.slug,
-                country: normalized.country,
-                logo: normalized.logo,
-                sourceName: normalized.sourceName,
-                sourceId: normalized.sourceId,
-                metadata: {}
-            };
-        });
+        const leaguesToInsert = ingested.map((l) => ({
+            name: l.name,
+            slug: l.slug,
+            country: l.country,
+            logo: l.logo,
+            sourceName: l.sourceName,
+            sourceId: l.sourceId,
+            metadata: {}
+        }));
 
         await db.insert(schema.leagues).values(leaguesToInsert).onConflictDoNothing();
         return db.select().from(schema.leagues);
     }
 
-    async getTeams(leagueId: number, season: number): Promise<any[]> {
+    async getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<any[]> {
         if (!db) return [];
-        const client = await this.getClient();
-        const resp = await client.get('/teams', {
-            params: { league: leagueId, season }
-        });
+        let leagueId = internalLeagueId;
+        if (!leagueId) {
+            const [league] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
+            if (!league) return [];
+            leagueId = league.id;
+        }
+        return db.select().from(schema.seasons).where(eq(schema.seasons.leagueId, leagueId as string));
+    }
 
-        const externalTeams = resp.data.response;
-        const teamsToInsert = externalTeams.map((item: any) => {
-            const normalized = Normalizer.normalizeTeam(item, 'api-football');
+    async getAllInternalSeasons(): Promise<any[]> {
+        if (!db) return [];
+        return db.select().from(schema.seasons);
+    }
+
+    private formulasCache: any[] | null = null;
+    async getRankingFormulas(): Promise<any[]> {
+        if (!db) return [];
+        if (this.formulasCache) return this.formulasCache;
+        this.formulasCache = await db.select().from(schema.rankingFormulas).orderBy(schema.rankingFormulas.id);
+        return this.formulasCache!;
+    }
+
+    async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<any[]> {
+        if (!db) return [];
+
+        // 0. Ensure internal IDs exist
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+        if (!localLeague) throw new Error(`League ${leagueId} not found`);
+
+        const [localSeason] = await db.select().from(schema.seasons)
+            .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
+        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
+
+        // 1. Fetch from provider
+        const { teams, venues } = await this.provider.getTeams(leagueId, seasonYear);
+
+        // 2. Upsert venues
+        await this.upsertVenues(venues);
+
+        // Map venues for easy ID lookup
+        const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+        const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+
+        // 3. Upsert teams
+        const teamsToInsert = teams.map((t) => ({
+            name: t.name,
+            shortName: t.shortName,
+            tla: t.tla,
+            logo: t.logo,
+            venueId: t.venueSourceId ? venueMap.get(t.venueSourceId) : null,
+            sourceName: t.sourceName,
+            sourceId: t.sourceId,
+            metadata: {},
+            updatedAt: sql`now()`
+        }));
+
+        await db.insert(schema.teams)
+            .values(teamsToInsert)
+            .onConflictDoUpdate({
+                target: [schema.teams.sourceName, schema.teams.sourceId],
+                set: {
+                    name: sql`EXCLUDED.name`,
+                    shortName: sql`EXCLUDED.short_name`,
+                    tla: sql`EXCLUDED.tla`,
+                    logo: sql`EXCLUDED.logo`,
+                    venueId: sql`EXCLUDED.venue_id`,
+                    updatedAt: sql`now()`
+                }
+            });
+
+        // 4. Populate seasons_to_teams linkage
+        const teamList = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
+        const teamMap = new Map<number, string>(teamList.map((t: any) => [t.sourceId, t.id]));
+
+        // 3.1 Sideload Graphics (CAS)
+        for (const t of teams) {
+            if (t.logo) {
+                const teamId = teamMap.get(t.sourceId);
+                if (teamId) {
+                    GfxService.sideload('team', teamId, t.logo).catch((e: any) =>
+                        LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for team ${teamId}`, { error: e.message })
+                    );
+                }
+            }
+        }
+
+        const linkages = teams.map((item) => {
+            const teamId = teamMap.get(item.sourceId);
+            if (!teamId) return null;
             return {
-                name: normalized.name,
-                shortName: normalized.shortName,
-                tla: normalized.tla,
-                logo: normalized.logo,
-                venue: normalized.venue,
-                sourceName: normalized.sourceName,
-                sourceId: normalized.sourceId,
-                metadata: {}
+                seasonId: localSeason.id,
+                teamId: teamId,
+                updatedAt: sql`now()`
             };
-        });
+        }).filter(Boolean);
 
-        await db.insert(schema.teams).values(teamsToInsert).onConflictDoNothing();
-        return db.select().from(schema.teams);
+        if (linkages.length > 0) {
+            await db.insert(schema.seasonsToTeams)
+                .values(linkages as any)
+                .onConflictDoUpdate({
+                    target: [schema.seasonsToTeams.seasonId, schema.seasonsToTeams.teamId],
+                    set: { updatedAt: sql`now()` }
+                });
+        }
+
+        // 5. Return teams for THIS season
+        let query = db.select({ team: schema.teams })
+            .from(schema.teams)
+            .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
+            .where(eq(schema.seasonsToTeams.seasonId, localSeason.id));
+
+        if (since) {
+            query = db.select({ team: schema.teams })
+                .from(schema.teams)
+                .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
+                .where(and(
+                    eq(schema.seasonsToTeams.seasonId, localSeason.id),
+                    gt(schema.teams.updatedAt, since)
+                ));
+        }
+
+        const res = await query;
+        return res.map((r: { team: any }) => r.team);
+    }
+
+    private async upsertVenues(venues: any[]) {
+        if (!db || venues.length === 0) return;
+
+        // Deduplicate and filter
+        const uniqueVenues = Array.from(
+            new Map(
+                venues
+                    .filter(v => v.sourceId !== null && v.sourceId !== undefined)
+                    .map(v => [v.sourceId, v])
+            ).values()
+        );
+
+        if (uniqueVenues.length === 0) return;
+
+        await db.insert(schema.venues)
+            .values(uniqueVenues)
+            .onConflictDoUpdate({
+                target: [schema.venues.sourceName, schema.venues.sourceId],
+                set: {
+                    name: sql`EXCLUDED.name`,
+                    city: sql`EXCLUDED.city`,
+                    capacity: sql`EXCLUDED.capacity`,
+                    surface: sql`EXCLUDED.surface`,
+                    image: sql`EXCLUDED.image`,
+                    updatedAt: sql`now()`
+                }
+            });
     }
 
     async syncSeasons(leagueId: number): Promise<SyncResult> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
-        let apiCallsCount = 0;
-        const client = await this.getClient();
-        const resp = await client.get('/leagues', { params: { id: leagueId } });
-        apiCallsCount++;
-        const leagueData = resp.data.response[0];
-        if (!leagueData) return { data: [], stats: { processedCount: 0, apiCallsCount } };
 
         const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
         if (!localLeague) throw new Error(`League with sourceId ${leagueId} not found locally.`);
 
-        const seasonsToInsert = leagueData.seasons.map((s: any) => {
-            const normalized = Normalizer.normalizeSeason(leagueData, s, 'api-football');
-            return {
-                leagueId: localLeague.id,
-                year: normalized.year,
-                startDate: normalized.startDate ? new Date(normalized.startDate) : null,
-                endDate: normalized.endDate ? new Date(normalized.endDate) : null,
-                metadata: {}
-            };
-        });
+        const ingested = await this.provider.getSeasons(leagueId);
+
+        const seasonsToInsert = ingested.map((s) => ({
+            leagueId: localLeague.id,
+            year: s.year,
+            startDate: s.startDate ? new Date(s.startDate) : null,
+            endDate: s.endDate ? new Date(s.endDate) : null,
+            metadata: {}
+        }));
 
         await db.insert(schema.seasons).values(seasonsToInsert).onConflictDoNothing();
         const data = await db.select().from(schema.seasons).where(eq(schema.seasons.leagueId, localLeague.id));
@@ -171,12 +295,12 @@ export class SupabaseFootballRepository implements FootballRepository {
             data,
             stats: {
                 processedCount: seasonsToInsert.length,
-                apiCallsCount
+                apiCallsCount: 1
             }
         };
     }
 
-    async syncFixtures(leagueId: number, seasonYear: number): Promise<SyncResult> {
+    async syncFixtures(leagueId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
         let apiCallsCount = 0;
 
@@ -197,34 +321,28 @@ export class SupabaseFootballRepository implements FootballRepository {
         if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
 
         // 2. Ensure teams exist for this league/season
-        const client = await this.getClient();
-        let teams = await db.select().from(schema.teams);
-
-        // If no teams found in DB at all, or we want to be safe, fetch them
-        // In a production world, we might want to check if teams for THIS league exist
-        // For now, let's just make sure we have the teams for this league first
-        const leagueTeams = await this.getTeams(leagueId, seasonYear);
+        await this.getTeams(leagueId, seasonYear);
         apiCallsCount++;
 
-        // Re-fetch all teams to get IDs
-        teams = await db.select().from(schema.teams);
+        // 3. Fetch fixtures and venues from provider
+        const { fixtures, venues } = await this.provider.getFixtures(leagueId, seasonYear);
+        apiCallsCount++;
+
+        // 3.1 Upsert any venues from fixtures (neutral grounds)
+        await this.upsertVenues(venues);
+
+        const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+        const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+
+        // Fetch all teams for this provider to get IDs
+        const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
         const teamMap = new Map<number, string>(teams.map((t: any) => [t.sourceId, t.id]));
 
-        // 3. Fetch fixtures
-        const resp = await client.get('/fixtures', {
-            params: { league: leagueId, season: seasonYear }
-        });
-        apiCallsCount++;
-        const externalFixtures = resp.data.response;
-
-        const fixturesToInsert = externalFixtures.map((item: any) => {
-            const normalized = Normalizer.normalizeFixture(item, 'api-football');
+        const fixturesToInsert = fixtures.map((normalized) => {
             const homeId = teamMap.get(normalized.homeTeamSourceId);
             const awayId = teamMap.get(normalized.awayTeamSourceId);
 
-            if (!homeId || !awayId) {
-                return null;
-            }
+            if (!homeId || !awayId) return null;
 
             return {
                 sourceName: normalized.sourceName,
@@ -233,35 +351,50 @@ export class SupabaseFootballRepository implements FootballRepository {
                 seasonId: localSeason.id,
                 homeTeamId: homeId,
                 awayTeamId: awayId,
+                venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
                 scheduledAt: new Date(normalized.scheduledAt),
                 status: normalized.status,
-                goalsHome: normalized.homeGoals,
-                goalsAway: normalized.awayGoals,
+                homeGoals: normalized.homeGoals,
+                awayGoals: normalized.awayGoals,
                 metadata: {},
-                updatedAt: new Date()
+                updatedAt: sql`now()`
             };
         }).filter(Boolean);
 
-        // 4. Batch upsert
-        for (const fix of fixturesToInsert) {
+        // 4. Batch upsert with progress reporting
+        const totalCount = fixturesToInsert.length;
+        let processedCount = 0;
+
+        for (const fix of fixturesToInsert as any[]) {
             await db.insert(schema.fixtures)
-                .values(fix as any)
+                .values(fix)
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                     set: {
                         status: fix.status,
-                        goalsHome: fix.goalsHome,
-                        goalsAway: fix.goalsAway,
-                        updatedAt: new Date()
+                        homeGoals: fix.homeGoals,
+                        awayGoals: fix.awayGoals,
+                        updatedAt: sql`now()`
                     }
                 });
+
+            processedCount++;
+            if (reporter && processedCount % 10 === 0) {
+                await reporter.updateProgress({ processedCount, totalCount });
+            }
+        }
+
+        // Final report
+        if (reporter) {
+            await reporter.updateProgress({ processedCount, totalCount });
         }
 
         const data = await this.getFixtures(leagueId, seasonYear);
         return {
             data,
             stats: {
-                processedCount: fixturesToInsert.length,
+                processedCount,
+                totalCount,
                 apiCallsCount
             }
         };
@@ -269,20 +402,24 @@ export class SupabaseFootballRepository implements FootballRepository {
 
     async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<any[]> {
         if (!db) return [];
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
-        if (!localLeague) return [];
 
-        const [localSeason] = await db.select().from(schema.seasons)
-            .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
-        if (!localSeason) return [];
+        const [season] = await db.select()
+            .from(schema.seasons)
+            .innerJoin(schema.leagues, eq(schema.seasons.leagueId, schema.leagues.id))
+            .where(and(
+                eq(schema.leagues.sourceId, leagueId),
+                eq(schema.seasons.year, seasonYear)
+            ));
 
-        let query = db.select().from(schema.fixtures)
-            .where(eq(schema.fixtures.seasonId, localSeason.id));
+        if (!season) return [];
+
+        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, season.seasons.id));
 
         if (since) {
-            // Re-bind query with date filter
-            query = db.select().from(schema.fixtures)
-                .where(sql`${schema.fixtures.seasonId} = ${localSeason.id} AND ${schema.fixtures.updatedAt} > ${since}`);
+            query = db.select().from(schema.fixtures).where(and(
+                eq(schema.fixtures.seasonId, season.seasons.id),
+                gt(schema.fixtures.updatedAt, since)
+            ));
         }
 
         return query;
@@ -291,15 +428,13 @@ export class SupabaseFootballRepository implements FootballRepository {
     // Catalog Management
     async syncCatalogCountries(): Promise<SyncResult> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
-        const client = await this.getClient();
-        const resp = await client.get('/countries');
-        const countries = resp.data.response;
+        const ingested = await this.provider.getCountries();
 
-        const toInsert = countries.map((c: any) => ({
+        const toInsert = ingested.map((c) => ({
             name: c.name,
             code: c.code,
             flag: c.flag,
-            sourceName: 'api-football',
+            sourceName: this.provider.name,
             updatedAt: new Date()
         }));
 
@@ -319,28 +454,27 @@ export class SupabaseFootballRepository implements FootballRepository {
 
     async syncCatalogLeagues(): Promise<SyncResult> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
-        const client = await this.getClient();
-        const resp = await client.get('/leagues');
-        const leagues = resp.data.response;
 
         // Ensure countries exist first
         await this.syncCatalogCountries();
 
+        const ingested = await this.provider.getLeagues();
+
         const localCountries = await this.getCatalogCountries();
         const countryMap = new Map<string, string>(localCountries.map(c => [c.name, c.id]));
 
-        const toInsert = leagues.map((item: any) => {
-            const countryId = countryMap.get(item.country.name);
+        const toInsert = ingested.map((item) => {
+            const countryId = countryMap.get(item.country || '');
             if (!countryId) return null;
 
             return {
                 countryId,
-                name: item.league.name,
-                type: item.league.type,
-                logo: item.league.logo,
-                sourceName: 'api-football',
-                sourceId: item.league.id,
-                metadata: { seasons: item.seasons },
+                name: item.name,
+                type: 'league', // Default or from metadata if we tracked it
+                logo: item.logo,
+                sourceName: this.provider.name,
+                sourceId: item.sourceId,
+                metadata: {}, // Will be populated by refreshCatalogSeasons
                 updatedAt: new Date()
             };
         }).filter(Boolean);
@@ -369,11 +503,36 @@ export class SupabaseFootballRepository implements FootballRepository {
         return db.select().from(schema.catalogCountries).orderBy(schema.catalogCountries.name);
     }
 
-    async getCatalogLeagues(countryId: string): Promise<any[]> {
+    async getCatalogLeagues(countryId?: string, sourceId?: number): Promise<any[]> {
         if (!db) return [];
-        return db.select().from(schema.catalogLeagues)
-            .where(eq(schema.catalogLeagues.countryId, countryId))
-            .orderBy(schema.catalogLeagues.name);
+        let query = db.select().from(schema.catalogLeagues);
+        if (countryId) {
+            return query.where(eq(schema.catalogLeagues.countryId, countryId))
+                .orderBy(schema.catalogLeagues.name);
+        }
+        if (sourceId) {
+            return query.where(eq(schema.catalogLeagues.sourceId, sourceId));
+        }
+        return query.orderBy(schema.catalogLeagues.name);
+    }
+
+    async refreshCatalogSeasons(catalogLeagueId: string): Promise<any> {
+        if (!db) return null;
+
+        const [catLeague] = await db.select().from(schema.catalogLeagues).where(eq(schema.catalogLeagues.id, catalogLeagueId));
+        if (!catLeague) throw new Error('Catalog league not found');
+
+        const seasons = await this.provider.getSeasons(catLeague.sourceId);
+
+        const [updated] = await db.update(schema.catalogLeagues)
+            .set({
+                metadata: { ...((catLeague.metadata as any) || {}), seasons },
+                updatedAt: new Date()
+            })
+            .where(eq(schema.catalogLeagues.id, catalogLeagueId))
+            .returning();
+
+        return updated;
     }
 
     async promoteLeague(catalogLeagueId: string): Promise<any> {
@@ -393,7 +552,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             name: catLeague.name,
             slug: catLeague.name.toLowerCase().replace(/ /g, '-'),
             country: catCountry?.name,
-            logo: logoUrl,
+            logo: catLeague.logo,
             sourceName: catLeague.sourceName,
             sourceId: catLeague.sourceId,
             metadata: catLeague.metadata
@@ -402,7 +561,102 @@ export class SupabaseFootballRepository implements FootballRepository {
             set: { updatedAt: new Date() }
         }).returning();
 
+        // 3. Sideload Logo (CAS)
+        if (managed.logo) {
+            GfxService.sideload('league', managed.id, managed.logo).catch(e =>
+                LogService.warn('SupabaseFootballRepository', `Soft-fail on sideload for league ${managed.id}`, { error: e.message })
+            );
+        }
+
         return managed;
+    }
+
+    async importSeason(leagueId: string, year: number): Promise<any> {
+        if (!db) return null;
+
+        // Ensure managed league exists (by UUID)
+        const [managedLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
+        if (!managedLeague) throw new Error('Managed league not found');
+
+        const [season] = await db.insert(schema.seasons).values({
+            leagueId: managedLeague.id,
+            year,
+            updatedAt: new Date()
+        }).onConflictDoUpdate({
+            target: [schema.seasons.leagueId, schema.seasons.year],
+            set: { updatedAt: new Date() }
+        }).returning();
+
+        return season;
+    }
+
+    async updateSeasonConfig(seasonId: string, config: any): Promise<any> {
+        if (!db) return null;
+        const [updated] = await db.update(schema.seasons)
+            .set({ metadata: config, updatedAt: new Date() })
+            .where(eq(schema.seasons.id, seasonId))
+            .returning();
+        return updated;
+    }
+
+    async removeSeason(seasonId: string): Promise<boolean> {
+        if (!db) return false;
+        // Delete dependent data
+        await db.delete(schema.standingsRows).where(eq(schema.standingsRows.seasonId, seasonId));
+        await db.delete(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonId));
+        // Delete the season itself
+        const result = await db.delete(schema.seasons).where(eq(schema.seasons.id, seasonId)).returning();
+        return result.length > 0;
+    }
+
+
+    async saveRankingFormula(formula: any): Promise<any> {
+        if (!db) return null;
+        const [upserted] = await db.insert(schema.rankingFormulas)
+            .values({ ...formula, updatedAt: new Date() })
+            .onConflictDoUpdate({
+                target: [schema.rankingFormulas.id],
+                set: {
+                    name: sql`excluded.name`,
+                    description: sql`excluded.description`,
+                    logicType: sql`excluded.logic_type`,
+                    updatedAt: new Date()
+                }
+            })
+            .returning();
+        return upserted;
+    }
+
+    // Graphics
+    async getGraphics(entityType: string, entityId: string): Promise<any[]> {
+        if (!db) return [];
+        return db.select().from(schema.graphics)
+            .where(sql`${schema.graphics.entityType} = ${entityType} AND ${schema.graphics.entityId} = ${entityId}`);
+    }
+
+    async saveGraphic(graphic: any): Promise<any> {
+        if (!db) return null;
+        const [upserted] = await db.insert(schema.graphics)
+            .values({ ...graphic, updatedAt: new Date() })
+            .onConflictDoUpdate({
+                target: [schema.graphics.entityType, schema.graphics.entityId, schema.graphics.variantName],
+                set: {
+                    blobPath: sql`excluded.blob_path`,
+                    mimeType: sql`excluded.mime_type`,
+                    metadata: sql`excluded.metadata`,
+                    updatedAt: new Date()
+                }
+            })
+            .returning();
+        return upserted;
+    }
+
+    async getMatchEvents(fixtureId: number): Promise<any[]> {
+        return this.provider.getMatchEvents(fixtureId);
+    }
+
+    async getPlayerData(playerId: number, season: number): Promise<any | null> {
+        return this.provider.getPlayerData(playerId, season);
     }
 }
 

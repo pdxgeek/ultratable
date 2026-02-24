@@ -13,10 +13,14 @@ const yoga = createYoga({
     context: () => ({
         // Add context here (auth, db, etc.)
     }),
+    cors: {
+        origin: '*',
+        methods: ['POST', 'GET', 'OPTIONS'],
+    }
 });
 
 const server = createServer(yoga);
 
-server.listen(4000, () => {
-    console.info('Server is running on http://localhost:4000/graphql');
+server.listen(4000, '127.0.0.1', () => {
+    console.info('Server is running on http://127.0.0.1:4000/graphql');
 });

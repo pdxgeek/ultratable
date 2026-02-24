@@ -1,0 +1,42 @@
+[
+    {
+        "team": {
+            "id": 1,
+            "name": "Mock Team A",
+            "code": "MTA",
+            "country": "Mockland",
+            "founded": 1900,
+            "national": false,
+            "logo": "https://example.com/team-a.png"
+        },
+        "venue": {
+            "id": 101,
+            "name": "Mock Stadium A",
+            "address": "123 Mock St",
+            "city": "Mock City",
+            "capacity": 50000,
+            "surface": "grass",
+            "image": "https://example.com/stadium-a.png"
+        }
+    },
+    {
+        "team": {
+            "id": 2,
+            "name": "Mock Team B",
+            "code": "MTB",
+            "country": "Mockland",
+            "founded": 1905,
+            "national": false,
+            "logo": "https://example.com/team-b.png"
+        },
+        "venue": {
+            "id": 102,
+            "name": "Mock Stadium B",
+            "address": "456 Mock St",
+            "city": "Mock Town",
+            "capacity": 30000,
+            "surface": "grass",
+            "image": "https://example.com/stadium-b.png"
+        }
+    }
+]
