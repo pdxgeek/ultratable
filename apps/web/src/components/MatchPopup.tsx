@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { Fixture, Team } from '../db';
 import { db } from '../db';
 import { usePopup } from '../context/PopupContext';
+import { useNavigate } from 'react-router-dom';
 
 interface MatchPopupProps {
     fixture: Fixture;
@@ -36,7 +37,8 @@ function getPopupPosition(anchorRect: DOMRect): React.CSSProperties {
 }
 
 export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopupProps) {
-    const { cancelHide, scheduleHide } = usePopup();
+    const { cancelHide, scheduleHide, hidePopup } = usePopup();
+    const navigate = useNavigate();
     const [venueImgError, setVenueImgError] = useState(false);
 
     const homeTeam = teamsMap.get(fixture.homeTeamId);
@@ -63,9 +65,13 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
     return (
         <div
             className="match-popup"
-            style={style}
+            style={{ ...style, cursor: 'pointer' }}
             onMouseEnter={cancelHide}
             onMouseLeave={scheduleHide}
+            onClick={() => {
+                hidePopup();
+                navigate(`/match/${fixture.id}`);
+            }}
         >
             {/* Venue Image Banner */}
             {venue && (

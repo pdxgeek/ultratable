@@ -516,3 +516,53 @@ button {
   vertical-align: super;
   margin-left: 2px;
 }
+
+/* Top Navigation Bar */
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 60px;
+  /* fixed height to allow absolute positioning of logo */
+}
+
+.top-nav__logo {
+  display: flex;
+  align-items: center;
+  transition: opacity 0.2s ease;
+  position: absolute;
+  top: 8px;
+  /* start slightly from top */
+  left: 24px;
+  height: 60px;
+  /* Larger height causing it to spill over the nav's 60px height when accounting for padding/top */
+  z-index: 1001;
+  /* Ensure it stays above the border */
+}
+
+.top-nav__logo:hover {
+  opacity: 0.8;
+}
+
+.top-nav__logo img {
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+  /* Add shadow since it overlaps */
+}
+
+.top-nav__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  /* push to right since logo is absolute */
+}

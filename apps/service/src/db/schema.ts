@@ -196,6 +196,23 @@ export const rankingFormulas = pgTable('ranking_formulas', {
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
 
+export const players = pgTable('players', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    firstname: varchar('firstname', { length: 255 }),
+    lastname: varchar('lastname', { length: 255 }),
+    age: integer('age'),
+    nationality: varchar('nationality', { length: 100 }),
+    photo: varchar('photo', { length: 500 }),
+    injured: boolean('injured').default(false).notNull(),
+    sourceName: varchar('source_name', { length: 50 }).notNull(),
+    sourceId: integer('source_id').notNull(),
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.sourceName, table.sourceId),
+}));
+
 export const graphics = pgTable('graphics', {
     id: uuid('id').primaryKey().defaultRandom(),
     entityType: varchar('entity_type', { length: 50 }).notNull(), // "team", "league", "player", "venue"

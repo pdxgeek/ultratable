@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePopup } from '../context/PopupContext';
 import type { Fixture, Team } from '../db';
 
@@ -9,7 +10,8 @@ interface FormColumnProps {
 }
 
 const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => {
-    const { showPopup, scheduleHide, cancelHide } = usePopup();
+    const { showPopup, scheduleHide, cancelHide, hidePopup } = usePopup();
+    const navigate = useNavigate();
     const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fixtureMap = new Map(fixtures.map(f => [f.id, f]));
 
@@ -34,6 +36,14 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
         scheduleHide();
     }, [scheduleHide]);
 
+    const handleClick = useCallback((fixtureId: string) => {
+        if (hoverTimeoutRef.current) {
+            clearTimeout(hoverTimeoutRef.current);
+        }
+        hidePopup();
+        navigate(`/match/${fixtureId}`);
+    }, [hidePopup, navigate]);
+
     return (
         <div style={{ display: 'flex', gap: '4px' }}>
             {form.map((entry, idx) => (
@@ -44,6 +54,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={(e) => handleMouseEnter(entry.fixtureId, e.currentTarget)}
                     onMouseLeave={handleMouseLeave}
+                    onClick={() => handleClick(entry.fixtureId)}
                 >
                     {entry.result}
                 </div>

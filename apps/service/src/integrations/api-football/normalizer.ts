@@ -84,6 +84,8 @@ export class Normalizer {
             teamId: item.team.id,
             playerName: item.player.name,
             playerSourceId: item.player.id,
+            assistName: item.assist?.name || null,
+            assistSourceId: item.assist?.id || null,
             type: item.type,
             detail: item.detail,
             comments: item.comments,
@@ -106,6 +108,45 @@ export class Normalizer {
             injured: p.injured,
             photo: p.photo,
             statistics: item.statistics
+        };
+    }
+
+    static normalizeLineup(item: any): import('../types').IngestedLineup {
+        const team = item.team;
+        const coach = item.coach;
+        return {
+            teamSourceId: team.id,
+            teamName: team.name,
+            teamLogo: team.logo,
+            formation: item.formation,
+            coachName: coach?.name || null,
+            coachPhoto: coach?.photo || null,
+            startXI: item.startXI?.map((x: any) => ({
+                sourceId: x.player.id,
+                name: x.player.name,
+                firstname: x.player.name, // Mocking first/last names if missing in lineup endpoint
+                lastname: '',
+                age: 0,
+                nationality: '',
+                height: null,
+                weight: null,
+                injured: false,
+                photo: `https://media.api-sports.io/football/players/${x.player.id}.png`,
+                ...x.player // Additional data like number, pos
+            })) || [],
+            substitutes: item.substitutes?.map((x: any) => ({
+                sourceId: x.player.id,
+                name: x.player.name,
+                firstname: x.player.name,
+                lastname: '',
+                age: 0,
+                nationality: '',
+                height: null,
+                weight: null,
+                injured: false,
+                photo: `https://media.api-sports.io/football/players/${x.player.id}.png`,
+                ...x.player
+            })) || []
         };
     }
 }

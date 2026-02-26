@@ -50,6 +50,7 @@ export interface FootballRepository {
 
     // Real-time / Lazy-load data
     getMatchEvents(fixtureId: number): Promise<any[]>;
+    getLineups(fixtureId: number): Promise<import('../integrations/types').IngestedLineup[]>;
     getPlayerData(playerId: number, season: number): Promise<any | null>;
 }
 

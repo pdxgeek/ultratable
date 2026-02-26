@@ -195,11 +195,23 @@ export class SupabaseFootballRepository implements FootballRepository {
         const teamList = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
         const teamMap = new Map<number, string>(teamList.map((t: any) => [t.sourceId, t.id]));
 
-        // 3.1 Sideload Graphics (CAS)
+        // 3.1 Sideload Graphics (only for entities not already registered)
+        const allEntityIds = [
+            ...teams.map(t => teamMap.get(t.sourceId)).filter(Boolean).map(id => ({ id: id!, type: 'team' })),
+            ...venues.map(v => venueMap.get(v.sourceId)).filter(Boolean).map(id => ({ id: id!, type: 'venue' })),
+        ];
+        const existingGraphicIds = new Set<string>();
+        if (allEntityIds.length > 0) {
+            const existing = await db.select({ entityId: schema.graphics.entityId })
+                .from(schema.graphics)
+                .where(inArray(schema.graphics.entityId, allEntityIds.map(e => e.id)));
+            for (const g of existing) existingGraphicIds.add(g.entityId);
+        }
+
         for (const t of teams) {
             if (t.logo) {
                 const teamId = teamMap.get(t.sourceId);
-                if (teamId) {
+                if (teamId && !existingGraphicIds.has(teamId)) {
                     graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: any) =>
                         logger.warn(`Soft-fail on sideload for team ${teamId}`, { error: e.message })
                     );
@@ -210,7 +222,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         for (const v of venues) {
             if (v.image) {
                 const venueId = venueMap.get(v.sourceId);
-                if (venueId) {
+                if (venueId && !existingGraphicIds.has(venueId)) {
                     graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: any) =>
                         logger.warn(`Soft-fail on sideload for venue ${venueId}`, { error: e.message })
                     );
@@ -325,10 +337,16 @@ export class SupabaseFootballRepository implements FootballRepository {
             .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
 
         if (!localSeason) {
-            const syncRes = await this.syncSeasons(leagueId);
-            apiCallsCount += syncRes.stats.apiCallsCount;
-            [localSeason] = await db.select().from(schema.seasons)
-                .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
+            // Only create the specific season we need, NOT all seasons
+            const [created] = await db.insert(schema.seasons).values({
+                leagueId: localLeague.id,
+                year: seasonYear,
+                updatedAt: new Date()
+            }).onConflictDoUpdate({
+                target: [schema.seasons.leagueId, schema.seasons.year],
+                set: { updatedAt: new Date() }
+            }).returning();
+            localSeason = created;
         }
 
         if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
@@ -376,25 +394,28 @@ export class SupabaseFootballRepository implements FootballRepository {
         }).filter(Boolean);
 
         // 4. Batch upsert with progress reporting
+        // 4. Batch upsert fixtures in chunks of 50 with progress reporting
         const totalCount = fixturesToInsert.length;
         let processedCount = 0;
+        const BATCH_SIZE = 50;
 
-        for (const fix of fixturesToInsert as any[]) {
+        for (let i = 0; i < totalCount; i += BATCH_SIZE) {
+            const batch = (fixturesToInsert as any[]).slice(i, i + BATCH_SIZE);
             await db.insert(schema.fixtures)
-                .values(fix)
+                .values(batch)
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                     set: {
-                        status: fix.status,
-                        homeGoals: fix.homeGoals,
-                        awayGoals: fix.awayGoals,
-                        gameweek: fix.gameweek,
+                        status: sql`EXCLUDED.status`,
+                        homeGoals: sql`EXCLUDED.home_goals`,
+                        awayGoals: sql`EXCLUDED.away_goals`,
+                        gameweek: sql`EXCLUDED.gameweek`,
                         updatedAt: sql`now()`
                     }
                 });
 
-            processedCount++;
-            if (reporter && processedCount % 10 === 0) {
+            processedCount += batch.length;
+            if (reporter) {
                 await reporter.updateProgress({ processedCount, totalCount });
             }
         }
@@ -769,11 +790,150 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     async getMatchEvents(fixtureId: number): Promise<any[]> {
-        return this.provider.getMatchEvents(fixtureId);
+        const events = await this.provider.getMatchEvents(fixtureId);
+
+        // Enrich events with internal player UUIDs if players exist in our DB
+        const sourceIds = events
+            .map((e: any) => e.playerSourceId)
+            .filter((id: number | null) => id != null);
+
+        if (sourceIds.length > 0) {
+            const existingPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+                .from(schema.players)
+                .where(and(
+                    eq(schema.players.sourceName, this.provider.name),
+                    inArray(schema.players.sourceId, sourceIds)
+                ));
+            const playerMap = new Map<number, string>(existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]));
+
+            for (const event of events) {
+                if (event.playerSourceId) {
+                    event.playerId = playerMap.get(event.playerSourceId) || null;
+                }
+            }
+        }
+
+        return events;
+    }
+
+    async getLineups(fixtureId: number): Promise<import('../integrations/types').IngestedLineup[]> {
+        const lineups = await this.provider.getLineups(fixtureId);
+
+        // Collect all players from all lineups
+        const allPlayers: { sourceId: number; name: string; photo: string | null }[] = [];
+        for (const lineup of lineups) {
+            for (const p of [...lineup.startXI, ...lineup.substitutes]) {
+                allPlayers.push({ sourceId: p.sourceId, name: p.name, photo: p.photo });
+            }
+        }
+
+        if (allPlayers.length === 0) return lineups;
+
+        // Deduplicate by sourceId
+        const uniquePlayers = Array.from(
+            new Map(allPlayers.map(p => [p.sourceId, p])).values()
+        );
+        const sourceIds = uniquePlayers.map(p => p.sourceId);
+
+        // 1. Check which players already exist — avoids writes on subsequent loads
+        const existingPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+            .from(schema.players)
+            .where(and(
+                eq(schema.players.sourceName, this.provider.name),
+                inArray(schema.players.sourceId, sourceIds)
+            ));
+        const existingMap = new Map<number, string>(existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]));
+
+        // 2. Only upsert players we haven't seen before
+        const newPlayers = uniquePlayers.filter(p => !existingMap.has(p.sourceId));
+
+        if (newPlayers.length > 0) {
+            await db.insert(schema.players)
+                .values(newPlayers.map(p => ({
+                    name: p.name,
+                    photo: p.photo,
+                    injured: false,
+                    sourceName: this.provider.name,
+                    sourceId: p.sourceId,
+                })))
+                .onConflictDoUpdate({
+                    target: [schema.players.sourceName, schema.players.sourceId],
+                    set: {
+                        name: sql`EXCLUDED.name`,
+                        photo: sql`EXCLUDED.photo`,
+                        updatedAt: sql`now()`,
+                    }
+                });
+
+            // Fetch the newly created UUIDs
+            const newDbPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+                .from(schema.players)
+                .where(and(
+                    eq(schema.players.sourceName, this.provider.name),
+                    inArray(schema.players.sourceId, newPlayers.map(p => p.sourceId))
+                ));
+            for (const p of newDbPlayers) {
+                existingMap.set(p.sourceId, p.id);
+            }
+        }
+
+        // 3. Attach internal UUIDs to all players in lineups; sideload only new photos
+        for (const lineup of lineups) {
+            for (const p of [...lineup.startXI, ...lineup.substitutes]) {
+                const internalId = existingMap.get(p.sourceId);
+                if (internalId) {
+                    (p as any).id = internalId;
+                    // Only sideload for newly created players
+                    if (p.photo && newPlayers.some(np => np.sourceId === p.sourceId)) {
+                        graphicsService.registerFromUrl(internalId, 'player', p.photo).catch((e: any) =>
+                            logger.warn(`Soft-fail on sideload for player ${internalId}`, { error: e.message })
+                        );
+                    }
+                }
+            }
+        }
+
+        return lineups;
     }
 
     async getPlayerData(playerId: number, season: number): Promise<any | null> {
-        return this.provider.getPlayerData(playerId, season);
+        const data = await this.provider.getPlayerData(playerId, season);
+        if (!data) return null;
+
+        // Upsert into local players table to assign a native UUID
+        const [upserted] = await db.insert(schema.players)
+            .values({
+                name: data.name,
+                firstname: data.firstname || null,
+                lastname: data.lastname || null,
+                age: data.age || null,
+                nationality: data.nationality || null,
+                photo: data.photo || null,
+                injured: data.injured || false,
+                sourceName: this.provider.name,
+                sourceId: playerId,
+            })
+            .onConflictDoUpdate({
+                target: [schema.players.sourceName, schema.players.sourceId],
+                set: {
+                    name: data.name,
+                    age: data.age || null,
+                    nationality: data.nationality || null,
+                    photo: data.photo || null,
+                    injured: data.injured || false,
+                    updatedAt: new Date(),
+                }
+            })
+            .returning();
+
+        // Sideload player photo into graphics registry
+        if (data.photo && upserted) {
+            graphicsService.registerFromUrl(upserted.id, 'player', data.photo).catch((e: any) =>
+                logger.warn(`Soft-fail on sideload for player ${upserted.id}`, { error: e.message })
+            );
+        }
+
+        return { ...data, id: upserted.id };
     }
 }
 

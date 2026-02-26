@@ -76,18 +76,27 @@ export const GraphicsView: React.FC = () => {
         e.preventDefault();
         setUploadStatus('loading');
         try {
+            const isAuto = !uploadUrl.trim();
+            const query = isAuto
+                ? `mutation AutoSideload($entityId: String!, $entityType: String!) {
+                    autoSideloadGraphic(entityId: $entityId, entityType: $entityType)
+                  }`
+                : `mutation RegisterGraph($entityId: String!, $entityType: String!, $url: String!) { 
+                    registerGraphic(entityId: $entityId, entityType: $entityType, url: $url) 
+                  }`;
+
+            const variables = isAuto
+                ? { entityId: uploadEntityId, entityType: uploadType }
+                : { entityId: uploadEntityId, entityType: uploadType, url: uploadUrl };
+
             const resp = await fetch('/graphql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query: `mutation RegisterGraph($entityId: String!, $entityType: String!, $url: String!) { 
-                        registerGraphic(entityId: $entityId, entityType: $entityType, url: $url) 
-                    }`,
-                    variables: { entityId: uploadEntityId, entityType: uploadType, url: uploadUrl }
-                })
+                body: JSON.stringify({ query, variables })
             });
+
             const json = await resp.json();
-            if (json.data?.registerGraphic) {
+            if (json.data?.registerGraphic || json.data?.autoSideloadGraphic) {
                 setUploadStatus('success');
                 setUploadEntityId('');
                 setUploadUrl('');
@@ -95,6 +104,7 @@ export const GraphicsView: React.FC = () => {
                 fetchGraphics();
             } else {
                 setUploadStatus('error');
+                console.error('GraphQL Error:', json.errors);
             }
         } catch (err) {
             console.error(err);
@@ -139,7 +149,7 @@ export const GraphicsView: React.FC = () => {
                     Register Graphic
                 </h3>
                 <p className="text-sm text-slate-400 mb-8 leading-relaxed font-normal">
-                    Manually register a graphic by URL. The image will be downloaded, hashed for deduplication, and stored in the Supabase bucket.
+                    Provide just an Entity UUID to automatically resolve and fetch the corresponding graphic, or supply a manual Source Image URL. The image will be downloaded, hashed for deduplication, and stored in the Supabase bucket. For players, provide their numerical Source ID as the UUID.
                 </p>
 
                 <form onSubmit={handleUpload} className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -167,22 +177,24 @@ export const GraphicsView: React.FC = () => {
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                        <label className="text-xs font-semibold text-slate-400">Source Image URL</label>
+                        <label className="text-xs font-semibold text-slate-400 flex justify-between">
+                            Source Image URL
+                            <span className="text-slate-500 font-normal">Optional for Auto-Fetch</span>
+                        </label>
                         <div className="flex gap-4">
                             <input
                                 type="url"
                                 className="flex-1 bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all font-mono"
-                                placeholder="https://media.api-sports.io/..."
+                                placeholder="Leave blank to auto-fetch..."
                                 value={uploadUrl}
                                 onChange={e => setUploadUrl(e.target.value)}
-                                required
                             />
                             <button
                                 type="submit"
                                 disabled={uploadStatus === 'loading'}
                                 className="bg-sky-500 hover:bg-sky-400 text-white px-8 py-2.5 rounded-lg font-semibold text-sm disabled:opacity-50 transition-all whitespace-nowrap"
                             >
-                                {uploadStatus === 'loading' ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Sideload'}
+                                {uploadStatus === 'loading' ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (uploadUrl.trim() ? 'Sideload' : 'Auto-Fetch')}
                             </button>
                         </div>
                     </div>

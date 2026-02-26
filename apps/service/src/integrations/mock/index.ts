@@ -72,6 +72,10 @@ export class MockFootballProvider implements IFootballProvider {
             .map((item: any) => Normalizer.normalizeEvent(item, fixtureId));
     }
 
+    async getLineups(fixtureId: number): Promise<import('../types').IngestedLineup[]> {
+        return [];
+    }
+
     async getPlayerData(playerId: number, season: number): Promise<any> {
         const raw = await this.loadData<any>('players.json');
         const player = raw.find((p: any) => p.player.id === playerId);

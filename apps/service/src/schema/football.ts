@@ -4,6 +4,7 @@ import { JobRunner } from '../workers/runner';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, and, count, countDistinct, sql } from 'drizzle-orm';
+import { graphicsService } from '../services/graphics.service';
 
 // Define object refs first
 export const LeagueRef = builder.objectRef<any>('League');
@@ -13,6 +14,7 @@ const FixtureRef = builder.objectRef<any>('Fixture');
 const VenueRef = builder.objectRef<any>('Venue');
 const MatchEventRef = builder.objectRef<any>('MatchEvent');
 const PlayerRef = builder.objectRef<any>('Player');
+const LineupRef = builder.objectRef<any>('Lineup');
 
 builder.objectType(VenueRef, {
     fields: (t) => ({
@@ -21,7 +23,16 @@ builder.objectType(VenueRef, {
         city: t.exposeString('city', { nullable: true }),
         capacity: t.exposeInt('capacity', { nullable: true }),
         surface: t.exposeString('surface', { nullable: true }),
-        image: t.exposeString('image', { nullable: true }),
+        image: t.string({
+            nullable: true,
+            resolve: async (parent) => {
+                try {
+                    const url = await graphicsService.resolveUrl(parent.id, 'venue');
+                    if (url) return url;
+                } catch { /* fall through */ }
+                return parent.image || null;
+            }
+        }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     }),
 });
@@ -39,7 +50,16 @@ builder.objectType(LeagueRef, {
         name: t.exposeString('name'),
         slug: t.exposeString('slug'),
         country: t.exposeString('country', { nullable: true }),
-        logo: t.exposeString('logo', { nullable: true }),
+        logo: t.string({
+            nullable: true,
+            resolve: async (parent) => {
+                try {
+                    const url = await graphicsService.resolveUrl(parent.id, 'league');
+                    if (url) return url;
+                } catch { /* fall through */ }
+                return parent.logo || null;
+            }
+        }),
         sourceId: t.exposeInt('sourceId'),
         seasons: t.field({
             type: [SeasonRef],
@@ -79,7 +99,17 @@ builder.objectType(TeamRef, {
         name: t.exposeString('name'),
         shortName: t.exposeString('shortName', { nullable: true }),
         tla: t.exposeString('tla', { nullable: true }),
-        logo: t.exposeString('logo', { nullable: true }),
+        logo: t.string({
+            nullable: true,
+            resolve: async (parent) => {
+                try {
+                    const url = await graphicsService.resolveUrl(parent.id, 'team');
+                    if (url) return url;
+                } catch { /* fall through */ }
+                return parent.logo || null;
+            }
+        }),
+        sourceId: t.exposeInt('sourceId'),
         venue: t.field({
             type: VenueRef,
             nullable: true,
@@ -149,6 +179,13 @@ builder.objectType(FixtureRef, {
     fields: (t) => ({
         id: t.exposeString('id'),
         seasonId: t.exposeString('seasonId'),
+        season: t.int({
+            resolve: async (parent) => {
+                if (!parent.seasonId) return 0;
+                const [s] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, parent.seasonId));
+                return s?.year ?? 0;
+            }
+        }),
         homeTeamId: t.exposeString('homeTeamId'),
         awayTeamId: t.exposeString('awayTeamId'),
         venueId: t.exposeString('venueId', { nullable: true }),
@@ -200,6 +237,12 @@ builder.objectType(FixtureRef, {
                 return repository.football.getMatchEvents(parent.sourceId);
             }
         }),
+        lineups: t.field({
+            type: [LineupRef],
+            resolve: async (parent) => {
+                return repository.football.getLineups(parent.sourceId);
+            }
+        }),
     }),
 });
 
@@ -209,6 +252,9 @@ builder.objectType(MatchEventRef, {
         teamId: t.exposeInt('teamId'),
         playerName: t.exposeString('playerName', { nullable: true }),
         playerSourceId: t.exposeInt('playerSourceId', { nullable: true }),
+        playerId: t.exposeString('playerId', { nullable: true }),
+        assistName: t.exposeString('assistName', { nullable: true }),
+        assistSourceId: t.exposeInt('assistSourceId', { nullable: true }),
         type: t.exposeString('type'),
         detail: t.exposeString('detail'),
         comments: t.exposeString('comments', { nullable: true }),
@@ -219,17 +265,44 @@ builder.objectType(MatchEventRef, {
 
 builder.objectType(PlayerRef, {
     fields: (t) => ({
+        id: t.string({
+            nullable: true,
+            resolve: (parent) => parent.id || null,
+        }),
         sourceId: t.exposeInt('sourceId'),
         name: t.exposeString('name'),
-        firstname: t.exposeString('firstname'),
-        lastname: t.exposeString('lastname'),
-        age: t.exposeInt('age'),
-        nationality: t.exposeString('nationality'),
-        height: t.exposeString('height', { nullable: true }),
-        weight: t.exposeString('weight', { nullable: true }),
+        firstname: t.exposeString('firstname', { nullable: true }),
+        lastname: t.exposeString('lastname', { nullable: true }),
+        age: t.exposeInt('age', { nullable: true }),
+        nationality: t.exposeString('nationality', { nullable: true }),
         injured: t.exposeBoolean('injured'),
-        photo: t.exposeString('photo', { nullable: true }),
+        photo: t.string({
+            nullable: true,
+            resolve: async (parent) => {
+                // If we have an internal UUID, check the graphics registry first
+                if (parent.id) {
+                    try {
+                        const url = await graphicsService.resolveUrl(parent.id, 'player');
+                        if (url) return url;
+                    } catch { /* fall through */ }
+                }
+                return parent.photo || null;
+            }
+        }),
         statistics: t.expose('statistics', { type: 'JSON', nullable: true }),
+    }),
+});
+
+builder.objectType(LineupRef, {
+    fields: (t) => ({
+        teamSourceId: t.exposeInt('teamSourceId'),
+        teamName: t.exposeString('teamName'),
+        teamLogo: t.exposeString('teamLogo', { nullable: true }),
+        formation: t.exposeString('formation', { nullable: true }),
+        coachName: t.exposeString('coachName', { nullable: true }),
+        coachPhoto: t.exposeString('coachPhoto', { nullable: true }),
+        startXI: t.expose('startXI', { type: [PlayerRef] }),
+        substitutes: t.expose('substitutes', { type: [PlayerRef] }),
     }),
 });
 
@@ -296,6 +369,20 @@ builder.queryField('fixtures', (t) =>
         },
         resolve: async (_: any, { leagueId, season, since }: any) => {
             return repository.football.getFixtures(leagueId, season, since || undefined);
+        },
+    })
+);
+
+builder.queryField('fixture', (t) =>
+    t.field({
+        type: FixtureRef,
+        nullable: true,
+        args: {
+            id: t.arg.string({ required: true }),
+        },
+        resolve: async (_, { id }) => {
+            const [fixture] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.id, id));
+            return fixture;
         },
     })
 );

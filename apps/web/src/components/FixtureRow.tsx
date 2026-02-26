@@ -1,4 +1,4 @@
-
+import { useNavigate } from 'react-router-dom';
 import type { Fixture, Team } from '../db';
 
 interface FixtureRowProps {
@@ -8,6 +8,7 @@ interface FixtureRowProps {
 }
 
 export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
+    const navigate = useNavigate();
     const isHome = fixture.homeTeamId === teamId;
     const opponentId = isHome ? fixture.awayTeamId : fixture.homeTeamId;
     const opponent = teams.get(opponentId);
@@ -36,7 +37,11 @@ export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
     };
 
     return (
-        <div className={`fixture-row ${resultClass}`}>
+        <div
+            className={`fixture-row ${resultClass}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate(`/match/${fixture.id}`)}
+        >
             <span className="fixture-row__ha">{isHome ? 'H' : 'A'}</span>
             {opponent?.logo && (
                 <img

@@ -105,4 +105,9 @@ export class ApiFootballProvider implements IFootballProvider {
         if (!player) return null;
         return Normalizer.normalizePlayer(player);
     }
+
+    async getLineups(fixtureId: number): Promise<import('../types').IngestedLineup[]> {
+        const resp = await this.client.get('/fixtures/lineups', { params: { fixture: fixtureId } });
+        return resp.data.response.map((item: any) => Normalizer.normalizeLineup(item));
+    }
 }
