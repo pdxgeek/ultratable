@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import type { Fixture, Team } from '../db';
+import type { Team } from '../db';
 import { compileStandings } from '../logic/dataCompiler';
 import type { StandingsOptions } from '../logic/dataCompiler';
 
@@ -12,6 +12,8 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
         ]);
 
         if (!season) return null;
+
+        const league = await db.leagues.get(season.leagueId);
 
         // Only include teams that appear in this season's fixtures
         const teamIds = new Set<string>();
@@ -26,12 +28,21 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
         const teamsMap = new Map<string, Team>(teams.map(t => [t.id, t]));
 
         const criteria = season.rankingCriteria || options.criteria;
-        const deductions = season.metadata?.deductions || [];
+        const leagueMeta = league?.metadata || {};
+        const seasonMeta = season.metadata || {};
+
+        const deductions = seasonMeta.deductions || [];
+        const zones = {
+            promotion: seasonMeta.promotion || leagueMeta.promotion || [],
+            playoffs: seasonMeta.playoffs || leagueMeta.playoffs || [],
+            relegation: seasonMeta.relegation || leagueMeta.relegation || []
+        };
 
         const standings = compileStandings(teams, fixtures, {
             ...options,
             criteria,
-            deductions
+            deductions,
+            zones
         });
 
         return {

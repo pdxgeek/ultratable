@@ -20,6 +20,7 @@ export const SYNC_DATA_QUERY = gql`
       status
       goalsHome
       goalsAway
+      gameweek
       updatedAt
     }
     venues(leagueId: $leagueId, season: $season) {

@@ -51,6 +51,7 @@ export interface IngestedFixture {
     venueSourceId: number | null;
     homeGoals: number | null;
     awayGoals: number | null;
+    gameweek: number | null;
 }
 
 export interface IngestedEvent {
@@ -86,6 +87,7 @@ export interface IFootballProvider {
     getSeasons(leagueId: number): Promise<IngestedSeason[]>;
     getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }>;
     getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
+    getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
     getMatchEvents(fixtureId: number): Promise<IngestedEvent[]>;
     getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null>;
 }

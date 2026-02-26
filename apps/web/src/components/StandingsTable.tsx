@@ -190,8 +190,14 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                                     return true;
                                 });
 
+                            const zoneClass = settings.showZones ? (
+                                row.description === 'promotion' ? 'promo' :
+                                    row.description === 'playoffs' ? 'playoff' :
+                                        row.description === 'relegation' ? 'rel' : ''
+                            ) : '';
+
                             return (
-                                <tr key={row.teamId} className="standings-row">
+                                <tr key={row.teamId} className={`standings-row ${zoneClass}`}>
                                     <td className="col-pos">{row.position}</td>
                                     <td className="col-team">
                                         <TeamCell team={{ id: row.teamId, ...row.team }} showLogo={settings.showLogos} />

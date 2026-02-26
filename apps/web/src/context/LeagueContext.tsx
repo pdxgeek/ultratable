@@ -28,6 +28,7 @@ const LIST_LEAGUES_QUERY = gql`
       country
       logo
       updatedAt
+      configJson
       seasons {
         id
         leagueId
@@ -91,7 +92,8 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
                                 slug: l.slug,
                                 country: l.country,
                                 logo: l.logo,
-                                updatedAt: l.updatedAt
+                                updatedAt: l.updatedAt,
+                                metadata: l.configJson ? JSON.parse(l.configJson) : {}
                             });
                             for (const s of l.seasons) {
                                 await db.seasons.put({
@@ -123,7 +125,15 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     // 3. Auto-sync when active season changes
     useEffect(() => {
         if (activeLeague && activeSeason) {
+            // Initial sync on season change
             sync(activeLeague.sourceId, activeSeason.year);
+
+            // Set up a 5-minute heartbeat to poll for live fixtures
+            const intervalId = setInterval(() => {
+                sync(activeLeague.sourceId, activeSeason.year);
+            }, 5 * 60 * 1000);
+
+            return () => clearInterval(intervalId);
         }
     }, [activeSeasonId, activeLeague, activeSeason, sync]);
 

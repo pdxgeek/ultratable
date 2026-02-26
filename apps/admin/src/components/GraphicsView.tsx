@@ -27,6 +27,7 @@ export const GraphicsView: React.FC = () => {
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState<GraphicType | 'all'>('all');
     const [selectedGraphic, setSelectedGraphic] = useState<Graphic | null>(null);
+    const [deleteStatus, setDeleteStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
     // Upload form state
     const [uploadType, setUploadType] = useState<GraphicType>('team');
@@ -98,6 +99,33 @@ export const GraphicsView: React.FC = () => {
         } catch (err) {
             console.error(err);
             setUploadStatus('error');
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this graphic from the registry?')) return;
+        setDeleteStatus('loading');
+        try {
+            const resp = await fetch('/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `mutation($id: String!) { removeGraphic(id: $id) }`,
+                    variables: { id }
+                })
+            });
+            const json = await resp.json();
+            if (json.data?.removeGraphic) {
+                setDeleteStatus('success');
+                setTimeout(() => setDeleteStatus('idle'), 2000);
+                setSelectedGraphic(null);
+                fetchGraphics();
+            } else {
+                setDeleteStatus('error');
+            }
+        } catch (err) {
+            console.error(err);
+            setDeleteStatus('error');
         }
     };
 

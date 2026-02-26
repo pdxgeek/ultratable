@@ -44,6 +44,10 @@ describe('Normalizer', () => {
                     id: 505
                 }
             },
+            league: {
+                id: 39,
+                round: "Regular Season - 15"
+            },
             teams: {
                 home: { id: 135 },
                 away: { id: 141 }
@@ -60,5 +64,6 @@ describe('Normalizer', () => {
         expect(fixture.homeGoals).toBe(4);
         expect(fixture.awayGoals).toBe(2);
         expect(fixture.venueSourceId).toBe(505);
+        expect(fixture.gameweek).toBe(15);
     });
 });

@@ -63,6 +63,8 @@ export class MockFootballProvider implements IFootballProvider {
         return { fixtures, venues };
     }
 
+    async getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> { return { fixtures: [], venues: [] }; }
+
     async getMatchEvents(fixtureId: number): Promise<any[]> {
         const raw = await this.loadData<any>('events.json');
         return raw

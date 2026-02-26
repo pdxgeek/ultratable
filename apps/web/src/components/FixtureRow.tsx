@@ -51,6 +51,10 @@ export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
                 <span className="fixture-row__score">
                     {fixture.goalsHome}–{fixture.goalsAway}
                 </span>
+            ) : fixture.gameweek ? (
+                <span className="fixture-row__date">
+                    GW {fixture.gameweek}
+                </span>
             ) : (
                 <span className="fixture-row__date">
                     {formatDate(fixture.scheduledAt)}

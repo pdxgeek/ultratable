@@ -73,7 +73,8 @@ export class Normalizer {
             awayTeamSourceId: teams.away.id,
             venueSourceId: fixture.venue?.id || null,
             homeGoals: goals.home,
-            awayGoals: goals.away
+            awayGoals: goals.away,
+            gameweek: parseInt(item.league?.round?.match(/\d+/)?.pop() || '0', 10) || null
         };
     }
 
