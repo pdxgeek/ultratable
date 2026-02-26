@@ -59,11 +59,23 @@ export interface IngestedEvent {
     teamId: number;
     playerName: string | null;
     playerSourceId: number | null;
+    playerId?: string | null; // Internal UUID from players table
     type: string;
     detail: string;
     comments: string | null;
     minute: number;
     extraMinute: number | null;
+}
+
+export interface IngestedLineup {
+    teamSourceId: number;
+    teamName: string;
+    teamLogo: string | null;
+    formation: string | null;
+    coachName: string | null;
+    coachPhoto: string | null;
+    startXI: IngestedPlayer[];
+    substitutes: IngestedPlayer[];
 }
 
 export interface IngestedPlayer {
@@ -89,5 +101,6 @@ export interface IFootballProvider {
     getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
     getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
     getMatchEvents(fixtureId: number): Promise<IngestedEvent[]>;
+    getLineups(fixtureId: number): Promise<IngestedLineup[]>;
     getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null>;
 }

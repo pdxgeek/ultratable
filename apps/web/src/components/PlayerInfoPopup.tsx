@@ -13,21 +13,41 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, anc
 
     if (!anchorRect) return null;
 
+    let top = anchorRect.top - 250;
+    if (top < 20) top = anchorRect.bottom + 10;
+
     const style: React.CSSProperties = {
         position: 'fixed',
-        top: anchorRect.top - 250,
-        left: anchorRect.left + anchorRect.width / 2 - 125,
+        top: `${top}px`,
+        left: `${anchorRect.left + anchorRect.width / 2 - 125}px`,
         width: '250px',
-        zIndex: 1000,
+        zIndex: 999999, // Ensure it's on top of everything
     };
+
+    console.log("PlayerInfoPopup rendering:", playerId, "loading:", isLoading, "player:", player?.name);
 
     if (isLoading) return (
         <div className="glass-card" style={style}>
-            <div className="loading-shimmer" style={{ height: '200px' }} />
+            <div className="loading-shimmer" style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: 'white' }}>Loading Player...</span>
+            </div>
         </div>
     );
 
-    if (!player) return null;
+    if (!player) {
+        console.warn("PlayerInfoPopup: No player data returned for", playerId);
+        return (
+            <div className="glass-card player-popup" style={style} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}>✕</button>
+                </div>
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <h3 style={{ margin: '8px 0 4px 0', color: 'var(--text-muted)' }}>Stats Unavailable</h3>
+                    <p style={{ fontSize: '0.85rem' }}>No detailed data found for this player.</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="glass-card player-popup" style={style} onClick={(e) => e.stopPropagation()}>

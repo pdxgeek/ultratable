@@ -4,6 +4,7 @@ import { gql } from 'urql';
 const PLAYER_QUERY = gql`
   query GetPlayer($sourceId: Int!, $season: Int!) {
     player(sourceId: $sourceId, season: $season) {
+      id
       sourceId
       name
       firstname
@@ -20,15 +21,15 @@ const PLAYER_QUERY = gql`
 `;
 
 export function usePlayer(sourceId: number, season: number) {
-    const [result] = useQuery({
-        query: PLAYER_QUERY,
-        variables: { sourceId, season },
-        pause: !sourceId || !season,
-    });
+  const [result] = useQuery({
+    query: PLAYER_QUERY,
+    variables: { sourceId, season },
+    pause: !sourceId || !season,
+  });
 
-    return {
-        player: result.data?.player,
-        isLoading: result.fetching,
-        error: result.error,
-    };
+  return {
+    player: result.data?.player,
+    isLoading: result.fetching,
+    error: result.error,
+  };
 }

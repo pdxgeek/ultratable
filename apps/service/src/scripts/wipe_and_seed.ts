@@ -49,6 +49,7 @@ async function run() {
         await db.delete(schema.fixtures);
         await db.delete(schema.standingsRows);
         await db.delete(schema.seasonsToTeams);
+        await db.delete(schema.players);
         await db.delete(schema.teams); // Teams must be deleted BEFORE venues
         await db.delete(schema.venues);
         await db.delete(schema.seasons);
@@ -76,6 +77,11 @@ async function run() {
 
         const managed = await repository.football.promoteLeague(catLeague.id);
         console.log(`✅ Promoted League: ${managed.name}`);
+
+        // 4b. Refresh catalog seasons so the Season Importer has data
+        console.log('Refreshing catalog seasons...');
+        await repository.football.refreshCatalogSeasons(catLeague.id);
+        console.log('✅ Catalog seasons refreshed.');
 
         // 5. Seed Fixtures (which brings in Teams, Venues, and Graphics)
         console.log('\n--- 5. Seeding Fixtures and Data ---');

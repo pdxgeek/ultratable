@@ -53,5 +53,16 @@ builder.mutationFields((t) => ({
         resolve: async (_root, args) => {
             return graphicsService.registerFromUrl(args.entityId, args.entityType, args.url);
         }
+    }),
+    autoSideloadGraphic: t.field({
+        type: 'String',
+        nullable: true,
+        args: {
+            entityId: t.arg.string({ required: true }),
+            entityType: t.arg.string({ required: true })
+        },
+        resolve: async (_root, args) => {
+            return graphicsService.autoSideloadGraphic(args.entityId, args.entityType);
+        }
     })
 }));

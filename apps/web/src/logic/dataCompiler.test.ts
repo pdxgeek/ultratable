@@ -33,8 +33,7 @@ describe('compileStandings', () => {
 
     it('applies point deductions', () => {
         const mockFixtures: Fixture[] = [];
-        const deductions = [{ teamId: 't1', modification: -3 }];
-
+        const deductions = [{ teamId: 't1', points: -3, reason: 'test deduction' }];
         const standings = compileStandings(mockTeams, mockFixtures, { deductions });
 
         expect(standings.find(s => s.teamId === 't1')?.points).toBe(-3);

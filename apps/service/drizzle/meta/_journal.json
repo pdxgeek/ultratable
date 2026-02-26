@@ -71,6 +71,13 @@
       "when": 1772079329278,
       "tag": "0009_needy_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772139010236,
+      "tag": "0010_pale_wraith",
+      "breakpoints": true
     }
   ]
 }

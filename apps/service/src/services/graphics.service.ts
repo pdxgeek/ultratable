@@ -75,6 +75,37 @@ export class GraphicsService {
 
         return storageProvider.getPublicUrl(this.BUCKET_NAME, graphic.blobPath);
     }
+    /**
+     * Automatically attempts to resolve the API Football URL and fetch the graphic based purely on entity ID.
+     */
+    async autoSideloadGraphic(entityId: string, entityType: string): Promise<string | null> {
+        let url: string | null = null;
+        let row: { sourceId?: number | null } | undefined;
+
+        if (entityType === 'player') {
+            [row] = await db.select().from(schema.players).where(eq(schema.players.id, entityId));
+            if (row?.sourceId) url = `https://media.api-sports.io/football/players/${row.sourceId}.png`;
+        } else if (entityType === 'team') {
+            [row] = await db.select().from(schema.teams).where(eq(schema.teams.id, entityId));
+            if (row?.sourceId) url = `https://media.api-sports.io/football/teams/${row.sourceId}.png`;
+        } else if (entityType === 'venue') {
+            [row] = await db.select().from(schema.venues).where(eq(schema.venues.id, entityId));
+            if (row?.sourceId) url = `https://media.api-sports.io/football/venues/${row.sourceId}.png`;
+        } else if (entityType === 'league') {
+            [row] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, entityId));
+            if (!row) {
+                [row] = await db.select().from(schema.catalogLeagues).where(eq(schema.catalogLeagues.id, entityId));
+            }
+            if (row?.sourceId) url = `https://media.api-sports.io/football/leagues/${row.sourceId}.png`;
+        }
+
+        if (!url) {
+            console.error(`[GraphicsService] Could not auto-resolve source URL for ${entityType} ${entityId}`);
+            return null;
+        }
+
+        return this.registerFromUrl(entityId, entityType, url);
+    }
 }
 
 export const graphicsService = new GraphicsService();
