@@ -64,6 +64,13 @@
       "when": 1771868646372,
       "tag": "0008_cute_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1772079329278,
+      "tag": "0009_needy_stone_men",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { ConfigRepository, FootballRepository, IRepository, SyncResult } from './interfaces';
 import { db, supabase } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql, and, gt } from 'drizzle-orm';
+import { eq, sql, and, gt, inArray, lte } from 'drizzle-orm';
 import { IFootballProvider } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
@@ -369,6 +369,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 status: normalized.status,
                 homeGoals: normalized.homeGoals,
                 awayGoals: normalized.awayGoals,
+                gameweek: normalized.gameweek,
                 metadata: {},
                 updatedAt: sql`now()`
             };
@@ -387,6 +388,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                         status: fix.status,
                         homeGoals: fix.homeGoals,
                         awayGoals: fix.awayGoals,
+                        gameweek: fix.gameweek,
                         updatedAt: sql`now()`
                     }
                 });
@@ -426,11 +428,113 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         if (!season) return [];
 
-        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, season.seasons.id));
+        // --- LIVE FIXTURE POLLING LOGIC ---
+        const now = new Date();
+        const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+        const seasonRecord = season.seasons;
+
+        if (!seasonRecord.isCompleted) {
+            const timeSinceLastSync = seasonRecord.lastLiveSyncAt
+                ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
+                : Infinity;
+
+            if (timeSinceLastSync > FIVE_MINUTES_MS) {
+                // 1. Set concurrency lock immediately
+                await db.update(schema.seasons)
+                    .set({ lastLiveSyncAt: now })
+                    .where(eq(schema.seasons.id, seasonRecord.id));
+
+                // 2. Find target fixtures: scheduled in the past but not played/postponed/cancelled
+                const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
+                    .from(schema.fixtures)
+                    .where(and(
+                        eq(schema.fixtures.seasonId, seasonRecord.id),
+                        lte(schema.fixtures.scheduledAt, now),
+                        inArray(schema.fixtures.status, ['scheduled', 'live'])
+                    ));
+
+                if (pastDue.length > 0) {
+                    try {
+                        const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
+                        logger.info(`Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`, { leagueId, seasonYear });
+
+                        // Fetch latest status from upstream
+                        const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
+
+                        if (updatedFixtures.length > 0) {
+                            const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+                            const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+
+                            const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
+                            const teamMap = new Map<number, string>(teams.map((t: any) => [t.sourceId, t.id]));
+
+                            const fixturesToUpdate = updatedFixtures.map(normalized => {
+                                const homeId = teamMap.get(normalized.homeTeamSourceId);
+                                const awayId = teamMap.get(normalized.awayTeamSourceId);
+                                if (!homeId || !awayId) return null;
+                                return {
+                                    sourceName: normalized.sourceName,
+                                    sourceId: normalized.sourceId,
+                                    leagueId: season.leagues.id,
+                                    seasonId: seasonRecord.id,
+                                    homeTeamId: homeId,
+                                    awayTeamId: awayId,
+                                    venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
+                                    scheduledAt: new Date(normalized.scheduledAt),
+                                    status: normalized.status,
+                                    homeGoals: normalized.homeGoals,
+                                    awayGoals: normalized.awayGoals,
+                                    gameweek: normalized.gameweek,
+                                    updatedAt: sql`now()`
+                                };
+                            }).filter(Boolean);
+
+                            if (fixturesToUpdate.length > 0) {
+                                await db.insert(schema.fixtures)
+                                    .values(fixturesToUpdate as any)
+                                    .onConflictDoUpdate({
+                                        target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                        set: {
+                                            status: sql`EXCLUDED.status`,
+                                            homeGoals: sql`EXCLUDED.home_goals`,
+                                            awayGoals: sql`EXCLUDED.away_goals`,
+                                            gameweek: sql`EXCLUDED.gameweek`,
+                                            updatedAt: sql`EXCLUDED.updated_at`
+                                        }
+                                    });
+                            }
+                        }
+                    } catch (e: any) {
+                        logger.error('Live polling failed', { error: e.message });
+                    }
+                } else {
+                    // Check if there are any remaining matches that *will* happen in the future
+                    const futureMatches = await db.select({ count: sql`count(*)` })
+                        .from(schema.fixtures)
+                        .where(and(
+                            eq(schema.fixtures.seasonId, seasonRecord.id),
+                            gt(schema.fixtures.scheduledAt, now)
+                        ));
+
+                    if (Number(futureMatches[0]?.count || 0) === 0) {
+                        // All matches in this season have passed and have no remaining 'scheduled' block
+                        // Mark season as completed to prevent future polling
+                        logger.info(`Live polling: marking season ${seasonYear} complete`, { leagueId });
+                        await db.update(schema.seasons)
+                            .set({ isCompleted: true })
+                            .where(eq(schema.seasons.id, seasonRecord.id));
+                    }
+                }
+            }
+        }
+        // --- END LIVE FIXTURE POLLING LOGIC ---
+
+        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonRecord.id));
 
         if (since) {
             query = db.select().from(schema.fixtures).where(and(
-                eq(schema.fixtures.seasonId, season.seasons.id),
+                eq(schema.fixtures.seasonId, seasonRecord.id),
                 gt(schema.fixtures.updatedAt, since)
             ));
         }

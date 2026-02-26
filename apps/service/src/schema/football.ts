@@ -154,6 +154,7 @@ builder.objectType(FixtureRef, {
         venueId: t.exposeString('venueId', { nullable: true }),
         scheduledAt: t.expose('scheduledAt', { type: 'DateTime' }),
         status: t.exposeString('status'),
+        gameweek: t.exposeInt('gameweek', { nullable: true }),
         goalsHome: t.int({
             nullable: true,
             resolve: (parent: any) => parent.homeGoals ?? null,

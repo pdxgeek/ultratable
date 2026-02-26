@@ -46,6 +46,7 @@ export interface Fixture {
     status: string;
     goalsHome?: number;
     goalsAway?: number;
+    gameweek?: number | null;
     updatedAt: string;
 }
 
@@ -83,7 +84,7 @@ export class UltraWebDB extends Dexie {
             leagues: 'id, sourceId, slug, updatedAt',
             seasons: 'id, leagueId, [leagueId+year], updatedAt',
             teams: 'id, updatedAt',
-            fixtures: 'id, seasonId, scheduledAt, updatedAt',
+            fixtures: 'id, seasonId, scheduledAt, gameweek, updatedAt',
             graphics: 'id, [entityType+entityId], updatedAt',
         });
         this.version(2).stores({

@@ -15,7 +15,7 @@
     "start:service": "npm run dev --prefix apps/service",
     "start:admin": "npm run dev --prefix apps/admin",
     "start:web": "npm run dev --prefix apps/web",
-    "start:all": "concurrently \"npm:start:service\" \"npm:start:admin\" \"npm:start:web\"",
+    "start:all": "node scripts/start-all.js",
     "health:check": "bash health-check.sh"
   },
   "dependencies": {

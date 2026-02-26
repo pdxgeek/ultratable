@@ -98,6 +98,8 @@ export const seasons = pgTable('seasons', {
     startDate: utcTimestamp('start_date'),
     endDate: utcTimestamp('end_date'),
     metadata: jsonb('metadata'),
+    isCompleted: boolean('is_completed').default(false).notNull(),
+    lastLiveSyncAt: utcTimestamp('last_live_sync_at'),
     createdAt: utcTimestamp('created_at').defaultNow().notNull(),
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -117,6 +119,7 @@ export const fixtures = pgTable('fixtures', {
     awayGoals: integer('away_goals'),
     sourceName: varchar('source_name', { length: 50 }).notNull(),
     sourceId: integer('source_id').notNull(),
+    gameweek: integer('gameweek'),
     metadata: jsonb('metadata'), // events_summary, referee, weather, etc.
     rawResponse: jsonb('raw_response'), // original API signal
     createdAt: utcTimestamp('created_at').defaultNow().notNull(),

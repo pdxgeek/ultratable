@@ -11,6 +11,11 @@ export interface StandingsOptions {
     pointsForDraw?: number;
     pointsForLoss?: number;
     deductions?: Array<{ teamId: string; points: number; reason: string }>;
+    zones?: {
+        promotion?: number[];
+        playoffs?: number[];
+        relegation?: number[];
+    };
 }
 
 export function compileStandings(
@@ -144,7 +149,12 @@ export function compileStandings(
     });
 
     rows.sort((a, b) => compareByCriteria(a, b, criteria, fixtures));
-    rows.forEach((r, i) => r.position = i + 1);
+    rows.forEach((r, i) => {
+        r.position = i + 1;
+        if (options.zones?.promotion?.includes(r.position)) r.description = 'promotion';
+        else if (options.zones?.playoffs?.includes(r.position)) r.description = 'playoffs';
+        else if (options.zones?.relegation?.includes(r.position)) r.description = 'relegation';
+    });
 
     return rows;
 }

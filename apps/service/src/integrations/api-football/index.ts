@@ -64,6 +64,36 @@ export class ApiFootballProvider implements IFootballProvider {
         return { fixtures, venues };
     }
 
+    async getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
+        const fixtures: IngestedFixture[] = [];
+        const venues: IngestedVenue[] = [];
+
+        // API-Football allows max 20 ids per request via the `ids` parameter
+        const CHUNK_SIZE = 20;
+
+        for (let i = 0; i < sourceIds.length; i += CHUNK_SIZE) {
+            const chunk = sourceIds.slice(i, i + CHUNK_SIZE);
+            const idsList = chunk.join('-');
+
+            try {
+                const resp = await this.client.get('/fixtures', { params: { ids: idsList } });
+                const response = resp.data.response || [];
+
+                const chunkFixtures = response.map((item: any) => Normalizer.normalizeFixture(item, this.name));
+                const chunkVenues = response
+                    .filter((item: any) => item.fixture.venue?.id)
+                    .map((item: any) => Normalizer.normalizeVenue(item.fixture.venue, this.name));
+
+                fixtures.push(...chunkFixtures);
+                venues.push(...chunkVenues);
+            } catch (err) {
+                console.error(`Error fetching proxy fixtures for ids ${idsList}:`, err);
+            }
+        }
+
+        return { fixtures, venues };
+    }
+
     async getMatchEvents(fixtureId: number): Promise<any[]> {
         const resp = await this.client.get('/fixtures/events', { params: { fixture: fixtureId } });
         return resp.data.response.map((item: any) => Normalizer.normalizeEvent(item, fixtureId));

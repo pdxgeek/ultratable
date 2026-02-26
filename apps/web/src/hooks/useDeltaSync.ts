@@ -53,6 +53,7 @@ export function useDeltaSync() {
                         status: f.status,
                         goalsHome: f.goalsHome,
                         goalsAway: f.goalsAway,
+                        gameweek: f.gameweek,
                         updatedAt: f.updatedAt
                     })));
                 }

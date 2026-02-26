@@ -93,6 +93,7 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
                 {isUpcoming && <span className="badge badge--upcoming">Upcoming</span>}
                 {fixture.status === 'postponed' && <span className="badge badge--postponed">Postponed</span>}
                 {isPlayed && <span className="badge badge--played">Full Time</span>}
+                {fixture.gameweek && <span className="badge badge--gameweek">Gameweek {fixture.gameweek}</span>}
             </div>
 
             <div className="match-popup__header">
