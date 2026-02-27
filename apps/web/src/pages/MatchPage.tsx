@@ -10,6 +10,7 @@ const MATCH_QUERY = `
     fixture(id: $id) {
       id
       season
+      leagueSourceId
       scheduledAt
       status
       goalsHome
@@ -65,7 +66,7 @@ const MATCH_QUERY = `
   }
 `;
 
-const PlayerRow = ({ player, season, reverse }: { player: any; season: number; reverse?: boolean }) => {
+const PlayerRow = ({ player, season, leagueSourceId, reverse }: { player: any; season: number; leagueSourceId?: number; reverse?: boolean }) => {
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
     const [showPopup, setShowPopup] = useState(false);
     const hoverTimer = useRef<any>(null);
@@ -108,6 +109,7 @@ const PlayerRow = ({ player, season, reverse }: { player: any; season: number; r
                     <PlayerInfoPopup
                         playerId={player.sourceId}
                         season={season}
+                        leagueSourceId={leagueSourceId}
                         anchorRect={anchorRect}
                         onClose={handleMouseLeave}
                     />
@@ -272,7 +274,7 @@ const MatchPage: React.FC = () => {
                             <h4>Starting XI</h4>
                             <ul className="player-list">
                                 {homeLineup.startXI?.map((p: any) => (
-                                    <PlayerRow key={`home-start-${p.sourceId}`} player={p} season={fixture.season} />
+                                    <PlayerRow key={`home-start-${p.sourceId}`} player={p} season={fixture.season} leagueSourceId={fixture.leagueSourceId} />
                                 ))}
                             </ul>
 
@@ -359,7 +361,7 @@ const MatchPage: React.FC = () => {
                             <h4 style={{ textAlign: 'right' }}>Starting XI</h4>
                             <ul className="player-list" style={{ textAlign: 'right' }}>
                                 {awayLineup.startXI?.map((p: any) => (
-                                    <PlayerRow key={`away-start-${p.sourceId}`} player={p} season={fixture.season} reverse />
+                                    <PlayerRow key={`away-start-${p.sourceId}`} player={p} season={fixture.season} leagueSourceId={fixture.leagueSourceId} reverse />
                                 ))}
                             </ul>
 

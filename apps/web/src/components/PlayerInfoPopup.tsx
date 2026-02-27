@@ -1,85 +1,134 @@
 import React from 'react';
 import { usePlayer } from '../hooks/usePlayer';
+import './PlayerInfoPopup.css';
 
 interface PlayerInfoPopupProps {
     playerId: number;
     season: number;
+    leagueSourceId?: number;
     anchorRect: DOMRect | null;
     onClose: () => void;
 }
 
-const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, anchorRect, onClose }) => {
+const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, leagueSourceId, anchorRect, onClose }) => {
     const { player, isLoading } = usePlayer(playerId, season);
 
     if (!anchorRect) return null;
 
-    let top = anchorRect.top - 250;
+    let top = anchorRect.top - 320;
     if (top < 20) top = anchorRect.bottom + 10;
+    let left = anchorRect.left + anchorRect.width / 2 - 160;
+    if (left < 10) left = 10;
+    if (left + 320 > window.innerWidth - 10) left = window.innerWidth - 330;
 
     const style: React.CSSProperties = {
         position: 'fixed',
         top: `${top}px`,
-        left: `${anchorRect.left + anchorRect.width / 2 - 125}px`,
-        width: '250px',
-        zIndex: 999999, // Ensure it's on top of everything
+        left: `${left}px`,
     };
 
-    console.log("PlayerInfoPopup rendering:", playerId, "loading:", isLoading, "player:", player?.name);
-
     if (isLoading) return (
-        <div className="glass-card" style={style}>
-            <div className="loading-shimmer" style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ color: 'white' }}>Loading Player...</span>
+        <div className="player-popup" style={style}>
+            <div className="player-popup__loading">
+                <div className="player-popup__loading-photo" />
+                <div className="player-popup__loading-lines">
+                    <div className="player-popup__loading-line" />
+                    <div className="player-popup__loading-line" />
+                    <div className="player-popup__loading-line" />
+                </div>
             </div>
         </div>
     );
 
     if (!player) {
-        console.warn("PlayerInfoPopup: No player data returned for", playerId);
+        const initials = String(playerId).slice(0, 2);
         return (
-            <div className="glass-card player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}>✕</button>
-                </div>
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    <h3 style={{ margin: '8px 0 4px 0', color: 'var(--text-muted)' }}>Stats Unavailable</h3>
-                    <p style={{ fontSize: '0.85rem' }}>No detailed data found for this player.</p>
+            <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
+                <button className="player-popup__close" onClick={onClose}>✕</button>
+                <div className="player-popup__header">
+                    <div className="player-popup__photo-placeholder">{initials}</div>
+                    <div className="player-popup__identity">
+                        <h3 className="player-popup__name">Player #{playerId}</h3>
+                        <p className="player-popup__nationality">Stats Unavailable</p>
+                    </div>
                 </div>
             </div>
         );
     }
 
+    // Pick the stats entry matching the current league, or fall back to most appearances
+    const currentStats = (() => {
+        if (!player.statistics?.length) return null;
+        if (leagueSourceId) {
+            const match = player.statistics.find((s: any) => s.league?.id === leagueSourceId);
+            if (match) return match;
+        }
+        // Fallback: pick entry with most appearances
+        return player.statistics.reduce((best: any, s: any) =>
+            (s.games?.appearences || 0) > (best?.games?.appearences || 0) ? s : best
+            , player.statistics[0]);
+    })();
+
     return (
-        <div className="glass-card player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}>✕</button>
+        <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
+            <button className="player-popup__close" onClick={onClose}>✕</button>
+
+            {/* Header: Photo + Name */}
+            <div className="player-popup__header">
+                {player.photo ? (
+                    <img src={player.photo} alt={player.name} className="player-popup__photo" />
+                ) : (
+                    <div className="player-popup__photo-placeholder">
+                        {player.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                )}
+                <div className="player-popup__identity">
+                    <h3 className="player-popup__name">{player.name}</h3>
+                    {player.nationality && <p className="player-popup__nationality">{player.nationality}</p>}
+                    {currentStats?.games?.position && (
+                        <p className="player-popup__nationality">{currentStats.games.position}</p>
+                    )}
+                </div>
             </div>
 
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                <img
-                    src={player.photo}
-                    alt={player.name}
-                    style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-main)' }}
-                />
-                <h3 style={{ margin: '8px 0 4px 0' }}>{player.name}</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>{player.nationality}</p>
-            </div>
+            {/* Body: Stats */}
+            <div className="player-popup__body">
+                {/* Bio */}
+                <div className="player-popup__section">
+                    <Row label="Age" value={player.age} />
+                    {player.height && <Row label="Height" value={player.height} />}
+                    {player.weight && <Row label="Weight" value={player.weight} />}
+                </div>
 
-            <div style={{ fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Age:</span>
-                    <span>{player.age}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Height:</span>
-                    <span>{player.height || 'N/A'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Weight:</span>
-                    <span>{player.weight || 'N/A'}</span>
-                </div>
+                {/* Season stats */}
+                {currentStats && (
+                    <>
+                        <div className="player-popup__section">
+                            <div className="player-popup__section-title">Season Stats</div>
+                            <Row label="Team" value={currentStats.team?.name} />
+                            {currentStats.games?.number && <Row label="Number" value={`#${currentStats.games.number}`} />}
+                            <Row label="Appearances" value={currentStats.games?.appearences || 0} />
+                            <Row label="Minutes" value={(currentStats.games?.minutes || 0).toLocaleString()} />
+                            {currentStats.games?.rating && <Row label="Rating" value={parseFloat(currentStats.games.rating).toFixed(2)} />}
+                        </div>
+
+                        <div className="player-popup__section">
+                            <div className="player-popup__section-title">Output</div>
+                            <Row label="Goals" value={currentStats.goals?.total || 0} />
+                            <Row label="Assists" value={currentStats.goals?.assists || 0} />
+                            <div className="player-popup__row">
+                                <span className="player-popup__label">Cards</span>
+                                <span className="player-popup__cards">
+                                    <span style={{ color: '#ffd700' }}>🟨 {currentStats.cards?.yellow || 0}</span>
+                                    <span style={{ color: '#ff4d4d' }}>🟥 {currentStats.cards?.red || 0}</span>
+                                </span>
+                            </div>
+                        </div>
+                    </>
+                )}
+
                 {player.injured && (
-                    <div style={{ marginTop: '8px', color: '#ff4d4d', fontSize: '0.75rem', textAlign: 'center' }}>
+                    <div className="player-popup__injury">
                         ⚠️ Currently Injured
                     </div>
                 )}
@@ -87,5 +136,12 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, anc
         </div>
     );
 };
+
+const Row = ({ label, value }: { label: string; value: any }) => (
+    <div className="player-popup__row">
+        <span className="player-popup__label">{label}</span>
+        <span className="player-popup__value">{value ?? 'N/A'}</span>
+    </div>
+);
 
 export default PlayerInfoPopup;

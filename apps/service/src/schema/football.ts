@@ -186,6 +186,16 @@ builder.objectType(FixtureRef, {
                 return s?.year ?? 0;
             }
         }),
+        leagueSourceId: t.int({
+            nullable: true,
+            resolve: async (parent) => {
+                if (!parent.seasonId) return null;
+                const [s] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, parent.seasonId));
+                if (!s) return null;
+                const [l] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, s.leagueId));
+                return l?.sourceId ?? null;
+            }
+        }),
         homeTeamId: t.exposeString('homeTeamId'),
         awayTeamId: t.exposeString('awayTeamId'),
         venueId: t.exposeString('venueId', { nullable: true }),
@@ -275,6 +285,8 @@ builder.objectType(PlayerRef, {
         lastname: t.exposeString('lastname', { nullable: true }),
         age: t.exposeInt('age', { nullable: true }),
         nationality: t.exposeString('nationality', { nullable: true }),
+        height: t.string({ nullable: true, resolve: (parent) => parent.height || null }),
+        weight: t.string({ nullable: true, resolve: (parent) => parent.weight || null }),
         injured: t.exposeBoolean('injured'),
         photo: t.string({
             nullable: true,
