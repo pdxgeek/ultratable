@@ -1,0 +1,214 @@
+.player-popup {
+    position: fixed;
+    z-index: 999999;
+    min-width: 300px;
+    max-width: 340px;
+    background: rgba(18, 18, 28, 0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+    animation: playerPopupIn 0.15s ease-out;
+}
+
+@keyframes playerPopupIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Top banner with photo and name */
+.player-popup__header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(100, 120, 255, 0.08), rgba(140, 80, 220, 0.06));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.player-popup__photo {
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    flex-shrink: 0;
+}
+
+.player-popup__photo-placeholder {
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    color: white;
+    font-weight: 700;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.player-popup__identity {
+    flex: 1;
+    overflow: hidden;
+}
+
+.player-popup__name {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.player-popup__nationality {
+    margin: 3px 0 0 0;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Body sections */
+.player-popup__body {
+    padding: 10px 16px 14px;
+}
+
+.player-popup__section {
+    margin-bottom: 10px;
+}
+
+.player-popup__section:last-child {
+    margin-bottom: 0;
+}
+
+.player-popup__section-title {
+    margin: 0 0 6px 0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding-bottom: 4px;
+}
+
+.player-popup__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+    font-size: 0.8rem;
+}
+
+.player-popup__label {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.player-popup__value {
+    color: #fff;
+    font-weight: 600;
+}
+
+.player-popup__cards {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-weight: 600;
+}
+
+.player-popup__injury {
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.25);
+    border-radius: 6px;
+    padding: 6px;
+    color: #ff9800;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 8px;
+}
+
+.player-popup__close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.player-popup__close:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Loading shimmer */
+.player-popup__loading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+}
+
+.player-popup__loading-photo {
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    flex-shrink: 0;
+}
+
+.player-popup__loading-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.player-popup__loading-line {
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.player-popup__loading-line:nth-child(1) {
+    width: 80%;
+}
+
+.player-popup__loading-line:nth-child(2) {
+    width: 55%;
+    animation-delay: 0.1s;
+}
+
+.player-popup__loading-line:nth-child(3) {
+    width: 40%;
+    animation-delay: 0.2s;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}

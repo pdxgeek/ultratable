@@ -53,9 +53,9 @@ export default function MatchPopup({
     const awayLogo = awayTeam?.logo || gfxRegistry.getLogo(fixture.awayTeamId);
 
     // For venue images: try fixture.venueImage (for mock leagues with direct URLs),
-    // otherwise get from graphics registry (for real leagues which are already cached as blob URLs)
+    // otherwise get from graphics registry, or fall back to the home team's venue image
     const venueFromRegistry = gfxRegistry.getVenue(fixture.homeTeamId);
-    const venueDirectUrl = useCachedImage(fixture.venueImage);
+    const venueDirectUrl = useCachedImage(fixture.venueImage || homeTeam?.venueImage);
     const venueImageUrl = venueDirectUrl || venueFromRegistry;
 
     const loadEvents = useCallback(async () => {
