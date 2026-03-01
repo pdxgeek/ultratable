@@ -23,16 +23,19 @@ WORKDIR /app
 # Set node environment to production
 ENV NODE_ENV=production
 
-# Copy root package files
-COPY package.json package-lock.json ./
-# Copy service package file
-COPY apps/service/package.json ./apps/service/
+# Copy only the service package file into the production directory
+COPY apps/service/package.json ./ultratable-service/
 
-# Install ONLY production dependencies
-RUN npm ci --omit=dev
+# Navigate to the service directory and install production dependencies directly
+WORKDIR /app/ultratable-service
+RUN npm install --omit=dev
+
+# Navigate back to root for the rest of the setup
+WORKDIR /app
 
 # Copy compiled code from builder stage
-COPY --from=builder /app/apps/service/dist ./apps/service/dist
+COPY --from=builder /app/apps/service/dist ./ultratable-service/dist
+COPY apps/service/.env ./ultratable-service/.env
 
 # Set permissions for the non-root 'node' user
 RUN chown -R node:node /app
@@ -43,5 +46,6 @@ USER node
 # Expose the API port
 EXPOSE 8080
 
-# Start the application
-CMD ["npm", "run", "start", "--workspace=apps/service"]
+# Start the application referencing the local node_modules
+# Since the workdir is /app at runtime, we can either cd or use prefix
+CMD ["npm", "run", "start", "--prefix", "ultratable-service"]

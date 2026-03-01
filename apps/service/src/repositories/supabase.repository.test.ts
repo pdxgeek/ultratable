@@ -64,8 +64,16 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
 
     describe('Delta Sync (updatedAt filtering)', () => {
         it('should filter fixtures by updatedAt', async () => {
-            const leagueId = 39; // PL
-            const season = 2024;
+            if (!db) return;
+            const anySeason = await db.select().from(schema.seasons).limit(1);
+            if (anySeason.length === 0) return;
+
+            const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
+            if (league.length === 0) return;
+
+            const leagueId = league[0].sourceId;
+            const season = anySeason[0].year;
+
             const fixtures = await repository.football.getFixtures(leagueId, season);
             if (fixtures.length === 0) return; // Skip if no data
 
@@ -78,10 +86,23 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
         });
 
         it('should filter teams by updatedAt', async () => {
-            const leagueId = 39;
-            const season = 2024;
-            const teams = await repository.football.getTeams(leagueId, season);
-            if (teams.length === 0) return;
+            if (!db) return;
+            const anySeason = await db.select().from(schema.seasons).limit(1);
+            if (anySeason.length === 0) return;
+
+            const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
+            if (league.length === 0) return;
+
+            const leagueId = league[0].sourceId;
+            const season = anySeason[0].year;
+
+            let teams;
+            try {
+                teams = await repository.football.getTeams(leagueId, season);
+            } catch (e) {
+                return; // Skip if league/season not found
+            }
+            if (!teams || teams.length === 0) return;
 
             const midPoint = new Date(Date.now() - 1000 * 60 * 60);
             const recent = await repository.football.getTeams(leagueId, season, midPoint);

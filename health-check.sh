@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the ports
-SERVICE_PORT=4000
+SERVICE_PORT=8080
 ADMIN_PORT=5174
 WEB_PORT=5175
 
