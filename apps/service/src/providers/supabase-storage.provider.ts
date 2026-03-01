@@ -10,7 +10,6 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     constructor() {
         const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
         const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
         if (!supabaseUrl || !serviceRoleKey) {
@@ -22,7 +21,7 @@ export class SupabaseStorageProvider implements StorageProvider {
     }
 
     async upload(bucket: string, path: string, file: Buffer | ArrayBuffer | Blob, mimeType: string, upsert: boolean = false): Promise<string> {
-        const { data, error } = await this.client.storage
+        const { error } = await this.client.storage
             .from(bucket)
             .upload(path, file, {
                 contentType: mimeType,

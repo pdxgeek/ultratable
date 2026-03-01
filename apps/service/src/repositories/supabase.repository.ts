@@ -1,5 +1,5 @@
 import { ConfigRepository, FootballRepository, IRepository, SyncResult } from './interfaces';
-import { db, supabase } from '../db';
+import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, sql, and, gt, inArray, lte } from 'drizzle-orm';
 import { IFootballProvider } from '../integrations/types';
@@ -17,9 +17,11 @@ export class SupabaseConfigRepository implements ConfigRepository {
         let content = '';
         try {
             content = await fs.readFile(envPath, 'utf-8');
-        } catch { }
+        } catch {
+            // ignore if .env is missing
+        }
 
-        let lines = content.split('\n');
+        const lines = content.split('\n');
         for (const [key, value] of Object.entries(updates)) {
             const index = lines.findIndex(l => l.startsWith(`${key}=`));
             if (index !== -1) {
@@ -98,7 +100,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         }
     }
 
-    async getLeagues(): Promise<any[]> {
+    async getLeagues(): Promise<Array<typeof schema.leagues.$inferSelect>> {
         if (!db) return [];
         const existing = await db.select().from(schema.leagues);
         if (existing.length > 0) return existing;
@@ -119,7 +121,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         return db.select().from(schema.leagues);
     }
 
-    async getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<any[]> {
+    async getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<Array<typeof schema.seasons.$inferSelect>> {
         if (!db) return [];
         let leagueId = internalLeagueId;
         if (!leagueId) {
@@ -130,20 +132,20 @@ export class SupabaseFootballRepository implements FootballRepository {
         return db.select().from(schema.seasons).where(eq(schema.seasons.leagueId, leagueId as string));
     }
 
-    async getAllInternalSeasons(): Promise<any[]> {
+    async getAllInternalSeasons(): Promise<Array<typeof schema.seasons.$inferSelect>> {
         if (!db) return [];
         return db.select().from(schema.seasons);
     }
 
-    private formulasCache: any[] | null = null;
-    async getRankingFormulas(): Promise<any[]> {
+    private formulasCache: Array<typeof schema.rankingFormulas.$inferSelect> | null = null;
+    async getRankingFormulas(): Promise<Array<typeof schema.rankingFormulas.$inferSelect>> {
         if (!db) return [];
         if (this.formulasCache) return this.formulasCache;
         this.formulasCache = await db.select().from(schema.rankingFormulas).orderBy(schema.rankingFormulas.id);
         return this.formulasCache!;
     }
 
-    async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<any[]> {
+    async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
         if (!db) return [];
 
         // 0. Ensure internal IDs exist
@@ -162,7 +164,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // Map venues for easy ID lookup
         const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-        const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+        const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
 
         // 3. Upsert teams
         const teamsToInsert = teams.map((t) => ({
@@ -193,7 +195,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // 4. Populate seasons_to_teams linkage
         const teamList = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-        const teamMap = new Map<number, string>(teamList.map((t: any) => [t.sourceId, t.id]));
+        const teamMap = new Map<number, string>(teamList.map((t) => [t.sourceId, t.id]));
 
         // 3.1 Sideload Graphics (only for entities not already registered)
         const allEntityIds = [
@@ -212,7 +214,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             if (t.logo) {
                 const teamId = teamMap.get(t.sourceId);
                 if (teamId && !existingGraphicIds.has(teamId)) {
-                    graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: any) =>
+                    graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: Error) =>
                         logger.warn(`Soft-fail on sideload for team ${teamId}`, { error: e.message })
                     );
                 }
@@ -223,7 +225,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             if (v.image) {
                 const venueId = venueMap.get(v.sourceId);
                 if (venueId && !existingGraphicIds.has(venueId)) {
-                    graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: any) =>
+                    graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: Error) =>
                         logger.warn(`Soft-fail on sideload for venue ${venueId}`, { error: e.message })
                     );
                 }
@@ -242,7 +244,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         if (linkages.length > 0) {
             await db.insert(schema.seasonsToTeams)
-                .values(linkages as any)
+                .values(linkages as unknown as typeof schema.seasonsToTeams.$inferInsert[])
                 .onConflictDoUpdate({
                     target: [schema.seasonsToTeams.seasonId, schema.seasonsToTeams.teamId],
                     set: { updatedAt: sql`now()` }
@@ -266,10 +268,10 @@ export class SupabaseFootballRepository implements FootballRepository {
         }
 
         const res = await query;
-        return res.map((r: { team: any }) => r.team);
+        return res.map((r) => r.team);
     }
 
-    private async upsertVenues(venues: any[]) {
+    private async upsertVenues(venues: import('../integrations/types').IngestedVenue[]) {
         if (!db || venues.length === 0) return;
 
         // Deduplicate and filter
@@ -298,7 +300,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             });
     }
 
-    async syncSeasons(leagueId: number): Promise<SyncResult> {
+    async syncSeasons(leagueId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
 
         const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
@@ -325,7 +327,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async syncFixtures(leagueId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult> {
+    async syncFixtures(leagueId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
         let apiCallsCount = 0;
 
@@ -363,11 +365,11 @@ export class SupabaseFootballRepository implements FootballRepository {
         await this.upsertVenues(venues);
 
         const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-        const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+        const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
 
         // Fetch all teams for this provider to get IDs
         const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-        const teamMap = new Map<number, string>(teams.map((t: any) => [t.sourceId, t.id]));
+        const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
 
         const fixturesToInsert = fixtures.map((normalized) => {
             const homeId = teamMap.get(normalized.homeTeamSourceId);
@@ -400,9 +402,9 @@ export class SupabaseFootballRepository implements FootballRepository {
         const BATCH_SIZE = 50;
 
         for (let i = 0; i < totalCount; i += BATCH_SIZE) {
-            const batch = (fixturesToInsert as any[]).slice(i, i + BATCH_SIZE);
+            const batch = fixturesToInsert.slice(i, i + BATCH_SIZE);
             await db.insert(schema.fixtures)
-                .values(batch)
+                .values(batch as unknown as typeof schema.fixtures.$inferInsert[])
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                     set: {
@@ -436,7 +438,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<any[]> {
+    async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
         const [season] = await db.select()
@@ -485,10 +487,10 @@ export class SupabaseFootballRepository implements FootballRepository {
 
                         if (updatedFixtures.length > 0) {
                             const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-                            const venueMap = new Map<number, string>(currentVenues.map((v: any) => [v.sourceId, v.id]));
+                            const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
 
                             const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-                            const teamMap = new Map<number, string>(teams.map((t: any) => [t.sourceId, t.id]));
+                            const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
 
                             const fixturesToUpdate = updatedFixtures.map(normalized => {
                                 const homeId = teamMap.get(normalized.homeTeamSourceId);
@@ -513,7 +515,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
                             if (fixturesToUpdate.length > 0) {
                                 await db.insert(schema.fixtures)
-                                    .values(fixturesToUpdate as any)
+                                    .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
                                     .onConflictDoUpdate({
                                         target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                                         set: {
@@ -526,8 +528,9 @@ export class SupabaseFootballRepository implements FootballRepository {
                                     });
                             }
                         }
-                    } catch (e: any) {
-                        logger.error('Live polling failed', { error: e.message });
+                    } catch (e: unknown) {
+                        const err = e instanceof Error ? e : new Error(String(e));
+                        logger.error('Live polling failed', { error: err.message });
                     }
                 } else {
                     // Check if there are any remaining matches that *will* happen in the future
@@ -564,7 +567,7 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     // Catalog Management
-    async syncCatalogCountries(): Promise<SyncResult> {
+    async syncCatalogCountries(): Promise<SyncResult<typeof schema.catalogCountries.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
         const ingested = await this.provider.getCountries();
 
@@ -590,7 +593,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async syncCatalogLeagues(): Promise<SyncResult> {
+    async syncCatalogLeagues(): Promise<SyncResult<typeof schema.catalogLeagues.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
 
         // Ensure countries exist first
@@ -599,7 +602,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         const ingested = await this.provider.getLeagues();
 
         const localCountries = await this.getCatalogCountries();
-        const countryMap = new Map<string, string>(localCountries.map(c => [c.name, c.id]));
+        const countryMap = new Map<string, string>(localCountries.map(c => [c.name as string, c.id as string]));
 
         const toInsert = ingested.map((item) => {
             const countryId = countryMap.get(item.country || '');
@@ -617,10 +620,9 @@ export class SupabaseFootballRepository implements FootballRepository {
             };
         }).filter(Boolean);
 
-        // Batch upsert catalog leagues
         for (let i = 0; i < toInsert.length; i += 100) {
             const batch = toInsert.slice(i, i + 100);
-            await db.insert(schema.catalogLeagues).values(batch as any).onConflictDoUpdate({
+            await db.insert(schema.catalogLeagues).values(batch as unknown as typeof schema.catalogLeagues.$inferInsert[]).onConflictDoUpdate({
                 target: [schema.catalogLeagues.sourceName, schema.catalogLeagues.sourceId],
                 set: {
                     logo: sql`excluded.logo`,
@@ -636,14 +638,14 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async getCatalogCountries(): Promise<any[]> {
+    async getCatalogCountries(): Promise<Array<typeof schema.catalogCountries.$inferSelect>> {
         if (!db) return [];
         return db.select().from(schema.catalogCountries).orderBy(schema.catalogCountries.name);
     }
 
-    async getCatalogLeagues(countryId?: string, sourceId?: number): Promise<any[]> {
+    async getCatalogLeagues(countryId?: string, sourceId?: number): Promise<Array<typeof schema.catalogLeagues.$inferSelect>> {
         if (!db) return [];
-        let query = db.select().from(schema.catalogLeagues);
+        const query = db.select().from(schema.catalogLeagues);
         if (countryId) {
             return query.where(eq(schema.catalogLeagues.countryId, countryId))
                 .orderBy(schema.catalogLeagues.name);
@@ -654,8 +656,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         return query.orderBy(schema.catalogLeagues.name);
     }
 
-    async refreshCatalogSeasons(catalogLeagueId: string): Promise<any> {
-        if (!db) return null;
+    async refreshCatalogSeasons(catalogLeagueId: string): Promise<typeof schema.catalogLeagues.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.catalogLeagues.$inferSelect;
 
         const [catLeague] = await db.select().from(schema.catalogLeagues).where(eq(schema.catalogLeagues.id, catalogLeagueId));
         if (!catLeague) throw new Error('Catalog league not found');
@@ -664,7 +666,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         const [updated] = await db.update(schema.catalogLeagues)
             .set({
-                metadata: { ...((catLeague.metadata as any) || {}), seasons },
+                metadata: { ...((catLeague.metadata as Record<string, unknown>) || {}), seasons },
                 updatedAt: new Date()
             })
             .where(eq(schema.catalogLeagues.id, catalogLeagueId))
@@ -673,8 +675,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         return updated;
     }
 
-    async promoteLeague(catalogLeagueId: string): Promise<any> {
-        if (!db) return null;
+    async promoteLeague(catalogLeagueId: string): Promise<typeof schema.leagues.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.leagues.$inferSelect;
 
         const [catLeague] = await db.select().from(schema.catalogLeagues).where(eq(schema.catalogLeagues.id, catalogLeagueId));
         if (!catLeague) throw new Error('Catalog league not found');
@@ -683,7 +685,6 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // 1. Sideload Logo (In a real app we'd fetch and upload to Supabase Storage)
         // For now, we'll just use the external URL but we've planned for storage
-        const logoUrl = catLeague.logo;
 
         // 2. Insert into managed leagues
         const [managed] = await db.insert(schema.leagues).values({
@@ -709,8 +710,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         return managed;
     }
 
-    async importSeason(leagueId: string, year: number): Promise<any> {
-        if (!db) return null;
+    async importSeason(leagueId: string, year: number): Promise<typeof schema.seasons.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.seasons.$inferSelect;
 
         // Ensure managed league exists (by UUID)
         const [managedLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
@@ -728,8 +729,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         return season;
     }
 
-    async updateSeasonConfig(seasonId: string, config: any): Promise<any> {
-        if (!db) return null;
+    async updateSeasonConfig(seasonId: string, config: Record<string, unknown>): Promise<typeof schema.seasons.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.seasons.$inferSelect;
         const [updated] = await db.update(schema.seasons)
             .set({ metadata: config, updatedAt: new Date() })
             .where(eq(schema.seasons.id, seasonId))
@@ -748,10 +749,10 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
 
-    async saveRankingFormula(formula: any): Promise<any> {
-        if (!db) return null;
+    async saveRankingFormula(formula: Record<string, unknown>): Promise<typeof schema.rankingFormulas.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.rankingFormulas.$inferSelect;
         const [upserted] = await db.insert(schema.rankingFormulas)
-            .values({ ...formula, updatedAt: new Date() })
+            .values({ ...formula, updatedAt: new Date() } as unknown as typeof schema.rankingFormulas.$inferInsert)
             .onConflictDoUpdate({
                 target: [schema.rankingFormulas.id],
                 set: {
@@ -766,16 +767,16 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     // Graphics
-    async getGraphics(entityType: string, entityId: string): Promise<any[]> {
+    async getGraphics(entityType: string, entityId: string): Promise<Array<typeof schema.graphics.$inferSelect>> {
         if (!db) return [];
         return db.select().from(schema.graphics)
             .where(sql`${schema.graphics.entityType} = ${entityType} AND ${schema.graphics.entityId} = ${entityId}`);
     }
 
-    async saveGraphic(graphic: any): Promise<any> {
-        if (!db) return null;
+    async saveGraphic(graphic: Record<string, unknown>): Promise<typeof schema.graphics.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.graphics.$inferSelect;
         const [upserted] = await db.insert(schema.graphics)
-            .values({ ...graphic, updatedAt: new Date() })
+            .values({ ...graphic, updatedAt: new Date() } as unknown as typeof schema.graphics.$inferInsert)
             .onConflictDoUpdate({
                 target: [schema.graphics.entityType, schema.graphics.entityId],
                 set: {
@@ -789,12 +790,12 @@ export class SupabaseFootballRepository implements FootballRepository {
         return upserted;
     }
 
-    async getMatchEvents(fixtureId: number): Promise<any[]> {
+    async getMatchEvents(fixtureId: number): Promise<import('../integrations/types').IngestedEvent[]> {
         const events = await this.provider.getMatchEvents(fixtureId);
 
         // Enrich events with internal player UUIDs if players exist in our DB
         const sourceIds = events
-            .map((e: any) => e.playerSourceId)
+            .map((e) => e.playerSourceId)
             .filter((id: number | null) => id != null);
 
         if (sourceIds.length > 0) {
@@ -882,10 +883,10 @@ export class SupabaseFootballRepository implements FootballRepository {
             for (const p of [...lineup.startXI, ...lineup.substitutes]) {
                 const internalId = existingMap.get(p.sourceId);
                 if (internalId) {
-                    (p as any).id = internalId;
+                    Object.assign(p, { id: internalId });
                     // Only sideload for newly created players
                     if (p.photo && newPlayers.some(np => np.sourceId === p.sourceId)) {
-                        graphicsService.registerFromUrl(internalId, 'player', p.photo).catch((e: any) =>
+                        graphicsService.registerFromUrl(internalId, 'player', p.photo).catch((e: Error) =>
                             logger.warn(`Soft-fail on sideload for player ${internalId}`, { error: e.message })
                         );
                     }
@@ -896,7 +897,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         return lineups;
     }
 
-    async getPlayerData(playerId: number, season: number): Promise<any | null> {
+    async getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null }) | null> {
         const data = await this.provider.getPlayerData(playerId, season);
         if (!data) return null;
 
@@ -928,12 +929,18 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // Sideload player photo into graphics registry
         if (data.photo && upserted) {
-            graphicsService.registerFromUrl(upserted.id, 'player', data.photo).catch((e: any) =>
+            graphicsService.registerFromUrl(upserted.id, 'player', data.photo).catch((e: Error) =>
                 logger.warn(`Soft-fail on sideload for player ${upserted.id}`, { error: e.message })
             );
         }
 
-        return { ...data, id: upserted.id };
+        return {
+            ...data,
+            id: upserted.id,
+            sourceName: this.provider.name,
+            createdAt: upserted.createdAt,
+            updatedAt: upserted.updatedAt
+        };
     }
 }
 

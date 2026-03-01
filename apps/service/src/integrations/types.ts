@@ -60,6 +60,8 @@ export interface IngestedEvent {
     playerName: string | null;
     playerSourceId: number | null;
     playerId?: string | null; // Internal UUID from players table
+    assistName: string | null;
+    assistSourceId: number | null;
     type: string;
     detail: string;
     comments: string | null;
@@ -89,7 +91,7 @@ export interface IngestedPlayer {
     weight: string | null;
     injured: boolean;
     photo: string | null;
-    statistics?: any[];
+    statistics?: Record<string, unknown>[];
 }
 
 export interface IFootballProvider {

@@ -30,17 +30,6 @@ export function FixtureDropdown({
 
         if (expanded) {
             document.addEventListener('mousedown', handleClickOutside);
-
-            if (containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect();
-                const spaceBelow = window.innerHeight - rect.bottom;
-                const spaceAbove = rect.top;
-                if (spaceBelow < 400 && spaceAbove > spaceBelow) {
-                    setPosition('up');
-                } else {
-                    setPosition('down');
-                }
-            }
         }
 
         return () => {
@@ -48,13 +37,28 @@ export function FixtureDropdown({
         };
     }, [expanded]);
 
+    const handleToggle = () => {
+        if (!expanded && containerRef.current) {
+            // Calculate position before expanding
+            const rect = containerRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            if (spaceBelow < 400 && spaceAbove > spaceBelow) {
+                setPosition('up');
+            } else {
+                setPosition('down');
+            }
+        }
+        setExpanded(!expanded);
+    };
+
     if (fixtures.length === 0) return null;
 
     return (
         <div className="fixture-dropdown" ref={containerRef}>
             <button
                 className={`fixture-dropdown__toggle ${expanded ? 'fixture-dropdown__toggle--active' : ''}`}
-                onClick={() => setExpanded(!expanded)}
+                onClick={handleToggle}
                 title={type === 'past' ? 'View past fixtures' : 'View future fixtures'}
             >
                 {type === 'past' ? '◂' : '▸'}

@@ -3,7 +3,7 @@
  
 > [!IMPORTANT]
 > **DIRECTORY ISOLATION RULES**
-> - **🚨 CRITICAL 🚨**: THE `/src` DIRECTORY IS THE OLD LEGACY ARCHITECTURE. **NEVER TOUCH OR MODIFY `/src` FIRST**. IT IS STRICTLY FOR HISTORICAL REFERENCE ONLY!
+ - **Legacy**: We used to have a `/src` directory for the old legacy architecture. It has been deleted.
 > - **Active Development**: All new projects, backends, and frontends live EXCLUSIVELY under the `/apps/` directory.
 > - **BFF (Back-end for Front-end)**: We are currently building a new GraphQL service and Postgres database in `/apps/service`.
 > - **Rewriting Strategy**: When building new frontends, we use `/src` as a blueprint but rewrite it natively from scratch in a new `/apps/[app-name]` directory.
@@ -82,6 +82,7 @@ You must strictly adhere to the following coding standards when working on this 
 ---
 
 ## 6. AI Agent Operational Rules
+- **Strict TypeScript (No `any`)**: We explicitly chose TypeScript to avoid loose typing. **DO NOT use `any` under any circumstances.** Always define proper interfaces, use `unknown` with assertions if the type is truly not known, and leverage Drizzle's `$inferSelect`/`$inferInsert` for database types. Maintaining a strict, zero-warning TypeScript environment is mandatory. Always verify your changes do not introduce warnings by running `npm run lint --workspaces`.
 - **Keep It Tight (Small & Modular)**: DO NOT build massive "God Components" (like a 1700-line `App.tsx`). Break your code down into small, focused, and independently testable components. This saves context memory, prevents hallucination, makes patching code much safer, and enforces strict type boundaries (via component props).
 - **Token Efficiency**: Do NOT waste tokens doing massive, expensive architectural operations or gigantic refactors that simple instructions to the Owner (David) could accomplish. 
 - **Ask First**: If a task requires manipulating hundreds of files or executing a convoluted process, write a short, clear prompt for the owner to run natively instead of blowing through the context window.

@@ -27,15 +27,15 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
 
         const teamsMap = new Map<string, Team>(teams.map(t => [t.id, t]));
 
-        const criteria = season.rankingCriteria || options.criteria;
-        const leagueMeta = league?.metadata || {};
-        const seasonMeta = season.metadata || {};
+        const criteria = (season.rankingCriteria as { name: string; logicType: string; }[]) || options.criteria;
+        const leagueMeta = (league?.metadata as Record<string, unknown>) || {};
+        const seasonMeta = (season.metadata as Record<string, unknown>) || {};
 
-        const deductions = seasonMeta.deductions || [];
+        const deductions = (seasonMeta.deductions as { teamId: string; points: number; reason: string; }[]) || [];
         const zones = {
-            promotion: seasonMeta.promotion || leagueMeta.promotion || [],
-            playoffs: seasonMeta.playoffs || leagueMeta.playoffs || [],
-            relegation: seasonMeta.relegation || leagueMeta.relegation || []
+            promotion: (seasonMeta.promotion ?? leagueMeta.promotion ?? []) as number[],
+            playoffs: (seasonMeta.playoffs ?? leagueMeta.playoffs ?? []) as number[],
+            relegation: (seasonMeta.relegation ?? leagueMeta.relegation ?? []) as number[]
         };
 
         const standings = compileStandings(teams, fixtures, {

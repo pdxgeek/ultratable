@@ -8,7 +8,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:reset": "ts-node src/scripts/wipe_and_seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,7 @@
     "@pothos/plugin-simple-objects": "^4.1.3",
     "@supabase/supabase-js": "^2.97.0",
     "axios": "^1.13.5",
+    "better-auth": "^1.4.18",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.7.4",
@@ -30,11 +32,15 @@
     "winston-transport": "^4.9.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.0",
     "drizzle-kit": "^0.31.9",
+    "eslint": "^10.0.2",
+    "globals": "^17.3.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
   }
 }

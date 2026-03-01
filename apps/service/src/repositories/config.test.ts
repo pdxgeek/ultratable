@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SupabaseConfigRepository } from './supabase.repository';
 import fs from 'node:fs/promises';
-import path from 'node:path';
-
 vi.mock('node:fs/promises');
 
 describe('SupabaseConfigRepository', () => {

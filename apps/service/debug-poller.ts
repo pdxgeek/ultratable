@@ -1,6 +1,3 @@
-import { db } from './src/db';
-import { sql, and, lte, inArray, eq } from 'drizzle-orm';
-import * as schema from './src/db/schema';
 import { SupabaseFootballRepository } from './src/repositories/supabase.repository';
 
 async function main() {

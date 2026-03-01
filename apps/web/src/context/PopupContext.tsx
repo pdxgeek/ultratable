@@ -52,6 +52,7 @@ export function PopupProvider({ children }: { children: ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePopup() {
     const context = useContext(PopupContext);
     if (!context) {

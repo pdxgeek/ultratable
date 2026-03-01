@@ -5,8 +5,8 @@ import { desc, eq } from 'drizzle-orm';
 import { JobRunner } from '../workers/runner';
 import { repository } from '../repositories/supabase.repository';
 
-const JobRef = builder.objectRef<any>('Job');
-const JobExecutionRef = builder.objectRef<any>('JobExecution');
+const JobRef = builder.objectRef<typeof schema.jobs.$inferSelect>('Job');
+const JobExecutionRef = builder.objectRef<typeof schema.jobExecutions.$inferSelect>('JobExecution');
 
 builder.objectType(JobRef, {
     fields: (t) => ({
@@ -62,7 +62,7 @@ builder.queryField('jobExecutions', (t) =>
             limit: t.arg.int({ required: false }),
         },
         resolve: async (_, { jobId, limit }) => {
-            let query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
+            const query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
             if (jobId) {
                 const res = await db.select().from(schema.jobExecutions)
                     .where(eq(schema.jobExecutions.jobId, jobId))

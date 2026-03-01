@@ -3,7 +3,7 @@ import Dexie, { type Table } from 'dexie';
 export interface SyncState {
     key: string; // e.g., "teams:39:2024" or "fixtures:39:2024"
     lastUpdatedAt: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 export interface League {
@@ -14,7 +14,7 @@ export interface League {
     logo?: string;
     slug: string;
     updatedAt: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 export interface Season {
@@ -23,8 +23,8 @@ export interface Season {
     sourceId?: number; // Optional as backend might only provide it via league parent
     year: number;
     updatedAt: string;
-    rankingCriteria?: any[];
-    metadata?: any;
+    rankingCriteria?: unknown[];
+    metadata?: Record<string, unknown>;
 }
 
 export interface Team {

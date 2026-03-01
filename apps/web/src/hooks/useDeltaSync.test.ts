@@ -22,7 +22,7 @@ describe('useDeltaSync', () => {
         vi.clearAllMocks();
         await db.syncState.clear();
         await db.teams.clear();
-        (useClient as any).mockReturnValue(mockClient);
+        vi.mocked(useClient).mockReturnValue(mockClient as unknown as ReturnType<typeof useClient>);
     });
 
     it('should fetch and store new teams', async () => {

@@ -1,0 +1,8 @@
+# Strict TypeScript Rules
+- We explicitly chose TypeScript to avoid loose typing. 
+- **DO NOT use `any` under any circumstances.** 
+- Always define proper interfaces.
+- Use `unknown` with assertions or type guards if the type is truly not known.
+- Leverage Drizzle's `$inferSelect` / `$inferInsert` for database types. 
+- Maintaining a strict, zero-warning TypeScript environment is mandatory. 
+- Always verify your changes do not introduce warnings by running `npm run lint --workspaces`.

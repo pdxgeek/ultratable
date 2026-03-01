@@ -3,18 +3,20 @@ import { repository } from '../repositories/supabase.repository';
 import { JobRunner } from '../workers/runner';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, count, countDistinct, sql } from 'drizzle-orm';
+import { eq, and, count, sql } from 'drizzle-orm';
 import { graphicsService } from '../services/graphics.service';
 
 // Define object refs first
-export const LeagueRef = builder.objectRef<any>('League');
-const TeamRef = builder.objectRef<any>('Team');
-export const SeasonRef = builder.objectRef<any>('Season');
-const FixtureRef = builder.objectRef<any>('Fixture');
-const VenueRef = builder.objectRef<any>('Venue');
-const MatchEventRef = builder.objectRef<any>('MatchEvent');
-const PlayerRef = builder.objectRef<any>('Player');
-const LineupRef = builder.objectRef<any>('Lineup');
+export const LeagueRef = builder.objectRef<typeof schema.leagues.$inferSelect>('League');
+const TeamRef = builder.objectRef<typeof schema.teams.$inferSelect>('Team');
+export const SeasonRef = builder.objectRef<typeof schema.seasons.$inferSelect>('Season');
+const FixtureRef = builder.objectRef<typeof schema.fixtures.$inferSelect>('Fixture');
+const VenueRef = builder.objectRef<typeof schema.venues.$inferSelect>('Venue');
+const MatchEventRef = builder.objectRef<import('../integrations/types').IngestedEvent>('MatchEvent');
+
+type PlayerShape = Partial<typeof schema.players.$inferSelect> & { sourceId: number, name: string, injured: boolean, statistics?: unknown, height?: string | null, weight?: string | null };
+const PlayerRef = builder.objectRef<PlayerShape>('Player');
+const LineupRef = builder.objectRef<import('../integrations/types').IngestedLineup>('Lineup');
 
 builder.objectType(VenueRef, {
     fields: (t) => ({
@@ -66,7 +68,7 @@ builder.objectType(LeagueRef, {
             resolve: async (parent) => {
                 // Only return seasons that have teams imported (i.e., real data)
                 const allSeasons = await repository.football.getInternalSeasons(parent.sourceId, parent.id);
-                const seasonIds = allSeasons.map((s: any) => s.id);
+                const seasonIds = allSeasons.map((s) => s.id);
                 if (seasonIds.length === 0) return [];
 
                 // Check which seasons have teams linked
@@ -74,13 +76,13 @@ builder.objectType(LeagueRef, {
                     .from(schema.seasonsToTeams)
                     .where(sql`${schema.seasonsToTeams.seasonId} IN (${sql.join(seasonIds.map((id: string) => sql`${id}`), sql`, `)})`);
 
-                const linkedIds = new Set(linked.map((r: any) => r.seasonId));
-                return allSeasons.filter((s: any) => linkedIds.has(s.id));
+                const linkedIds = new Set(linked.map((r) => r.seasonId));
+                return allSeasons.filter((s) => linkedIds.has(s.id));
             },
         }),
         metadata: t.field({
             type: SourceRef,
-            resolve: (parent: any) => ({
+            resolve: (parent) => ({
                 sourceName: parent.sourceName,
                 sourceId: parent.sourceId,
             }),
@@ -121,7 +123,7 @@ builder.objectType(TeamRef, {
         }),
         metadata: t.field({
             type: SourceRef,
-            resolve: (parent: any) => ({
+            resolve: (parent) => ({
                 sourceName: parent.sourceName,
                 sourceId: parent.sourceId,
             }),
@@ -160,13 +162,14 @@ builder.objectType(SeasonRef, {
                     .from(schema.teams)
                     .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
                     .where(eq(schema.seasonsToTeams.seasonId, parent.id));
-                return res.map((r: { team: any }) => r.team);
+                return res.map((r) => r.team);
             }
         }),
         rankingCriteria: t.field({
             type: [RankingFormulaRef],
             resolve: async (parent) => {
-                const criteria = (parent.metadata as any)?.rankingCriteria || ['standard_pts', 'goal_diff', 'goals_for'];
+                const metadata = parent.metadata as Record<string, unknown> | null;
+                const criteria = (metadata?.rankingCriteria as string[]) || ['standard_pts', 'goal_diff', 'goals_for'];
                 const all = await repository.football.getRankingFormulas();
                 return all.filter(f => criteria.includes(f.id));
             }
@@ -204,11 +207,11 @@ builder.objectType(FixtureRef, {
         gameweek: t.exposeInt('gameweek', { nullable: true }),
         goalsHome: t.int({
             nullable: true,
-            resolve: (parent: any) => parent.homeGoals ?? null,
+            resolve: (parent) => parent.homeGoals,
         }),
         goalsAway: t.int({
             nullable: true,
-            resolve: (parent: any) => parent.awayGoals ?? null,
+            resolve: (parent) => parent.awayGoals,
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
         homeTeam: t.field({
@@ -236,9 +239,9 @@ builder.objectType(FixtureRef, {
         }),
         metadata: t.field({
             type: SourceRef,
-            resolve: (parent: any) => ({
-                sourceName: parent.sourceName,
-                sourceId: parent.sourceId,
+            resolve: (parent) => ({
+                sourceName: parent.sourceName as string,
+                sourceId: parent.sourceId as number,
             }),
         }),
         events: t.field({
@@ -353,7 +356,7 @@ builder.queryField('allSeasons', (t) =>
     })
 );
 
-const RankingFormulaRef = builder.objectRef<any>('RankingFormula');
+const RankingFormulaRef = builder.objectRef<typeof schema.rankingFormulas.$inferSelect>('RankingFormula');
 
 builder.objectType(RankingFormulaRef, {
     fields: (t) => ({
@@ -379,7 +382,7 @@ builder.queryField('fixtures', (t) =>
             season: t.arg.int({ required: true }),
             since: t.arg({ type: 'DateTime', required: false }),
         },
-        resolve: async (_: any, { leagueId, season, since }: any) => {
+        resolve: async (_, { leagueId, season, since }) => {
             return repository.football.getFixtures(leagueId, season, since || undefined);
         },
     })
@@ -420,7 +423,7 @@ builder.queryField('venues', (t) =>
                 .innerJoin(schema.fixtures, eq(schema.fixtures.venueId, schema.venues.id))
                 .where(eq(schema.fixtures.seasonId, localSeason.id));
 
-            return result.map((r: any) => r.venue);
+            return result.map((r) => r.venue);
         },
     })
 );
@@ -450,9 +453,9 @@ builder.queryField('teams', (t) =>
 
                 if (cached.length > 0) {
                     if (since) {
-                        return cached.filter((r: any) => new Date(r.team.updatedAt) > since).map((r: any) => r.team);
+                        return cached.filter((r) => new Date(r.team.updatedAt as Date) > since).map((r) => r.team);
                     }
-                    return cached.map((r: any) => r.team);
+                    return cached.map((r) => r.team);
                 }
 
                 // No cached data — do full sync (first time only)
@@ -479,8 +482,8 @@ builder.mutationField('syncFixtures', (t) =>
             leagueId: t.arg.int({ required: true }),
             season: t.arg.int({ required: true }),
         },
-        resolve: async (_: any, { leagueId, season }: any) => {
-            let result: any[] = [];
+        resolve: async (_, { leagueId, season }) => {
+            let result: Array<typeof schema.fixtures.$inferSelect> = [];
             await JobRunner.run(`sync-fixtures-${leagueId}-${season}`, async () => {
                 const syncRes = await repository.football.syncFixtures(leagueId, season);
                 result = syncRes.data;
@@ -517,10 +520,10 @@ builder.mutationField('saveLeagueConfig', (t) =>
             configJson: t.arg.string({ required: true }),
         },
         resolve: async (_, { id, configJson }) => {
-            let metadata = {};
+            let metadata: Record<string, unknown>;
             try {
                 metadata = JSON.parse(configJson);
-            } catch (e) {
+            } catch {
                 throw new Error("Invalid JSON configuration");
             }
             const [updated] = await db.update(schema.leagues)
@@ -541,10 +544,10 @@ builder.mutationField('saveSeasonConfig', (t) =>
             rankingCriteria: t.arg.stringList({ required: false }),
         },
         resolve: async (_, { id, configJson, rankingCriteria }) => {
-            let metadata: any = {};
+            let metadata: Record<string, unknown>;
             try {
                 metadata = JSON.parse(configJson);
-            } catch (e) {
+            } catch {
                 throw new Error("Invalid JSON configuration");
             }
 

@@ -51,8 +51,8 @@ export class GraphicsService {
                 });
 
             return publicUrl;
-        } catch (error: any) {
-            console.error(`[GraphicsService] Failed to register graphic for ${entityType} ${entityId} from ${url}:`, error.message);
+        } catch (error: unknown) {
+            console.error(`[GraphicsService] Failed to register graphic for ${entityType} ${entityId} from ${url}:`, (error as Error).message);
             return null;
         }
     }
