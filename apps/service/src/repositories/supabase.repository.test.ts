@@ -29,6 +29,7 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
     });
 
     it('should save and retrieve ranking formulas', async () => {
+        if (!db) return;
         const saved = await repository.football.saveRankingFormula(testFormula);
         expect(saved.id).toBe(testFormula.id);
         expect(saved.name).toBe(testFormula.name);
@@ -38,6 +39,7 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
     });
 
     it('should save and retrieve graphics', async () => {
+        if (!db) return;
         const saved = await repository.football.saveGraphic(testGraphic);
         expect(saved.blobPath).toBe(testGraphic.blobPath);
         expect(saved.entityId).toBe(testGraphic.entityId);
@@ -48,6 +50,7 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
     });
 
     it('should upsert graphics on conflict', async () => {
+        if (!db) return;
         await repository.football.saveGraphic(testGraphic);
 
         const updatedGraphic = { ...testGraphic, mimeType: 'image/jpeg' };

@@ -1,15 +1,14 @@
 services:
-  db:
-    image: postgres:15-alpine
+  service:
+    build:
+      context: .
+      dockerfile: apps/service/Dockerfile
     restart: always
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: ultratable
     ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
-volumes:
-  db_data:
+      - "8080:8080"
+    env_file:
+      - apps/service/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      - HOST=0.0.0.0

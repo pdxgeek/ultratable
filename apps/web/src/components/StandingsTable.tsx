@@ -45,7 +45,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
     const sortedStandings = useMemo(() => {
         const sorted = [...standings];
         sorted.sort((a, b) => {
-            let comparison = 0;
+            let comparison: number;
 
             switch (sortConfig.key) {
                 case 'team': {
