@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# UltraTable
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+UltraTable is a real-time fantasy sports platform. It consists of multiple applications managed in a monorepo setup.
 
-Currently, two official plugins are available:
+## Project Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- `/apps/service` - The core BFF (Back-end for Front-end) service. Built with Fastify, GraphQL Yoga, and Drizzle ORM.
+- `/apps/admin` - Administrative interface.
+- `/apps/web` - Main consumer-facing web application.
 
-## React Compiler
+## Local Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+We use Docker Compose to provide a seamless local development environment that closely mirrors our production Kubernetes deployment.
 
-## Expanding the ESLint configuration
+### Prerequisites
+- [Docker & Docker Compose](https://docs.docker.com/get-docker/)
+- Node.js (for local CLI tooling, though the service runs in Docker)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Starting the Service
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+The Fastify GraphQL service relies on external integrations like Supabase and API-Football. Ensure your `.env` file is populated at `apps/service/.env` before starting.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Start the service in the background
+docker compose up -d
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This will:
+1. Build the `service` Docker image.
+2. Inject your `apps/service/.env` secrets.
+3. Start the service, binding it to `localhost:8080`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Accessing the API
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Once the container is running, you can access the GraphQL Yoga playground to test queries and mutations:
+
+- **GraphQL Endpoint:** `http://localhost:8080/graphql`
+- **Health Check (Kubernetes Probes):** `http://localhost:8080/health`
+
+### Viewing Logs
+
+To view the stdout logs (powered by Fastify Pino):
+
+```bash
+docker compose logs -f service
+```
+
+### Stopping the Applications
+
+To tear down the environment:
+
+```bash
+docker compose down
 ```

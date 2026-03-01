@@ -57,10 +57,10 @@ export class GfxService {
 
             return blobPath;
         } catch (error: unknown) {
-            logger.error(`Failed to sideload graphic for ${entityType}:${entityId}`, {
+            logger.error({
                 url,
                 error: (error as Error).message
-            });
+            }, `Failed to sideload graphic for ${entityType}:${entityId}`);
             return null;
         }
     }

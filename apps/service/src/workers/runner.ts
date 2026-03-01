@@ -48,7 +48,7 @@ export class JobRunner {
         }).returning();
 
         console.log(`[Job: ${name}] Started (ID: ${execution.id})`);
-        logger.info(`Job [${name}] started`, { jobId: job.id, executionId: execution.id });
+        logger.info({ jobId: job.id, executionId: execution.id }, `Job [${name}] started`);
 
         const reporter: JobReporter = {
             updateProgress: async (stats) => {
@@ -85,12 +85,12 @@ export class JobRunner {
                 .where(eq(schema.jobs.id, job.id));
 
             console.log(`[Job: ${name}] Finished successfully (Count: ${stats.processedCount || 0})`);
-            logger.info(`Job [${name}] finished successfully`, {
+            logger.info({
                 jobId: job.id,
                 executionId: execution.id,
                 processedCount: stats.processedCount,
                 apiCallsCount: stats.apiCallsCount
-            });
+            }, `Job [${name}] finished successfully`);
         } catch (error: unknown) {
             // 5. Record failure
             console.error(`[Job: ${name}] Failed:`, error);
@@ -104,12 +104,12 @@ export class JobRunner {
                 })
                 .where(eq(schema.jobExecutions.id, execution.id));
 
-            logger.error(`Job [${name}] failed: ${err.message || error}`, {
+            logger.error({
                 jobId: job.id,
                 executionId: execution.id,
                 error: err.message || String(error),
                 stack: err.stack
-            });
+            }, `Job [${name}] failed: ${err.message || error}`);
 
             throw error; // Re-throw to caller
         }
