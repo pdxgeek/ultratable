@@ -11,6 +11,7 @@ interface SeasonImporterProps {
     seasonsForCatalogLeague: Season[];
     importSeason: (leagueId: string, year: number) => void;
     removeSeason: (leagueId: string, seasonId: string, year: number) => void;
+    refreshCatalogSeasons: (catalogId: string) => void;
     actionLoading: string | null;
 }
 
@@ -22,6 +23,7 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
     seasonsForCatalogLeague,
     importSeason,
     removeSeason,
+    refreshCatalogSeasons,
     actionLoading
 }) => {
     return (
@@ -68,11 +70,14 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                             </div>
                         </div>
 
-                        {/* <button
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-colors border border-slate-700"
+                        <button
+                            onClick={() => refreshCatalogSeasons(selectedCatalogLeagueId)}
+                            disabled={actionLoading === `${selectedCatalogLeagueId}-refresh`}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-colors border border-slate-700 disabled:opacity-50 flex items-center gap-2"
                         >
-                            Refresh Catalog metadata
-                        </button> */}
+                            {actionLoading === `${selectedCatalogLeagueId}-refresh` && <Loader2 className="w-3 h-3 animate-spin" />}
+                            Fetch Catalog Seasons
+                        </button>
                     </div>
 
                     <div className="overflow-hidden border border-slate-800/40 rounded-xl bg-slate-900/20 backdrop-blur-sm">
