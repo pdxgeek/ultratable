@@ -2,7 +2,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 import * as schema from './schema';
-import 'dotenv/config';
+import * as dotenv from 'dotenv';
+import path from 'path';
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const dbUrl = process.env.DATABASE_URL;
 

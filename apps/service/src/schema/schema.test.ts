@@ -48,7 +48,7 @@ describe('GraphQL Schema', () => {
         ];
         vi.mocked(repository.football.getLeagues).mockResolvedValue(mockLeagues as unknown as typeof schema.leagues.$inferSelect[]);
 
-        const response = await yoga.fetch('http://localhost:4000/graphql', {
+        const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -80,7 +80,7 @@ describe('GraphQL Schema', () => {
         vi.mocked(repository.football.getFixtures).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
 
         const since = "2026-02-21T00:00:00.000Z";
-        const response = await yoga.fetch('http://localhost:4000/graphql', {
+        const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -109,7 +109,7 @@ describe('GraphQL Schema', () => {
             stats: { processedCount: 1, apiCallsCount: 1 }
         });
 
-        const response = await yoga.fetch('http://localhost:4000/graphql', {
+        const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -155,7 +155,7 @@ describe('GraphQL Schema', () => {
 
         vi.mocked(repository.football.getInternalSeasons).mockResolvedValue(mockSeasons as unknown as typeof schema.seasons.$inferSelect[]);
 
-        const response = await yoga.fetch('http://localhost:4000/graphql', {
+        const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

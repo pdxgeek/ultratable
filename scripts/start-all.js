@@ -1,7 +1,7 @@
 import { spawn, exec } from 'child_process';
 import net from 'net';
 
-const API_PORT = 4000;
+const API_PORT = 8080;
 const ADMIN_PORT = 5174;
 const WEB_PORT = 5175;
 
