@@ -242,6 +242,35 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
     }
   };
 
+  const refreshCatalogSeasons = async (managedLeagueId: string) => {
+    setActionLoading(`${managedLeagueId}-refresh`);
+    try {
+      const league = managedLeagues.find(l => l.id === managedLeagueId);
+      if (!league?.sourceId) return;
+
+      const catalogId = catalogLeagueMetadata?.id;
+      if (!catalogId) {
+        console.error("No associated catalog league found.");
+        return;
+      }
+
+      await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($id: String!) { refreshCatalogSeasons(catalogId: $id) { id seasons { year current } } }`,
+          variables: { id: catalogId }
+        })
+      });
+
+      await fetchCatalogMetadataBySourceId(league.sourceId);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const importSeason = async (leagueId: string, year: number) => {
     const key = `${leagueId}-${year}`;
     setActionLoading(key);
@@ -411,6 +440,7 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         seasonsForCatalogLeague={seasonsForCatalogLeague}
         importSeason={importSeason}
         removeSeason={removeSeason}
+        refreshCatalogSeasons={refreshCatalogSeasons}
         actionLoading={actionLoading}
       />
 
