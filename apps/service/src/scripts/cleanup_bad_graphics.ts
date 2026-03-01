@@ -20,8 +20,8 @@ async function run() {
 
         console.log(`Deleted ${result.length} bad graphic rows.`);
         console.log('Cleanup complete.');
-    } catch (e: any) {
-        console.error('Failed to cleanup:', e.message);
+    } catch (e: unknown) {
+        console.error('Failed to cleanup:', (e as Error).message);
     }
 }
 

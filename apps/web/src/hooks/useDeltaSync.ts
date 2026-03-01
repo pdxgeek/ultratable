@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useClient } from 'urql';
-import { db } from '../db';
+import { db, type Team, type Fixture, type Venue } from '../db';
 import { SYNC_DATA_QUERY } from '../api/queries';
 
 export function useDeltaSync() {
@@ -32,7 +32,7 @@ export function useDeltaSync() {
             // 3. Batch updates into Dexie
             await db.transaction('rw', [db.teams, db.fixtures, db.venues, db.syncState], async () => {
                 if (teams?.length > 0) {
-                    await db.teams.bulkPut(teams.map((t: any) => ({
+                    await db.teams.bulkPut(teams.map((t: Team) => ({
                         id: t.id,
                         name: t.name,
                         shortName: t.shortName,
@@ -43,7 +43,7 @@ export function useDeltaSync() {
                 }
 
                 if (fixtures?.length > 0) {
-                    await db.fixtures.bulkPut(fixtures.map((f: any) => ({
+                    await db.fixtures.bulkPut(fixtures.map((f: Fixture) => ({
                         id: f.id,
                         seasonId: f.seasonId,
                         homeTeamId: f.homeTeamId,
@@ -59,7 +59,7 @@ export function useDeltaSync() {
                 }
 
                 if (venues?.length > 0) {
-                    await db.venues.bulkPut(venues.map((v: any) => ({
+                    await db.venues.bulkPut(venues.map((v: Venue) => ({
                         id: v.id,
                         name: v.name,
                         city: v.city || undefined,
@@ -83,9 +83,9 @@ export function useDeltaSync() {
                 }
             });
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('DeltaSync failed:', err);
-            setError(err);
+            setError(err instanceof Error ? err : new Error(String(err)));
         } finally {
             setIsSyncing(false);
         }

@@ -1,6 +1,6 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { globalLogger } from '../services/log.service';
 
 const logger = globalLogger.child({ module: 'JobRunner' });
@@ -11,7 +11,7 @@ export interface JobResult {
     processedCount?: number;
     totalCount?: number;
     apiCallsCount?: number;
-    context?: Record<string, any>;
+    context?: Record<string, unknown>;
 }
 
 export interface JobReporter {
@@ -91,23 +91,24 @@ export class JobRunner {
                 processedCount: stats.processedCount,
                 apiCallsCount: stats.apiCallsCount
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             // 5. Record failure
             console.error(`[Job: ${name}] Failed:`, error);
+            const err = error as Error;
 
             await db.update(schema.jobExecutions)
                 .set({
                     status: 'failed',
                     finishedAt: new Date(),
-                    errorMessage: error.message || String(error)
+                    errorMessage: err.message || String(error)
                 })
                 .where(eq(schema.jobExecutions.id, execution.id));
 
-            logger.error(`Job [${name}] failed: ${error.message || error}`, {
+            logger.error(`Job [${name}] failed: ${err.message || error}`, {
                 jobId: job.id,
                 executionId: execution.id,
-                error: error.message || String(error),
-                stack: error.stack
+                error: err.message || String(error),
+                stack: err.stack
             });
 
             throw error; // Re-throw to caller

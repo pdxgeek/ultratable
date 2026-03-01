@@ -5,6 +5,35 @@ import { useQuery } from 'urql';
 import PlayerInfoPopup from '../components/PlayerInfoPopup';
 import './MatchPage.css';
 
+interface MatchPlayer {
+    name: string;
+    sourceId: number;
+    photo: string | null;
+}
+
+interface MatchLineup {
+    teamSourceId: number;
+    teamName: string;
+    teamLogo: string;
+    formation: string;
+    coachName: string;
+    coachPhoto: string;
+    startXI: MatchPlayer[];
+    substitutes: MatchPlayer[];
+}
+
+interface MatchEvent {
+    minute: number;
+    extraMinute: number | null;
+    teamId: number;
+    playerName: string;
+    assistName: string | null;
+    type: string;
+    detail: string;
+    comments: string | null;
+    subs?: MatchEvent[];
+}
+
 const MATCH_QUERY = `
   query GetMatch($id: String!) {
     fixture(id: $id) {
@@ -66,10 +95,10 @@ const MATCH_QUERY = `
   }
 `;
 
-const PlayerRow = ({ player, season, leagueSourceId, reverse }: { player: any; season: number; leagueSourceId?: number; reverse?: boolean }) => {
+const PlayerRow = ({ player, season, leagueSourceId, reverse }: { player: MatchPlayer; season: number; leagueSourceId?: number; reverse?: boolean }) => {
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
     const [showPopup, setShowPopup] = useState(false);
-    const hoverTimer = useRef<any>(null);
+    const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleMouseEnter = (e: React.MouseEvent) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -139,12 +168,12 @@ const MatchPage: React.FC = () => {
     // Group lineups by home/away
     const homeLineup = useMemo(() => {
         if (!fixture?.lineups || !fixture.homeTeam) return null;
-        return fixture.lineups.find((l: any) => l.teamSourceId === fixture.homeTeam.sourceId) || null;
+        return fixture.lineups.find((l: MatchLineup) => l.teamSourceId === fixture.homeTeam.sourceId) || null;
     }, [fixture]);
 
     const awayLineup = useMemo(() => {
         if (!fixture?.lineups || !fixture.awayTeam) return null;
-        return fixture.lineups.find((l: any) => l.teamSourceId === fixture.awayTeam.sourceId) || null;
+        return fixture.lineups.find((l: MatchLineup) => l.teamSourceId === fixture.awayTeam.sourceId) || null;
     }, [fixture]);
 
     // Group events into a unified timeline, sorted by minute
@@ -157,11 +186,11 @@ const MatchPage: React.FC = () => {
             return a.minute - b.minute;
         });
 
-        const collapsed: any[] = [];
+        const collapsed: MatchEvent[] = [];
         for (const evt of rawEvents) {
             if (evt.type === 'subst') {
                 const prev = collapsed.length > 0 ? collapsed[collapsed.length - 1] : null;
-                if (prev && prev.minute === evt.minute && prev.teamId === evt.teamId && prev.type === 'subst_group') {
+                if (prev && prev.minute === evt.minute && prev.teamId === evt.teamId && prev.type === 'subst_group' && prev.subs) {
                     prev.subs.push(evt);
                 } else if (prev && prev.minute === evt.minute && prev.teamId === evt.teamId && prev.type === 'subst') {
                     const group = {
@@ -178,7 +207,7 @@ const MatchPage: React.FC = () => {
             }
         }
         return collapsed;
-    }, [fixture?.events]);
+    }, [fixture]);
 
     if (fetching) {
         return (
@@ -273,14 +302,14 @@ const MatchPage: React.FC = () => {
 
                             <h4>Starting XI</h4>
                             <ul className="player-list">
-                                {homeLineup.startXI?.map((p: any) => (
+                                {homeLineup.startXI?.map((p: MatchPlayer) => (
                                     <PlayerRow key={`home-start-${p.sourceId}`} player={p} season={fixture.season} leagueSourceId={fixture.leagueSourceId} />
                                 ))}
                             </ul>
 
                             <h4>Substitutes</h4>
                             <p className="subs-list-text">
-                                {homeLineup.substitutes?.map((p: any) => p.name).join(', ')}
+                                {homeLineup.substitutes?.map((p: MatchPlayer) => p.name).join(', ')}
                             </p>
                         </>
                     )}
@@ -293,12 +322,12 @@ const MatchPage: React.FC = () => {
                         <p className="no-events">No events recorded.</p>
                     ) : (
                         <div className="timeline-list">
-                            {timelineEvents.map((evt: any, i: number) => {
+                            {timelineEvents.map((evt: MatchEvent, i: number) => {
                                 const isHome = evt.teamId === homeTeam.sourceId;
 
                                 let content;
                                 if (evt.type === 'subst_group') {
-                                    content = evt.subs.map((sub: any, idx: number) => (
+                                    content = (evt.subs || []).map((sub: MatchEvent, idx: number) => (
                                         <div key={idx} className="event-sub">
                                             <span className="event-out">{sub.playerName}</span> <span className="sub-icon">🔁</span> <span className="event-player">{sub.assistName}</span>
                                         </div>
@@ -360,14 +389,14 @@ const MatchPage: React.FC = () => {
 
                             <h4 style={{ textAlign: 'right' }}>Starting XI</h4>
                             <ul className="player-list" style={{ textAlign: 'right' }}>
-                                {awayLineup.startXI?.map((p: any) => (
+                                {awayLineup.startXI?.map((p: MatchPlayer) => (
                                     <PlayerRow key={`away-start-${p.sourceId}`} player={p} season={fixture.season} leagueSourceId={fixture.leagueSourceId} reverse />
                                 ))}
                             </ul>
 
                             <h4 style={{ textAlign: 'right' }}>Substitutes</h4>
                             <p className="subs-list-text" style={{ textAlign: 'right' }}>
-                                {awayLineup.substitutes?.map((p: any) => p.name).join(', ')}
+                                {awayLineup.substitutes?.map((p: MatchPlayer) => p.name).join(', ')}
                             </p>
                         </>
                     )}

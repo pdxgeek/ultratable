@@ -38,10 +38,10 @@ async function run() {
         const fixturesResult = await repository.football.syncFixtures(40, 2024);
         console.log(`✅ Seeding Complete. Processed ${fixturesResult.stats.processedCount} fixtures.`);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('\n❌ SEEDING FAILED:');
-        console.error(error.message || error);
-        if (error.stack) console.error(error.stack);
+        console.error((error as Error).message || error);
+        if ((error as Error).stack) console.error((error as Error).stack);
     } finally {
         process.exit(0);
     }

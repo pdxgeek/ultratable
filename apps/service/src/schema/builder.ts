@@ -5,7 +5,7 @@ import { DateTimeResolver, JSONResolver } from 'graphql-scalars';
 export const builder = new SchemaBuilder<{
     Scalars: {
         DateTime: { Input: Date; Output: Date };
-        JSON: { Input: any; Output: any };
+        JSON: { Input: unknown; Output: unknown };
     };
 }>({
     plugins: [SimpleObjectsPlugin],

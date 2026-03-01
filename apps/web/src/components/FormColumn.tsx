@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePopup } from '../context/PopupContext';
 import type { Fixture, Team } from '../db';
@@ -13,7 +13,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
     const { showPopup, scheduleHide, cancelHide, hidePopup } = usePopup();
     const navigate = useNavigate();
     const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const fixtureMap = new Map(fixtures.map(f => [f.id, f]));
+    const fixtureMap = useMemo(() => new Map(fixtures.map(f => [f.id, f])), [fixtures]);
 
     const handleMouseEnter = useCallback(
         (fixtureId: string, el: HTMLElement) => {

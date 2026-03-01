@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SupabaseFootballRepository } from './supabase.repository';
-import axios from 'axios';
 import { db } from '../db';
-import * as schema from '../db/schema';
 
 const mockGet = vi.fn();
 vi.mock('axios', () => ({
     default: {
         create: vi.fn().mockReturnValue({
-            get: (...args: any[]) => mockGet(...args)
+            get: (...args: unknown[]) => mockGet(...args)
         })
     }
 }));
@@ -35,7 +33,7 @@ describe('SupabaseFootballRepository', () => {
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockResolvedValue(mockLeagues)
             });
-            vi.mocked(db.select).mockImplementation(selectMock as any);
+            vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
             const result = await repo.getLeagues();
 
@@ -48,7 +46,7 @@ describe('SupabaseFootballRepository', () => {
                 .mockReturnValueOnce({ from: vi.fn().mockResolvedValue([]) }) // Initial check
                 .mockReturnValueOnce({ from: vi.fn().mockResolvedValue([{ id: 'new-uuid', name: 'Premier League' }]) }); // Final fetch
 
-            vi.mocked(db.select).mockImplementation(emptySelectMock as any);
+            vi.mocked(db.select).mockImplementation(emptySelectMock as unknown as typeof db.select);
 
             // 2. Mock provider response
             const mockResponse = {
@@ -69,7 +67,7 @@ describe('SupabaseFootballRepository', () => {
                     onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
                 })
             });
-            vi.mocked(db.insert).mockImplementation(insertMock as any);
+            vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
             const result = await repo.getLeagues();
 
@@ -87,14 +85,14 @@ describe('SupabaseFootballRepository', () => {
             const teamMock = [{ id: 'team-uuid', sourceId: 42, name: 'Arsenal' }];
 
             // Sequential calls for getTeams
-            const m = vi.fn();
-            (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }); // league
-            (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }); // season
-            (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) });  // venues
-            (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) });   // teams
-            (m as any).mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]) }) }) }); // result
+            const m = vi.fn()
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) })  // venues
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) })   // teams
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]) }) }) }); // result
 
-            vi.mocked(db.select).mockImplementation(m);
+            vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
 
             const mockResponse = {
                 data: {
@@ -115,7 +113,7 @@ describe('SupabaseFootballRepository', () => {
                     onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
                 })
             });
-            vi.mocked(db.insert).mockImplementation(insertMock as any);
+            vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
             const result = await repo.getTeams(39, 2024);
 

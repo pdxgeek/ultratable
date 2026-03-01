@@ -21,11 +21,11 @@ const pgClient = dbUrl
 
 export const db = pgClient
     ? drizzle(pgClient, { schema })
-    : (null as any);
+    : (null as unknown as ReturnType<typeof drizzle>);
 
 // Supabase "Full Stack" Client
 export const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
         auth: { persistSession: false }
     })
-    : (null as any);
+    : (null as unknown as ReturnType<typeof createClient>);

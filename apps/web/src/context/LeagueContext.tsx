@@ -53,8 +53,11 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     const { sync, isSyncing } = useDeltaSync();
 
     // 1. Live queries for Dexie data
-    const leagues = useLiveQuery(() => db.leagues.toArray()) || [];
-    const seasons = useLiveQuery(() => db.seasons.toArray()) || [];
+    const leaguesResult = useLiveQuery(() => db.leagues.toArray());
+    const seasonsResult = useLiveQuery(() => db.seasons.toArray());
+
+    const leagues = useMemo(() => leaguesResult || [], [leaguesResult]);
+    const seasons = useMemo(() => seasonsResult || [], [seasonsResult]);
 
     const activeSeason = useMemo(() =>
         seasons.find(s => s.id === activeSeasonId) || null
@@ -120,6 +123,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
             }
         };
         bootstrap();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // 3. Auto-sync when active season changes
@@ -157,6 +161,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useLeague() {
     const context = useContext(LeagueContext);
     if (!context) throw new Error('useLeague must be used within a LeagueProvider');

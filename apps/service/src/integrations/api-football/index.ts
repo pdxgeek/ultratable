@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
-import { IFootballProvider, IngestedLeague, IngestedSeason, IngestedTeam, IngestedVenue, IngestedFixture, IngestedCountry } from '../types';
-import { Normalizer } from './normalizer';
+import { IFootballProvider, IngestedLeague, IngestedSeason, IngestedTeam, IngestedVenue, IngestedFixture, IngestedCountry, IngestedEvent, IngestedPlayer } from '../types';
+import { Normalizer, RawLeagueItem, RawSeasonItem, RawTeamItem, RawVenueItem, RawFixtureItem, RawEventItem, RawLineupItem } from './normalizer';
 
 export class ApiFootballProvider implements IFootballProvider {
     name = 'api-football';
@@ -23,7 +23,7 @@ export class ApiFootballProvider implements IFootballProvider {
 
     async getCountries(): Promise<IngestedCountry[]> {
         const resp = await this.client.get('/countries');
-        return resp.data.response.map((c: any) => ({
+        return resp.data.response.map((c: { name: string; code: string; flag: string }) => ({
             name: c.name,
             code: c.code,
             flag: c.flag
@@ -32,22 +32,22 @@ export class ApiFootballProvider implements IFootballProvider {
 
     async getLeagues(): Promise<IngestedLeague[]> {
         const resp = await this.client.get('/leagues');
-        return resp.data.response.map((item: any) => Normalizer.normalizeLeague(item, this.name));
+        return resp.data.response.map((item: RawLeagueItem) => Normalizer.normalizeLeague(item, this.name));
     }
 
     async getSeasons(leagueId: number): Promise<IngestedSeason[]> {
         const resp = await this.client.get('/leagues', { params: { id: leagueId } });
         const leagueData = resp.data.response[0];
         if (!leagueData) return [];
-        return leagueData.seasons.map((s: any) => Normalizer.normalizeSeason(leagueData, s, this.name));
+        return leagueData.seasons.map((s: RawSeasonItem) => Normalizer.normalizeSeason(leagueData, s, this.name));
     }
 
     async getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }> {
         const resp = await this.client.get('/teams', { params: { league: leagueId, season } });
         const response = resp.data.response;
 
-        const teams = response.map((item: any) => Normalizer.normalizeTeam(item, this.name));
-        const venues = response.map((item: any) => Normalizer.normalizeVenue(item, this.name));
+        const teams = response.map((item: RawTeamItem) => Normalizer.normalizeTeam(item, this.name));
+        const venues = response.map((item: RawVenueItem) => Normalizer.normalizeVenue(item, this.name));
 
         return { teams, venues };
     }
@@ -56,10 +56,10 @@ export class ApiFootballProvider implements IFootballProvider {
         const resp = await this.client.get('/fixtures', { params: { league: leagueId, season } });
         const response = resp.data.response;
 
-        const fixtures = response.map((item: any) => Normalizer.normalizeFixture(item, this.name));
+        const fixtures = response.map((item: RawFixtureItem) => Normalizer.normalizeFixture(item, this.name));
         const venues = response
-            .filter((item: any) => item.fixture.venue?.id)
-            .map((item: any) => Normalizer.normalizeVenue(item.fixture.venue, this.name));
+            .filter((item: RawFixtureItem) => item.fixture.venue?.id)
+            .map((item: RawFixtureItem) => Normalizer.normalizeVenue(item.fixture.venue as RawVenueItem, this.name));
 
         return { fixtures, venues };
     }
@@ -79,10 +79,10 @@ export class ApiFootballProvider implements IFootballProvider {
                 const resp = await this.client.get('/fixtures', { params: { ids: idsList } });
                 const response = resp.data.response || [];
 
-                const chunkFixtures = response.map((item: any) => Normalizer.normalizeFixture(item, this.name));
+                const chunkFixtures = response.map((item: RawFixtureItem) => Normalizer.normalizeFixture(item, this.name));
                 const chunkVenues = response
-                    .filter((item: any) => item.fixture.venue?.id)
-                    .map((item: any) => Normalizer.normalizeVenue(item.fixture.venue, this.name));
+                    .filter((item: RawFixtureItem) => item.fixture.venue?.id)
+                    .map((item: RawFixtureItem) => Normalizer.normalizeVenue(item.fixture.venue as RawVenueItem, this.name));
 
                 fixtures.push(...chunkFixtures);
                 venues.push(...chunkVenues);
@@ -94,12 +94,12 @@ export class ApiFootballProvider implements IFootballProvider {
         return { fixtures, venues };
     }
 
-    async getMatchEvents(fixtureId: number): Promise<any[]> {
+    async getMatchEvents(fixtureId: number): Promise<IngestedEvent[]> {
         const resp = await this.client.get('/fixtures/events', { params: { fixture: fixtureId } });
-        return resp.data.response.map((item: any) => Normalizer.normalizeEvent(item, fixtureId));
+        return resp.data.response.map((item: RawEventItem) => Normalizer.normalizeEvent(item, fixtureId));
     }
 
-    async getPlayerData(playerId: number, season: number): Promise<any> {
+    async getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null> {
         const resp = await this.client.get('/players', { params: { id: playerId, season } });
         const player = resp.data.response[0];
         if (!player) return null;
@@ -108,6 +108,6 @@ export class ApiFootballProvider implements IFootballProvider {
 
     async getLineups(fixtureId: number): Promise<import('../types').IngestedLineup[]> {
         const resp = await this.client.get('/fixtures/lineups', { params: { fixture: fixtureId } });
-        return resp.data.response.map((item: any) => Normalizer.normalizeLineup(item));
+        return resp.data.response.map((item: RawLineupItem) => Normalizer.normalizeLineup(item));
     }
 }

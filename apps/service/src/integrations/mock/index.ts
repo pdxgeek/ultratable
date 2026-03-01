@@ -7,9 +7,11 @@ import {
     IngestedTeam,
     IngestedVenue,
     IngestedFixture,
+    IngestedEvent,
+    IngestedPlayer,
     IngestedCountry
 } from '../types';
-import { Normalizer } from '../api-football/normalizer';
+import { Normalizer, RawLeagueItem, RawSeasonItem, RawTeamItem, RawVenueItem, RawFixtureItem, RawEventItem, RawPlayerItem } from '../api-football/normalizer';
 
 export class MockFootballProvider implements IFootballProvider {
     name = 'mock';
@@ -26,8 +28,8 @@ export class MockFootballProvider implements IFootballProvider {
     }
 
     async getCountries(): Promise<IngestedCountry[]> {
-        const raw = await this.loadData<any>('leagues.json');
-        return raw.map((item: any) => ({
+        const raw = await this.loadData<{ country: { name: string; code: string; flag: string } }>('leagues.json');
+        return raw.map((item) => ({
             name: item.country.name,
             code: item.country.code,
             flag: item.country.flag
@@ -35,50 +37,50 @@ export class MockFootballProvider implements IFootballProvider {
     }
 
     async getLeagues(): Promise<IngestedLeague[]> {
-        const raw = await this.loadData<any>('leagues.json');
-        return raw.map((item: any) => Normalizer.normalizeLeague(item, this.name));
+        const raw = await this.loadData<RawLeagueItem>('leagues.json');
+        return raw.map((item) => Normalizer.normalizeLeague(item, this.name));
     }
 
     async getSeasons(leagueId: number): Promise<IngestedSeason[]> {
-        const raw = await this.loadData<any>('leagues.json');
-        const league = raw.find((item: any) => item.league.id === leagueId);
+        const raw = await this.loadData<RawLeagueItem & { seasons: RawSeasonItem[] }>('leagues.json');
+        const league = raw.find((item) => item.league.id === leagueId);
         if (!league) return [];
 
-        return league.seasons.map((s: any) => Normalizer.normalizeSeason(league, s, this.name));
+        return league.seasons.map((s) => Normalizer.normalizeSeason(league, s, this.name));
     }
 
-    async getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }> {
-        const raw = await this.loadData<any>('teams.json');
-        const teams = raw.map((item: any) => Normalizer.normalizeTeam(item, this.name));
-        const venues = raw.map((item: any) => Normalizer.normalizeVenue(item, this.name));
+    async getTeams(): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }> {
+        const raw = await this.loadData<RawTeamItem & RawVenueItem>('teams.json');
+        const teams = raw.map((item) => Normalizer.normalizeTeam(item, this.name));
+        const venues = raw.map((item) => Normalizer.normalizeVenue(item, this.name));
         return { teams, venues };
     }
 
-    async getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
-        const raw = await this.loadData<any>('fixtures.json');
-        const fixtures = raw.map((item: any) => Normalizer.normalizeFixture(item, this.name));
+    async getFixtures(): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
+        const raw = await this.loadData<RawFixtureItem>('fixtures.json');
+        const fixtures = raw.map((item) => Normalizer.normalizeFixture(item, this.name));
         const venues = raw
-            .filter((item: any) => item.fixture.venue?.id)
-            .map((item: any) => Normalizer.normalizeVenue(item.fixture.venue, this.name));
+            .filter((item) => item.fixture?.venue?.id)
+            .map((item) => Normalizer.normalizeVenue(item.fixture.venue as RawVenueItem, this.name));
         return { fixtures, venues };
     }
 
-    async getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> { return { fixtures: [], venues: [] }; }
+    async getFixturesByIds(): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> { return { fixtures: [], venues: [] }; }
 
-    async getMatchEvents(fixtureId: number): Promise<any[]> {
-        const raw = await this.loadData<any>('events.json');
+    async getMatchEvents(fixtureId: number): Promise<IngestedEvent[]> {
+        const raw = await this.loadData<RawEventItem>('events.json');
         return raw
-            .filter((e: any) => e.fixtureId === fixtureId)
-            .map((item: any) => Normalizer.normalizeEvent(item, fixtureId));
+            .filter((e) => e.fixtureId === fixtureId)
+            .map((item) => Normalizer.normalizeEvent(item, fixtureId));
     }
 
-    async getLineups(fixtureId: number): Promise<import('../types').IngestedLineup[]> {
+    async getLineups(): Promise<import('../types').IngestedLineup[]> {
         return [];
     }
 
-    async getPlayerData(playerId: number, season: number): Promise<any> {
-        const raw = await this.loadData<any>('players.json');
-        const player = raw.find((p: any) => p.player.id === playerId);
+    async getPlayerData(playerId: number): Promise<IngestedPlayer | null> {
+        const raw = await this.loadData<RawPlayerItem>('players.json');
+        const player = raw.find((p) => p.player.id === playerId);
         if (!player) return null;
         return Normalizer.normalizePlayer(player);
     }

@@ -33,7 +33,7 @@ describe('GfxService - CAS Sideloading', () => {
     });
 
     it('should download, hash, and upload a new image', async () => {
-        (axios.get as any).mockResolvedValue({
+        (axios.get as import('vitest').Mock).mockResolvedValue({
             data: testBuffer,
             headers: { 'content-type': 'image/png' }
         });
@@ -41,7 +41,7 @@ describe('GfxService - CAS Sideloading', () => {
         const listMock = vi.fn().mockResolvedValue({ data: [], error: null });
         const uploadMock = vi.fn().mockResolvedValue({ data: {}, error: null });
 
-        (supabase.storage.from as any).mockReturnValue({
+        (supabase.storage.from as import('vitest').Mock).mockReturnValue({
             list: listMock,
             upload: uploadMock
         });
@@ -57,7 +57,7 @@ describe('GfxService - CAS Sideloading', () => {
     });
 
     it('should NOT upload if image already exists in storage', async () => {
-        (axios.get as any).mockResolvedValue({
+        (axios.get as import('vitest').Mock).mockResolvedValue({
             data: testBuffer,
             headers: { 'content-type': 'image/png' }
         });
@@ -65,7 +65,7 @@ describe('GfxService - CAS Sideloading', () => {
         const listMock = vi.fn().mockResolvedValue({ data: [{ name: testHash }], error: null });
         const uploadMock = vi.fn();
 
-        (supabase.storage.from as any).mockReturnValue({
+        (supabase.storage.from as import('vitest').Mock).mockReturnValue({
             list: listMock,
             upload: uploadMock
         });

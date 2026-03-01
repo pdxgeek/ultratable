@@ -1,13 +1,11 @@
 import { builder } from './builder';
 import { repository } from '../repositories/supabase.repository';
-import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
 import { JobRunner } from '../workers/runner';
 import { LeagueRef, SeasonRef } from './football';
 
-const CatalogCountryRef = builder.objectRef<any>('CatalogCountry');
-const CatalogLeagueRef = builder.objectRef<any>('CatalogLeague');
+const CatalogCountryRef = builder.objectRef<typeof schema.catalogCountries.$inferSelect>('CatalogCountry');
+const CatalogLeagueRef = builder.objectRef<typeof schema.catalogLeagues.$inferSelect>('CatalogLeague');
 const CatalogSeasonRef = builder.simpleObject('CatalogSeason', {
     fields: (t) => ({
         year: t.int(),
@@ -39,7 +37,7 @@ builder.objectType(CatalogLeagueRef, {
         sourceId: t.exposeInt('sourceId'),
         seasons: t.field({
             type: [CatalogSeasonRef],
-            resolve: (parent) => (parent.metadata as any)?.seasons || [],
+            resolve: (parent) => ((parent.metadata as Record<string, unknown>)?.seasons as Record<string, unknown>[]) || [],
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     }),

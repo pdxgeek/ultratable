@@ -65,8 +65,10 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                     break;
                 }
                 default: {
-                    const valA = (a as any)[sortConfig.key] as number;
-                    const valB = (b as any)[sortConfig.key] as number;
+                    const rowA = a as unknown as Record<string, number>;
+                    const rowB = b as unknown as Record<string, number>;
+                    const valA = rowA[sortConfig.key];
+                    const valB = rowB[sortConfig.key];
                     comparison = valA - valB;
                 }
             }

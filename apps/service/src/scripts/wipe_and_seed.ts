@@ -27,8 +27,8 @@ async function clearStorage() {
         }
 
         console.log('✅ Storage bucket cleared.');
-    } catch (e: any) {
-        console.error('Failed to clear storage bucket:', e.message);
+    } catch (e: unknown) {
+        console.error('Failed to clear storage bucket:', (e as Error).message);
         // Don't throw, allow DB wipe to continue even if storage wipe fails or isn't configured correctly
     }
 }
@@ -96,10 +96,10 @@ async function run() {
         console.log('✅ WIPE AND RELOAD FINISHED SUCCESSFULLY');
         console.log('====================================');
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('\n❌ SCRIPT FAILED:');
-        console.error(error.message || error);
-        if (error.stack) console.error(error.stack);
+        console.error((error as Error).message || error);
+        if ((error as Error).stack) console.error((error as Error).stack);
     } finally {
         process.exit(0);
     }

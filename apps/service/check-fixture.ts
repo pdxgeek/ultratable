@@ -1,6 +1,5 @@
 import { db } from './src/db';
 import { sql } from 'drizzle-orm';
-import * as schema from './src/db/schema';
 
 async function main() {
     try {

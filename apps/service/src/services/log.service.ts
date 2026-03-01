@@ -16,15 +16,15 @@ class DrizzleTransport extends Transport {
         super(opts);
     }
 
-    log(info: any, callback: () => void) {
+    log(info: Record<string, unknown>, callback: () => void) {
         setImmediate(() => {
             this.emit('logged', info);
         });
 
         // Ensure we gracefully format to database schema
         const lvl = info.level as LogLevel;
-        const msg = info.message;
-        const mod = info.module || 'System';
+        const msg = info.message as string;
+        const mod = (info.module as string) || 'System';
 
         // Filter out winston core symbols for the context JSON payload
         const context = { ...info };
@@ -38,7 +38,7 @@ class DrizzleTransport extends Transport {
             module: mod,
             message: msg,
             context: cleanContext
-        }).catch((e: any) => {
+        }).catch((e: Error) => {
             console.error('[Logger] Failed to write system_log to database:', e.message);
         });
 
@@ -72,19 +72,19 @@ export const globalLogger = winston.createLogger({
 
 // Polyfill old static methods so we don't break un-migrated code instantly
 export class LogService {
-    static async log(level: LogLevel, module: string, message: string, context?: any) {
+    static async log(level: LogLevel, module: string, message: string, context?: Record<string, unknown>) {
         globalLogger.log(level, message, { module, ...context });
     }
 
-    static async info(module: string, message: string, context?: any) {
+    static async info(module: string, message: string, context?: Record<string, unknown>) {
         globalLogger.info(message, { module, ...context });
     }
 
-    static async warn(module: string, message: string, context?: any) {
+    static async warn(module: string, message: string, context?: Record<string, unknown>) {
         globalLogger.warn(message, { module, ...context });
     }
 
-    static async error(module: string, message: string, context?: any) {
+    static async error(module: string, message: string, context?: Record<string, unknown>) {
         globalLogger.error(message, { module, ...context });
     }
 }

@@ -10,6 +10,14 @@ interface PlayerInfoPopupProps {
     onClose: () => void;
 }
 
+interface PlayerStats {
+    league?: { id: number };
+    team?: { name: string };
+    games?: { appearences?: number; minutes?: number; rating?: string; number?: number; position?: string };
+    goals?: { total?: number; assists?: number };
+    cards?: { yellow?: number; red?: number };
+}
+
 const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, leagueSourceId, anchorRect, onClose }) => {
     const { player, isLoading } = usePlayer(playerId, season);
 
@@ -60,13 +68,13 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
     const currentStats = (() => {
         if (!player.statistics?.length) return null;
         if (leagueSourceId) {
-            const match = player.statistics.find((s: any) => s.league?.id === leagueSourceId);
-            if (match) return match;
+            const match = player.statistics.find((s: PlayerStats) => s.league?.id === leagueSourceId);
+            if (match) return match as PlayerStats;
         }
         // Fallback: pick entry with most appearances
-        return player.statistics.reduce((best: any, s: any) =>
+        return player.statistics.reduce((best: PlayerStats, s: PlayerStats) =>
             (s.games?.appearences || 0) > (best?.games?.appearences || 0) ? s : best
-            , player.statistics[0]);
+            , player.statistics[0]) as PlayerStats;
     })();
 
     return (
@@ -95,9 +103,9 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
             <div className="player-popup__body">
                 {/* Bio */}
                 <div className="player-popup__section">
-                    <Row label="Age" value={player.age} />
-                    {player.height && <Row label="Height" value={player.height} />}
-                    {player.weight && <Row label="Weight" value={player.weight} />}
+                    <Row label="Age" value={player.age as string | number} />
+                    {player.height && <Row label="Height" value={player.height as string} />}
+                    {player.weight && <Row label="Weight" value={player.weight as string} />}
                 </div>
 
                 {/* Season stats */}
@@ -137,7 +145,7 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
     );
 };
 
-const Row = ({ label, value }: { label: string; value: any }) => (
+const Row = ({ label, value }: { label: string; value: string | number | undefined }) => (
     <div className="player-popup__row">
         <span className="player-popup__label">{label}</span>
         <span className="player-popup__value">{value ?? 'N/A'}</span>
