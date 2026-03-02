@@ -1,4 +1,4 @@
-import { builder } from './builder';
+import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
 
 const ConfigStatusRef = builder.objectRef<{
@@ -22,7 +22,8 @@ builder.objectType(ConfigStatusRef, {
 builder.queryField('configStatus', (t) =>
     t.field({
         type: ConfigStatusRef,
-        resolve: async () => {
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
             return {
                 isDatabaseConnected: await repository.config.getDatabaseUrlMasked() !== null,
                 apiFootballKeyMasked: await repository.config.getApiFootballKeyMasked(),
@@ -39,7 +40,8 @@ builder.mutationField('configureDatabase', (t) =>
         args: {
             url: t.arg.string({ required: true }),
         },
-        resolve: async (_, { url }) => {
+        resolve: async (_, { url }, ctx) => {
+            requireAdmin(ctx);
             return repository.config.updateDatabaseUrl(url);
         },
     })
@@ -50,7 +52,8 @@ builder.mutationField('configureApiKey', (t) =>
         args: {
             key: t.arg.string({ required: true }),
         },
-        resolve: async (_, { key }) => {
+        resolve: async (_, { key }, ctx) => {
+            requireAdmin(ctx);
             return repository.config.updateApiFootballKey(key);
         },
     })
@@ -62,7 +65,8 @@ builder.mutationField('configureSupabase', (t) =>
             url: t.arg.string({ required: true }),
             anonKey: t.arg.string({ required: true }),
         },
-        resolve: async (_, { url, anonKey }) => {
+        resolve: async (_, { url, anonKey }, ctx) => {
+            requireAdmin(ctx);
             return repository.config.updateSupabaseConfig(url, anonKey);
         },
     })

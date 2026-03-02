@@ -1,4 +1,4 @@
-import { builder } from './builder';
+import { builder, requireAdmin } from './builder';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { desc, eq } from 'drizzle-orm';
@@ -48,7 +48,8 @@ const SystemLog = builder.simpleObject('SystemLog', {
 builder.queryField('jobs', (t) =>
     t.field({
         type: [JobRef],
-        resolve: async () => {
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
             return db.select().from(schema.jobs).orderBy(schema.jobs.name);
         },
     })
@@ -61,7 +62,8 @@ builder.queryField('jobExecutions', (t) =>
             jobId: t.arg.string({ required: false }),
             limit: t.arg.int({ required: false }),
         },
-        resolve: async (_, { jobId, limit }) => {
+        resolve: async (_, { jobId, limit }, ctx) => {
+            requireAdmin(ctx);
             const query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
             if (jobId) {
                 const res = await db.select().from(schema.jobExecutions)
@@ -81,7 +83,8 @@ builder.queryField('systemLogs', (t) =>
         args: {
             limit: t.arg.int({ required: false }),
         },
-        resolve: async (_, { limit }) => {
+        resolve: async (_, { limit }, ctx) => {
+            requireAdmin(ctx);
             return db.select().from(schema.systemLogs).orderBy(desc(schema.systemLogs.createdAt)).limit(limit || 100);
         },
     })
@@ -93,7 +96,8 @@ builder.mutationField('runJob', (t) =>
         args: {
             name: t.arg.string({ required: true }),
         },
-        resolve: async (_, { name }) => {
+        resolve: async (_, { name }, ctx) => {
+            requireAdmin(ctx);
             await JobRunner.run(name, async (reporter) => {
                 if (name.startsWith('sync-fixtures-')) {
                     const parts = name.split('-');

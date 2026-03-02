@@ -1,4 +1,4 @@
-import { builder } from './builder';
+import { builder, requireAdmin } from './builder';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, and, SQL } from 'drizzle-orm';
@@ -50,7 +50,8 @@ builder.mutationFields((t) => ({
             entityType: t.arg.string({ required: true }),
             url: t.arg.string({ required: true })
         },
-        resolve: async (_root, args) => {
+        resolve: async (_root, args, ctx) => {
+            requireAdmin(ctx);
             return graphicsService.registerFromUrl(args.entityId, args.entityType, args.url);
         }
     }),
@@ -61,7 +62,8 @@ builder.mutationFields((t) => ({
             entityId: t.arg.string({ required: true }),
             entityType: t.arg.string({ required: true })
         },
-        resolve: async (_root, args) => {
+        resolve: async (_root, args, ctx) => {
+            requireAdmin(ctx);
             return graphicsService.autoSideloadGraphic(args.entityId, args.entityType);
         }
     })

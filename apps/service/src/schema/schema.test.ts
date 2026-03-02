@@ -109,7 +109,15 @@ describe('GraphQL Schema', () => {
             stats: { processedCount: 1, apiCallsCount: 1 }
         });
 
-        const response = await yoga.fetch('http://localhost:8080/graphql', {
+        // Mutations now require admin — create a yoga instance with admin context
+        const adminYoga = createYoga({
+            schema: builder.toSchema(),
+            context: () => ({
+                user: { id: 'admin-test', roles: ['admin'] }
+            })
+        });
+
+        const response = await adminYoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

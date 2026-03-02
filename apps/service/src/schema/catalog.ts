@@ -1,4 +1,4 @@
-import { builder } from './builder';
+import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
@@ -46,7 +46,8 @@ builder.objectType(CatalogLeagueRef, {
 builder.queryFields((t) => ({
     catalogCountries: t.field({
         type: [CatalogCountryRef],
-        resolve: async () => {
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
             return repository.football.getCatalogCountries();
         },
     }),
@@ -56,7 +57,8 @@ builder.queryFields((t) => ({
             countryId: t.arg.string({ required: false }),
             sourceId: t.arg.int({ required: false }),
         },
-        resolve: async (_, { countryId, sourceId }) => {
+        resolve: async (_, { countryId, sourceId }, ctx) => {
+            requireAdmin(ctx);
             return repository.football.getCatalogLeagues(countryId || undefined, sourceId || undefined);
         },
     }),
@@ -70,7 +72,8 @@ builder.mutationFields((t) => ({
                 processedCount: t.int(),
             }),
         }),
-        resolve: async () => {
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
             let processedCount = 0;
             await JobRunner.run('sync-catalog', async () => {
                 const res = await repository.football.syncCatalogLeagues();
@@ -88,7 +91,8 @@ builder.mutationFields((t) => ({
         args: {
             catalogId: t.arg.string({ required: true }),
         },
-        resolve: async (_, { catalogId }) => {
+        resolve: async (_, { catalogId }, ctx) => {
+            requireAdmin(ctx);
             return repository.football.promoteLeague(catalogId);
         },
     }),
@@ -97,7 +101,8 @@ builder.mutationFields((t) => ({
         args: {
             catalogId: t.arg.string({ required: true }),
         },
-        resolve: async (_, { catalogId }) => {
+        resolve: async (_, { catalogId }, ctx) => {
+            requireAdmin(ctx);
             return repository.football.refreshCatalogSeasons(catalogId);
         },
     }),
@@ -107,7 +112,8 @@ builder.mutationFields((t) => ({
             leagueId: t.arg.string({ required: true }),
             year: t.arg.int({ required: true }),
         },
-        resolve: async (_, { leagueId, year }) => {
+        resolve: async (_, { leagueId, year }, ctx) => {
+            requireAdmin(ctx);
             return repository.football.importSeason(leagueId, year);
         },
     }),
@@ -116,7 +122,8 @@ builder.mutationFields((t) => ({
         args: {
             seasonId: t.arg.string({ required: true }),
         },
-        resolve: async (_, { seasonId }) => {
+        resolve: async (_, { seasonId }, ctx) => {
+            requireAdmin(ctx);
             return repository.football.removeSeason(seasonId);
         },
     }),
@@ -126,7 +133,8 @@ builder.mutationFields((t) => ({
             seasonId: t.arg.string({ required: true }),
             configJson: t.arg.string({ required: true }),
         },
-        resolve: async (_, { seasonId, configJson }) => {
+        resolve: async (_, { seasonId, configJson }, ctx) => {
+            requireAdmin(ctx);
             const config = JSON.parse(configJson);
             return repository.football.updateSeasonConfig(seasonId, config);
         },

@@ -26,7 +26,13 @@ const yoga = createYoga<{
     schema: builder.toSchema(),
     context: async ({ req }) => {
         const headers = toWebHeaders(req.headers);
-        const session = await auth.api.getSession({ headers });
+
+        let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null;
+        try {
+            session = await auth.api.getSession({ headers });
+        } catch {
+            // Malformed or expired cookie — treat as unauthenticated Guest
+        }
 
         if (!session?.user?.id) {
             return { req, user: undefined };
