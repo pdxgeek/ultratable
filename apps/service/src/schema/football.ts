@@ -1,4 +1,4 @@
-import { builder } from './builder';
+import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
 import { JobRunner } from '../workers/runner';
 import { db } from '../db';
@@ -469,7 +469,8 @@ builder.queryField('teams', (t) =>
 builder.mutationField('ingestLeagues', (t) =>
     t.field({
         type: [LeagueRef],
-        resolve: async () => {
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
             return repository.football.getLeagues();
         },
     })
@@ -482,7 +483,8 @@ builder.mutationField('syncFixtures', (t) =>
             leagueId: t.arg.int({ required: true }),
             season: t.arg.int({ required: true }),
         },
-        resolve: async (_, { leagueId, season }) => {
+        resolve: async (_, { leagueId, season }, ctx) => {
+            requireAdmin(ctx);
             let result: Array<typeof schema.fixtures.$inferSelect> = [];
             await JobRunner.run(`sync-fixtures-${leagueId}-${season}`, async () => {
                 const syncRes = await repository.football.syncFixtures(leagueId, season);
@@ -519,7 +521,8 @@ builder.mutationField('saveLeagueConfig', (t) =>
             id: t.arg.string({ required: true }),
             configJson: t.arg.string({ required: true }),
         },
-        resolve: async (_, { id, configJson }) => {
+        resolve: async (_, { id, configJson }, ctx) => {
+            requireAdmin(ctx);
             let metadata: Record<string, unknown>;
             try {
                 metadata = JSON.parse(configJson);
@@ -543,7 +546,8 @@ builder.mutationField('saveSeasonConfig', (t) =>
             configJson: t.arg.string({ required: true }),
             rankingCriteria: t.arg.stringList({ required: false }),
         },
-        resolve: async (_, { id, configJson, rankingCriteria }) => {
+        resolve: async (_, { id, configJson, rankingCriteria }, ctx) => {
+            requireAdmin(ctx);
             let metadata: Record<string, unknown>;
             try {
                 metadata = JSON.parse(configJson);

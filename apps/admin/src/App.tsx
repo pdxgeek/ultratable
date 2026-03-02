@@ -6,7 +6,6 @@ import type { LogEntry } from './components/LogsView';
 import { cn } from './utils';
 
 import { DevLoginTools } from './components/DevLoginTools';
-import { authClient } from './lib/auth-client';
 import ballerFailImg from './assets/baller_fail.png';
 import WorkersView from './components/WorkersView';
 import type { Job, Execution } from './components/WorkersView';
@@ -41,7 +40,7 @@ const App: React.FC = () => {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'omit', // We omit cookies for these admin stats since they aren't fully locked behind requireAdmin yet, but better Auth is failing parsing them if included without a session
+        credentials: 'include',
         body: JSON.stringify({
           query: `
                           query {
@@ -68,7 +67,7 @@ const App: React.FC = () => {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'omit',
+        credentials: 'include',
         body: JSON.stringify({
           query: `{ configStatus { isDatabaseConnected apiFootballKeyMasked databaseUrlMasked supabaseUrlMasked supabaseAnonKeyMasked } }`
         })
