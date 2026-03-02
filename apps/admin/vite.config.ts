@@ -12,7 +12,8 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5174,
       proxy: {
-        '/graphql': target
+        '/graphql': target,
+        '/api': target
       }
     }
   }

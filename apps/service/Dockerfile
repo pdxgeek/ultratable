@@ -28,7 +28,7 @@ COPY apps/service/package.json ./ultratable-service/
 
 # Navigate to the service directory and install production dependencies directly
 WORKDIR /app/ultratable-service
-RUN npm install --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
 # Navigate back to root for the rest of the setup
 WORKDIR /app

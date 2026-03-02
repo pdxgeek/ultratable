@@ -82,7 +82,12 @@ You must strictly adhere to the following coding standards when working on this 
 ---
 
 ## 6. AI Agent Operational Rules
+- **ANSWER QUESTIONS FIRST (DO NOT MUTATE)**: If the owner explicitly asks a question (e.g., "why...", "did you...", "how does..."), you must **JUST ANSWER IT**. Do NOT make autonomous code changes, do NOT trigger deployments, and do NOT proactively mutate state while answering a direct query. Always wait for explicit instruction to proceed with changes after answering.
 - **Strict TypeScript (No `any`)**: We explicitly chose TypeScript to avoid loose typing. **DO NOT use `any` under any circumstances.** Always define proper interfaces, use `unknown` with assertions if the type is truly not known, and leverage Drizzle's `$inferSelect`/`$inferInsert` for database types. Maintaining a strict, zero-warning TypeScript environment is mandatory. Always verify your changes do not introduce warnings by running `npm run lint --workspaces`.
 - **Keep It Tight (Small & Modular)**: DO NOT build massive "God Components" (like a 1700-line `App.tsx`). Break your code down into small, focused, and independently testable components. This saves context memory, prevents hallucination, makes patching code much safer, and enforces strict type boundaries (via component props).
 - **Token Efficiency**: Do NOT waste tokens doing massive, expensive architectural operations or gigantic refactors that simple instructions to the Owner (David) could accomplish. 
 - **Ask First**: If a task requires manipulating hundreds of files or executing a convoluted process, write a short, clear prompt for the owner to run natively instead of blowing through the context window.
+- **Utility Script Generation**: When creating one-off utility, migration, or debugging scripts:
+  1. **Always write them to `/tmp/`** (e.g., `/tmp/migrate-auth-tables.ts`). NEVER scatter them in the workspace root or inside `apps/`.
+  2. **Include a header comment** at the top of every script explaining: (a) what it does, (b) why it was generated, and (c) datetime of creation.
+  3. **Clean up after yourself** — delete any temp scripts once the task is complete. If a script has lasting value, propose promoting it to `scripts/` with proper documentation.

@@ -1,36 +1,23 @@
 # UltraTable Roadmap
 
 ## Vision
-
 UltraTable is an embeddable sports standings and prediction widget platform. League admins and content creators can integrate real-time data from their own API sources, enable fan predictions, and showcase head-to-head accuracy battles.
 
-**Core Principle**: We don't provide data - we provide the rendering, caching, and prediction infrastructure. Users bring their own API keys and data sources.
+## Overall Roadmap
 
----
-
-## Phase 1: Core Widget (Current)
-
-### ✅ Completed
-- [x] Standings table with live data
-- [x] Match detail pages with lineups
-- [x] Player hover popups with stats
-- [x] Graphics registry with LRU caching
-- [x] Mock data provider for testing
-- [x] API-Football integration
-- [x] Persistent IndexedDB storage
-- [x] Base32 NanoID system
-- [x] Test suite (59/59 passing)
-
-### 🚧 In Progress
-- [ ] Verify EFL Championship data loads correctly
-- [ ] Fix remaining 404s on missing assets
-- [ ] CORS handling for production
-
----
-
-## Phase 2: Prediction System
-
-### Core Features
+### MVP
+  - A standings table with EFL data deployed 
+    * (UI MVP is mostly complete)
+  - GQL Service with Postgres DB in the cloud (Supabase) 
+    * GQL Service is successfully feeding the UI MVP
+    * Supabase is deployed
+    * GQL service deployment is TBD
+  - Secure connection between service and database 
+    * Still TBD
+  - Oauth login for users 
+    * Still TBD
+ 
+### Post MVP : Prediction System 
 
 **1. Prediction Submission**
 - View upcoming fixtures for next gameweek
@@ -79,87 +66,6 @@ Additional scoring ideas:
 - Weekly roundup of predictions
 - "Hot takes that aged poorly"
 
-### Data Model
-
-```typescript
-interface Prediction {
-  id: string;                  // NanoID
-  profileId: string;           // Which predictor made this
-  fixtureId: string;           // Which match
-  homeScore: number;
-  awayScore: number;
-  confidence?: number;         // Optional 1-5 rating
-  notes?: string;              // Optional prediction notes
-  lockedAt: number;            // Timestamp when locked
-  createdAt: number;
-  updatedAt?: number;
-}
-
-interface PredictorProfile {
-  id: string;                  // NanoID
-  displayName: string;
-  slug: string;                // URL-friendly name
-  avatar?: string;             // Image URL or emoji
-  bio?: string;
-  stats: {
-    totalPredictions: number;
-    exactScores: number;
-    correctOutcomes: number;
-    wrongPredictions: number;
-    accuracy: number;          // Percentage
-    points: number;            // Total points earned
-    currentStreak: number;
-    bestStreak: number;
-    averageConfidence?: number;
-  };
-  socialLinks?: {
-    youtube?: string;
-    twitch?: string;
-    twitter?: string;
-  };
-  createdAt: number;
-}
-
-interface PredictionResult {
-  predictionId: string;
-  fixtureId: string;
-  predicted: { home: number; away: number };
-  actual: { home: number; away: number };
-  points: number;             // 0, 1, or 3
-  type: 'exact' | 'outcome' | 'wrong';
-}
-```
-
-### UI Components
-
-**Prediction Form**
-- Upcoming fixtures list
-- Score input (home/away)
-- Optional confidence slider
-- Optional notes field
-- Save/lock button
-- Time until lock indicator
-
-**Profile Dashboard**
-- Profile header with stats
-- Prediction history table
-- Accuracy chart over time
-- Upcoming predictions
-- Edit profile button
-
-**Comparison View**
-- Side-by-side profile stats
-- Week-by-week comparison table
-- Win/loss record between them
-- Accuracy trend charts
-
-**Review Page**
-- List of predictions vs actual
-- Filter by correct/wrong
-- Highlight best/worst predictions
-- Share to social media
-
----
 
 ## Phase 3: Stream Integration Widgets
 
