@@ -5,7 +5,9 @@ import { LogsView } from './components/LogsView';
 import type { LogEntry } from './components/LogsView';
 import { cn } from './utils';
 
-
+import { DevLoginTools } from './components/DevLoginTools';
+import { authClient } from './lib/auth-client';
+import ballerFailImg from './assets/baller_fail.png';
 import WorkersView from './components/WorkersView';
 import type { Job, Execution } from './components/WorkersView';
 import DashboardView from './components/DashboardView';
@@ -25,6 +27,8 @@ interface ConfigStatus {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [config, setConfig] = useState<ConfigStatus | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
 
   // Worker State (Lifted)
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -37,14 +41,15 @@ const App: React.FC = () => {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'omit', // We omit cookies for these admin stats since they aren't fully locked behind requireAdmin yet, but better Auth is failing parsing them if included without a session
         body: JSON.stringify({
           query: `
-                        query {
-                            jobs { id name scheduleCron isActive lastRunAt updatedAt }
-                            jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount totalCount apiCallsCount }
-                            systemLogs(limit: 100) { id level module message context createdAt }
-                        }
-                    `
+                          query {
+                              jobs { id name scheduleCron isActive lastRunAt updatedAt }
+                              jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount totalCount apiCallsCount }
+                              systemLogs(limit: 100) { id level module message context createdAt }
+                          }
+                      `
         })
       });
       const json = await resp.json();
@@ -63,6 +68,7 @@ const App: React.FC = () => {
       const resp = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'omit',
         body: JSON.stringify({
           query: `{ configStatus { isDatabaseConnected apiFootballKeyMasked databaseUrlMasked supabaseUrlMasked supabaseAnonKeyMasked } }`
         })
@@ -75,13 +81,35 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    let mounted = true;
+    const fetchSession = async () => {
+      try {
+        // Fetch the domain user (UUID + roles) via the authLinks bridge
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        const data = await res.json();
+        if (mounted) setSession(data?.user ? { user: data.user } : null);
+      } catch {
+        if (mounted) setSession(null);
+      } finally {
+        if (mounted) setSessionLoading(false);
+      }
+    };
+    fetchSession();
+
+    const onAuthChange = () => fetchSession();
+    window.addEventListener('dev-auth-change', onAuthChange);
+
     fetchStatus();
     fetchWorkerData();
     const interval = setInterval(() => {
       fetchStatus();
       fetchWorkerData();
     }, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      window.removeEventListener('dev-auth-change', onAuthChange);
+    }
   }, []);
 
   const navItems = [
@@ -93,6 +121,30 @@ const App: React.FC = () => {
     { id: 'graphics', label: 'Graphics', icon: ImageIcon },
     { id: 'logs', label: 'Logs', icon: History },
   ];
+
+  if (sessionLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020617] text-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400"></div>
+      </div>
+    );
+  }
+
+  const isAdmin = session?.user?.roles?.includes('admin');
+  if (!isAdmin) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617] text-slate-200 font-sans relative">
+        <img src={ballerFailImg} alt="Fail Whale" className="w-64 h-64 object-contain mb-8 opacity-80" />
+        <h1 className="text-3xl font-bold mb-4 text-slate-100 tracking-tight">Access Denied</h1>
+        <p className="text-slate-400 mb-8 max-w-md text-center">
+          You are currently logged in with the roles <span className="text-sky-400 font-mono">[{session?.user?.roles?.join(', ') || 'Guest'}]</span>.
+          <br /><br />
+          Administrative access is required to view the Ultratable console.
+        </p>
+        <DevLoginTools />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#020617] text-slate-200 font-sans selection:bg-sky-500/30">
@@ -183,6 +235,9 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Global Dev Tools Component */}
+      <DevLoginTools />
     </div>
   );
 };

@@ -19,10 +19,11 @@
     "start:admin": "npm run dev --prefix apps/admin",
     "start:web": "npm run dev --prefix apps/web",
     "start:all": "node scripts/start-all.js",
-    "health:check": "bash health-check.sh"
+    "health:check": "bash health-check.sh",
+    "docker:deploy": "bash scripts/docker-deploy.sh"
   },
-  "dependencies": {},
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
     "typescript": "~5.9.3"
   }

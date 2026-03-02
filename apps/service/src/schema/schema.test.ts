@@ -183,4 +183,62 @@ describe('GraphQL Schema', () => {
         expect(result.data.seasons).toHaveLength(1);
         expect(result.data.seasons[0].year).toBe(2024);
     });
+
+    describe('RBAC Authorization', () => {
+        it('should reject unauthenticated requests to protected endpoints', async () => {
+            const yoga = createYoga({
+                schema: builder.toSchema(),
+                maskedErrors: false,
+                context: () => ({ user: undefined })
+            });
+            const response = await yoga.fetch('http://localhost:8080/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: `{ me }` })
+            });
+
+            const result = await response.json();
+            expect(result.errors).toBeDefined();
+            expect(result.errors[0].message).toContain('Unauthenticated');
+        });
+
+        it('should allow authenticated users and expose their basic role', async () => {
+            // Mock a yoga context that forces a user payload
+            const yoga = createYoga({
+                schema: builder.toSchema(),
+                context: () => ({
+                    user: { id: 'user-123', roles: ['user'] }
+                })
+            });
+
+            const response = await yoga.fetch('http://localhost:8080/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: `{ me }` })
+            });
+
+            const result = await response.json();
+            expect(result.errors).toBeUndefined();
+            expect(result.data.me).toBe('Authenticated as user user-123 with roles user');
+        });
+
+        it('should allow admin roles correctly', async () => {
+            const yoga = createYoga({
+                schema: builder.toSchema(),
+                context: () => ({
+                    user: { id: 'admin-456', roles: ['user', 'admin'] }
+                })
+            });
+
+            const response = await yoga.fetch('http://localhost:8080/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: `{ me }` })
+            });
+
+            const result = await response.json();
+            expect(result.errors).toBeUndefined();
+            expect(result.data.me).toBe('Authenticated as user admin-456 with roles user, admin');
+        });
+    });
 });

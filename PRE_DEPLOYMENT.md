@@ -6,12 +6,17 @@ This phase focuses on making the service production-ready and implementing the c
 One Docker image, one exposed port (`8080`), env vars injected at runtime.
 
 ## Step 2: Make service a real HTTP server
-Right now you have `localhost:4000/graphql`. Keep that shape.
+Right now you have `localhost:8080/graphql`.
 Implement a **Fastify** server that mounts **Better Auth** + **Yoga**:
-- `/auth/*` routes handled by `auth.handler(request.raw, reply.raw)`.
 - `/graphql` handled by Yoga via `yoga.handleNodeRequestAndResponse`.
 - Turn GraphiQL on only when `NODE_ENV !== 'production'`.
-- In Yoga context, read the `Authorization` header, verify Better Auth JWT, set `ctx.user`.
+
+## Step 2.5: Authentication Service Deployment (Better Auth)
+Integrate **Better Auth** within Fastify to act as the identity provider:
+- `/auth/*` routes handled by `auth.handler(request.raw, reply.raw)`.
+- Better Auth will uniformly manage HTTP-Only Cookies automatically for sessions in both Dev and Production.
+- Intercept requests in the Yoga context, read the active session via `auth.api.getSession`, and verify the user.
+- Extract `user.id` and `user.roles` from the active session payload and set `ctx.user` for downstream resolvers.
 
 ## Step 3: Database Setup & Auth Linking
 Integrate Better Auth with the Drizzle ORM schema:
@@ -19,15 +24,15 @@ Integrate Better Auth with the Drizzle ORM schema:
 - **User Linking Pattern**: Implement a linking pattern. Rather than a 1:1 user-to-auth platform relationship, support multiple accounts (e.g., Google, Github, Email) linking to a single internal UltraTable User UUID.
 - Run `drizzle-kit generate` and `drizzle-kit push` to apply the auth schema.
 
-## Step 4: Wire the client to send JWTs (Logic)
+## Step 4: Wire the client to send Cookies (Logic)
 In both web and admin apps:
 - Implement login via Better Auth (hits `https://api.ultratable.io/auth/...` in prod).
-- **Client-Side JWT Payload Requirements**: Since we are explicitly not caching user domain data, the JWT payload *must* contain:
-  - `sub`: The internal Drizzle/Postgres `User.id` (UUIDv4) for immediate database lookups.
-  - `roles`: An array of strings (e.g., `["admin"]` or `["user"]`) so the Yoga context can immediately enforce RBAC before hitting the database.
-- Store and access JWT client-side.
-- Ensure every GraphQL request includes: `Authorization: Bearer <jwt>`.
-- No cookies. No CORS credential gymnastics. Local `localhost:4000/graphql` flow stays the same.
+- **Client-Side Requirements**: Since we are using standard stateful sessions:
+  - Ensure every GraphQL request includes `credentials: 'include'` so the browser attaches the HTTP-Only cookie automatically.
+  - The Fastify Backend must be explicitly configured to whitelist the frontend URLs for CORS and allow credentials.
+- **Development Tools (Admin UI)**: Build a "Dev Login" component in the admin interface that:
+  - Hits a custom `/auth/dev-login` backend endpoint (setup in Step 2.5) that directly mints a new Better Auth HTTP-Only Cookie Session for `Guest`, `User`, or `Admin` accounts.
+  - Displays the current active Session payload (Role, User ID) for easy inspection during development context switching.
 
 ## Step 5: Enforce RBAC in the service
 The lock is in the service. Implement the following roles:
