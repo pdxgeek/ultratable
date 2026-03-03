@@ -1,13 +1,14 @@
 import { ConfigRepository, FootballRepository, IRepository, SyncResult } from './interfaces';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql, and, gt, inArray, lte } from 'drizzle-orm';
+import { eq, sql, and, gt, inArray, notInArray, lte } from 'drizzle-orm';
 import { IFootballProvider } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
 import { MockFootballProvider } from '../integrations/mock';
 import { graphicsService } from '../services/graphics.service';
 import { globalLogger } from '../services/log.service';
+import { cacheService, TTL, fixtureTTL, seasonTTL } from '../services/cache.service.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -102,8 +103,14 @@ export class SupabaseFootballRepository implements FootballRepository {
 
     async getLeagues(): Promise<Array<typeof schema.leagues.$inferSelect>> {
         if (!db) return [];
+        const cached = cacheService.get<Array<typeof schema.leagues.$inferSelect>>('leagues');
+        if (cached) return cached;
+
         const existing = await db.select().from(schema.leagues);
-        if (existing.length > 0) return existing;
+        if (existing.length > 0) {
+            cacheService.set('leagues', existing, TTL.STABLE);
+            return existing;
+        }
 
         const ingested = await this.provider.getLeagues();
 
@@ -118,7 +125,9 @@ export class SupabaseFootballRepository implements FootballRepository {
         }));
 
         await db.insert(schema.leagues).values(leaguesToInsert).onConflictDoNothing();
-        return db.select().from(schema.leagues);
+        const result = await db.select().from(schema.leagues);
+        cacheService.set('leagues', result, TTL.STABLE);
+        return result;
     }
 
     async getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<Array<typeof schema.seasons.$inferSelect>> {
@@ -129,20 +138,33 @@ export class SupabaseFootballRepository implements FootballRepository {
             if (!league) return [];
             leagueId = league.id;
         }
-        return db.select().from(schema.seasons).where(eq(schema.seasons.leagueId, leagueId as string));
+        const cacheKey = `seasons:${leagueId}`;
+        const cached = cacheService.get<Array<typeof schema.seasons.$inferSelect>>(cacheKey);
+        if (cached) return cached;
+
+        const result = await db.select().from(schema.seasons).where(eq(schema.seasons.leagueId, leagueId as string));
+        cacheService.set(cacheKey, result, TTL.STABLE);
+        return result;
     }
 
     async getAllInternalSeasons(): Promise<Array<typeof schema.seasons.$inferSelect>> {
         if (!db) return [];
-        return db.select().from(schema.seasons);
+        const cached = cacheService.get<Array<typeof schema.seasons.$inferSelect>>('seasons:all');
+        if (cached) return cached;
+
+        const result = await db.select().from(schema.seasons);
+        cacheService.set('seasons:all', result, TTL.ACTIVE);
+        return result;
     }
 
-    private formulasCache: Array<typeof schema.rankingFormulas.$inferSelect> | null = null;
     async getRankingFormulas(): Promise<Array<typeof schema.rankingFormulas.$inferSelect>> {
         if (!db) return [];
-        if (this.formulasCache) return this.formulasCache;
-        this.formulasCache = await db.select().from(schema.rankingFormulas).orderBy(schema.rankingFormulas.id);
-        return this.formulasCache!;
+        const cached = cacheService.get<Array<typeof schema.rankingFormulas.$inferSelect>>('formulas');
+        if (cached) return cached;
+
+        const result = await db.select().from(schema.rankingFormulas).orderBy(schema.rankingFormulas.id);
+        cacheService.set('formulas', result, TTL.FROZEN);
+        return result;
     }
 
     async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
@@ -441,6 +463,13 @@ export class SupabaseFootballRepository implements FootballRepository {
     async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
+        // Cache check (skip if caller wants delta via `since`)
+        if (!since) {
+            const cacheKey = `fixtures:${leagueId}:${seasonYear}`;
+            const cached = cacheService.get<Array<typeof schema.fixtures.$inferSelect>>(cacheKey);
+            if (cached) return cached;
+        }
+
         const [season] = await db.select()
             .from(schema.seasons)
             .innerJoin(schema.leagues, eq(schema.seasons.leagueId, schema.leagues.id))
@@ -468,13 +497,14 @@ export class SupabaseFootballRepository implements FootballRepository {
                     .set({ lastLiveSyncAt: now })
                     .where(eq(schema.seasons.id, seasonRecord.id));
 
-                // 2. Find target fixtures: scheduled in the past but not played/postponed/cancelled
+                // 2. Find past-due fixtures that aren't in a terminal state
+                const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
                 const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
                     .from(schema.fixtures)
                     .where(and(
                         eq(schema.fixtures.seasonId, seasonRecord.id),
                         lte(schema.fixtures.scheduledAt, now),
-                        inArray(schema.fixtures.status, ['scheduled', 'live'])
+                        notInArray(schema.fixtures.status, TERMINAL_STATUSES)
                     ));
 
                 if (pastDue.length > 0) {
@@ -563,7 +593,11 @@ export class SupabaseFootballRepository implements FootballRepository {
             ));
         }
 
-        return query;
+        const result = await query;
+        if (!since) {
+            cacheService.set(`fixtures:${leagueId}:${seasonYear}`, result, TTL.ACTIVE);
+        }
+        return result;
     }
 
     // Catalog Management
@@ -640,20 +674,32 @@ export class SupabaseFootballRepository implements FootballRepository {
 
     async getCatalogCountries(): Promise<Array<typeof schema.catalogCountries.$inferSelect>> {
         if (!db) return [];
-        return db.select().from(schema.catalogCountries).orderBy(schema.catalogCountries.name);
+        const cached = cacheService.get<Array<typeof schema.catalogCountries.$inferSelect>>('catalog:countries');
+        if (cached) return cached;
+
+        const result = await db.select().from(schema.catalogCountries).orderBy(schema.catalogCountries.name);
+        cacheService.set('catalog:countries', result, TTL.ACTIVE);
+        return result;
     }
 
     async getCatalogLeagues(countryId?: string, sourceId?: number): Promise<Array<typeof schema.catalogLeagues.$inferSelect>> {
         if (!db) return [];
+        const cacheKey = `catalog:leagues:${countryId || 'all'}:${sourceId || 'all'}`;
+        const cached = cacheService.get<Array<typeof schema.catalogLeagues.$inferSelect>>(cacheKey);
+        if (cached) return cached;
+
         const query = db.select().from(schema.catalogLeagues);
+        let result: Array<typeof schema.catalogLeagues.$inferSelect>;
         if (countryId) {
-            return query.where(eq(schema.catalogLeagues.countryId, countryId))
+            result = await query.where(eq(schema.catalogLeagues.countryId, countryId))
                 .orderBy(schema.catalogLeagues.name);
+        } else if (sourceId) {
+            result = await query.where(eq(schema.catalogLeagues.sourceId, sourceId));
+        } else {
+            result = await query.orderBy(schema.catalogLeagues.name);
         }
-        if (sourceId) {
-            return query.where(eq(schema.catalogLeagues.sourceId, sourceId));
-        }
-        return query.orderBy(schema.catalogLeagues.name);
+        cacheService.set(cacheKey, result, TTL.ACTIVE);
+        return result;
     }
 
     async refreshCatalogSeasons(catalogLeagueId: string): Promise<typeof schema.catalogLeagues.$inferSelect> {
@@ -791,6 +837,10 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     async getMatchEvents(fixtureId: number): Promise<import('../integrations/types').IngestedEvent[]> {
+        const cacheKey = `events:${fixtureId}`;
+        const cached = cacheService.get<import('../integrations/types').IngestedEvent[]>(cacheKey);
+        if (cached) return cached;
+
         const events = await this.provider.getMatchEvents(fixtureId);
 
         // Enrich events with internal player UUIDs if players exist in our DB
@@ -814,6 +864,10 @@ export class SupabaseFootballRepository implements FootballRepository {
             }
         }
 
+        // State-aware TTL: FT fixtures get FROZEN, live get ACTIVE
+        // We don't have status here, so use ACTIVE as default — the fixture detail
+        // queries that know the status will set a more appropriate TTL
+        cacheService.set(cacheKey, events, TTL.ACTIVE);
         return events;
     }
 
@@ -898,6 +952,11 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     async getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null }) | null> {
+        const cacheKey = `player:${playerId}:${season}`;
+        type PlayerResult = typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null };
+        const cached = cacheService.get<PlayerResult>(cacheKey);
+        if (cached) return cached;
+
         const data = await this.provider.getPlayerData(playerId, season);
         if (!data) return null;
 
@@ -934,13 +993,15 @@ export class SupabaseFootballRepository implements FootballRepository {
             );
         }
 
-        return {
+        const result = {
             ...data,
             id: upserted.id,
             sourceName: this.provider.name,
             createdAt: upserted.createdAt,
             updatedAt: upserted.updatedAt
         };
+        cacheService.set(cacheKey, result, TTL.ACTIVE);
+        return result;
     }
 }
 

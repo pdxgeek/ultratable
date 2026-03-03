@@ -1,20 +1,24 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import TopNav from './components/TopNav';
+import Footer from './components/Footer';
 import StandingsView from './pages/StandingsView';
 import MatchPage from './pages/MatchPage';
+import MissionPage from './pages/MissionPage';
 
 const App: React.FC = () => {
   return (
-    <>
+    <div className="app-shell">
       <TopNav />
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 20px' }}>
+      <main className="app-shell__content">
         <Routes>
           <Route path="/" element={<StandingsView />} />
           <Route path="/match/:id" element={<MatchPage />} />
+          <Route path="/mission" element={<MissionPage />} />
         </Routes>
-      </div>
-    </>
+      </main>
+      <Footer />
+    </div>
   );
 };
 
