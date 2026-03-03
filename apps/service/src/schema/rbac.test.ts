@@ -8,7 +8,7 @@
  *   - Admin (role: admin): expects NO auth error (may fail for other reasons)
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { createYoga, type YogaServerInstance } from 'graphql-yoga';
+import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
 
 // Mock ALL modules that schema files import at resolve-time
@@ -106,7 +106,9 @@ import './graphics';
 // ---------------------------------------------------------------------------
 // Yoga instances per role
 // ---------------------------------------------------------------------------
-type YogaInstance = YogaServerInstance<Record<string, unknown>, Record<string, unknown>>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type YogaInstance = ReturnType<typeof createYoga<any>>;
 
 function createTestYoga(user?: { id: string; roles: string[] }): YogaInstance {
     return createYoga({
@@ -153,6 +155,7 @@ const MUTATIONS: RbacTestCase[] = [
     { name: 'configureDatabase', query: 'mutation { configureDatabase(url: "postgres://test") }' },
     { name: 'configureApiKey', query: 'mutation { configureApiKey(key: "test-key") }' },
     { name: 'configureSupabase', query: 'mutation { configureSupabase(url: "https://test", anonKey: "key") }' },
+    { name: 'clearCache', query: 'mutation { clearCache }' },
     // graphics.ts
     { name: 'registerGraphic', query: 'mutation { registerGraphic(entityId: "test", entityType: "team", url: "https://img.png") }' },
     { name: 'autoSideloadGraphic', query: 'mutation { autoSideloadGraphic(entityId: "test", entityType: "team") }' },
@@ -160,6 +163,7 @@ const MUTATIONS: RbacTestCase[] = [
 
 const ADMIN_QUERIES: RbacTestCase[] = [
     { name: 'configStatus', query: '{ configStatus { isDatabaseConnected } }' },
+    { name: 'cacheStats', query: '{ cacheStats { size hitRate } }' },
     { name: 'jobs', query: '{ jobs { id } }' },
     { name: 'jobExecutions', query: '{ jobExecutions { id } }' },
     { name: 'systemLogs', query: '{ systemLogs { id } }' },

@@ -1,5 +1,6 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
+import { cacheService } from '../services/cache.service.js';
 
 const ConfigStatusRef = builder.objectRef<{
     isDatabaseConnected: boolean;
@@ -19,6 +20,24 @@ builder.objectType(ConfigStatusRef, {
     }),
 });
 
+const CacheStatsRef = builder.objectRef<{
+    size: number;
+    maxSize: number;
+    hitRate: string;
+    hits: number;
+    misses: number;
+}>('CacheStats');
+
+builder.objectType(CacheStatsRef, {
+    fields: (t) => ({
+        size: t.exposeInt('size'),
+        maxSize: t.exposeInt('maxSize'),
+        hitRate: t.exposeString('hitRate'),
+        hits: t.exposeInt('hits'),
+        misses: t.exposeInt('misses'),
+    }),
+});
+
 builder.queryField('configStatus', (t) =>
     t.field({
         type: ConfigStatusRef,
@@ -31,6 +50,26 @@ builder.queryField('configStatus', (t) =>
                 supabaseUrlMasked: await repository.config.getSupabaseUrl(),
                 supabaseAnonKeyMasked: await repository.config.getSupabaseAnonKeyMasked(),
             };
+        },
+    })
+);
+
+builder.queryField('cacheStats', (t) =>
+    t.field({
+        type: CacheStatsRef,
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
+            return cacheService.stats();
+        },
+    })
+);
+
+builder.mutationField('clearCache', (t) =>
+    t.boolean({
+        resolve: async (_root, _args, ctx) => {
+            requireAdmin(ctx);
+            cacheService.clear();
+            return true;
         },
     })
 );

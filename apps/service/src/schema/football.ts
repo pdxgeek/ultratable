@@ -1,6 +1,7 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
 import { JobRunner } from '../workers/runner';
+import { cacheService } from '../services/cache.service.js';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, and, count, sql } from 'drizzle-orm';
@@ -471,7 +472,9 @@ builder.mutationField('ingestLeagues', (t) =>
         type: [LeagueRef],
         resolve: async (_root, _args, ctx) => {
             requireAdmin(ctx);
-            return repository.football.getLeagues();
+            const result = await repository.football.getLeagues();
+            cacheService.invalidate('leagues');
+            return result;
         },
     })
 );
@@ -495,6 +498,8 @@ builder.mutationField('syncFixtures', (t) =>
                     context: { leagueId, season }
                 };
             });
+            cacheService.invalidate(`fixtures:${leagueId}:${season}`);
+            cacheService.invalidate(`teams:${leagueId}:${season}`);
             return result;
         },
     })
@@ -533,6 +538,7 @@ builder.mutationField('saveLeagueConfig', (t) =>
                 .set({ metadata, updatedAt: new Date() })
                 .where(eq(schema.leagues.id, id))
                 .returning();
+            cacheService.invalidate('leagues');
             return updated;
         }
     })
@@ -563,6 +569,7 @@ builder.mutationField('saveSeasonConfig', (t) =>
                 .set({ metadata, updatedAt: new Date() })
                 .where(eq(schema.seasons.id, id))
                 .returning();
+            cacheService.invalidate('seasons');
             return updated;
         }
     })

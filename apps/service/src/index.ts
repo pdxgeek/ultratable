@@ -5,6 +5,7 @@ import { builder } from './schema/builder';
 import { globalLogger } from './services/log.service';
 import { resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { eq } from 'drizzle-orm';
+import { GraphQLError, type ASTNode, type ValidationContext, type ASTVisitor } from 'graphql';
 
 // Import schema definitions
 import { auth } from './api/auth';
@@ -18,12 +19,47 @@ import './schema/graphics';
 import { db } from './db';
 import * as schema from './db/schema';
 
-// Keep GraphQL Yoga setup the same, just wire up Fastify reply
+/**
+ * GraphQL Depth Limit Validation Rule
+ * Prevents deeply nested queries that could exhaust database resources.
+ * Maximum nesting depth: 10 levels (e.g. league > seasons > teams > venue is 4).
+ */
+const MAX_QUERY_DEPTH = 10;
+
+function measureDepth(node: ASTNode, depth: number): number {
+    if ('selectionSet' in node && node.selectionSet) {
+        return Math.max(...node.selectionSet.selections.map(s => measureDepth(s, depth + 1)));
+    }
+    return depth;
+}
+
+function depthLimitRule(context: ValidationContext): ASTVisitor {
+    return {
+        OperationDefinition(node) {
+            const depth = measureDepth(node, 0);
+            if (depth > MAX_QUERY_DEPTH) {
+                context.reportError(
+                    new GraphQLError(
+                        `Query depth ${depth} exceeds maximum allowed depth of ${MAX_QUERY_DEPTH}`
+                    )
+                );
+            }
+        }
+    };
+}
+
 const yoga = createYoga<{
     req: FastifyRequest
     reply: FastifyReply
 }>({
     schema: builder.toSchema(),
+    plugins: [
+        {
+            onValidate({ addValidationRule }: { addValidationRule: (rule: (ctx: ValidationContext) => ASTVisitor) => void }) {
+                addValidationRule(depthLimitRule);
+            }
+        }
+    ],
     context: async ({ req }) => {
         const headers = toWebHeaders(req.headers);
 
@@ -54,12 +90,19 @@ const yoga = createYoga<{
 
 import fastifyCors from '@fastify/cors';
 import fastifyCookie from '@fastify/cookie';
+import fastifyRateLimit from '@fastify/rate-limit';
 
 const server = Fastify({
     logger: false
 })
 
 server.register(fastifyCookie);
+
+// Global rate limit: 100 requests per minute per IP
+server.register(fastifyRateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+});
 
 server.register(fastifyCors, {
     origin: (origin, cb) => {

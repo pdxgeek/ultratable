@@ -566,3 +566,220 @@ button {
   margin-left: auto;
   /* push to right since logo is absolute */
 }
+
+/* App Shell — flex column to push footer down */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell__content {
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+/* ================================ */
+/*  Footer                          */
+/* ================================ */
+.site-footer {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--glass-border);
+  padding: 32px 24px;
+  margin-top: 48px;
+}
+
+.site-footer__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.site-footer__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.site-footer__name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--accent-blue), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.site-footer__tagline {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.site-footer__links {
+  display: flex;
+  gap: 20px;
+}
+
+.site-footer__link {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.site-footer__link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--accent-blue);
+  transition: width 0.2s ease;
+}
+
+.site-footer__link:hover {
+  color: var(--accent-blue);
+}
+
+.site-footer__link:hover::after {
+  width: 100%;
+}
+
+.site-footer__legal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.site-footer__divider {
+  opacity: 0.4;
+}
+
+/* ================================ */
+/*  Mission Page                    */
+/* ================================ */
+.mission-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 0 40px;
+}
+
+.mission-page__back {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 32px;
+  transition: color 0.2s ease;
+}
+
+.mission-page__back:hover {
+  color: var(--accent-blue);
+}
+
+.mission-page__hero {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.mission-page__title {
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--text-primary), var(--accent-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.mission-page__subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.mission-page__section {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mission-page__section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.mission-page__icon {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+
+.mission-page__section h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.mission-page__section p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.mission-page__cta {
+  text-align: center;
+  margin-top: 40px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(167, 139, 250, 0.08));
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.mission-page__cta p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Responsive footer */
+@media (max-width: 600px) {
+  .site-footer__legal {
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+  }
+
+  .site-footer__divider {
+    display: none;
+  }
+
+  .mission-page__title {
+    font-size: 1.8rem;
+  }
+
+  .mission-page__section {
+    padding: 20px 20px;
+  }
+}

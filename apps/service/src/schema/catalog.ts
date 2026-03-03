@@ -1,5 +1,6 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
+import { cacheService } from '../services/cache.service.js';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
 import { LeagueRef, SeasonRef } from './football';
@@ -83,6 +84,7 @@ builder.mutationFields((t) => ({
                     apiCallsCount: res.stats.apiCallsCount,
                 };
             });
+            cacheService.invalidate('catalog:');
             return { success: true, processedCount };
         },
     }),
@@ -93,7 +95,9 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { catalogId }, ctx) => {
             requireAdmin(ctx);
-            return repository.football.promoteLeague(catalogId);
+            const result = await repository.football.promoteLeague(catalogId);
+            cacheService.invalidate('leagues');
+            return result;
         },
     }),
     refreshCatalogSeasons: t.field({
@@ -103,7 +107,9 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { catalogId }, ctx) => {
             requireAdmin(ctx);
-            return repository.football.refreshCatalogSeasons(catalogId);
+            const result = await repository.football.refreshCatalogSeasons(catalogId);
+            cacheService.invalidate('catalog:');
+            return result;
         },
     }),
     importSeason: t.field({
@@ -114,7 +120,10 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { leagueId, year }, ctx) => {
             requireAdmin(ctx);
-            return repository.football.importSeason(leagueId, year);
+            const result = await repository.football.importSeason(leagueId, year);
+            cacheService.invalidate('seasons');
+            cacheService.invalidate('leagues');
+            return result;
         },
     }),
     removeSeason: t.field({
@@ -124,7 +133,11 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { seasonId }, ctx) => {
             requireAdmin(ctx);
-            return repository.football.removeSeason(seasonId);
+            const result = await repository.football.removeSeason(seasonId);
+            cacheService.invalidate('seasons');
+            cacheService.invalidate('leagues');
+            cacheService.invalidate('fixtures');
+            return result;
         },
     }),
     updateSeasonConfig: t.field({
@@ -136,7 +149,9 @@ builder.mutationFields((t) => ({
         resolve: async (_, { seasonId, configJson }, ctx) => {
             requireAdmin(ctx);
             const config = JSON.parse(configJson);
-            return repository.football.updateSeasonConfig(seasonId, config);
+            const result = await repository.football.updateSeasonConfig(seasonId, config);
+            cacheService.invalidate('seasons');
+            return result;
         },
     }),
 }));

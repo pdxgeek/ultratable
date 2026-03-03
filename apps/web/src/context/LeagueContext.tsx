@@ -71,13 +71,11 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                console.log('[LeagueContext] Starting bootstrap with client...');
+                // Clear sync watermarks so the first delta sync does a full pull
+                // This ensures we never show stale data from a previous session
+                await db.syncState.clear();
+
                 const result = await client.query(LIST_LEAGUES_QUERY, {}).toPromise();
-                console.log('[LeagueContext] Result received:', {
-                    data: !!result.data,
-                    error: result.error,
-                    stale: result.stale
-                });
 
                 if (result.error) {
                     console.error('GraphQL Bootstrap Error:', result.error);

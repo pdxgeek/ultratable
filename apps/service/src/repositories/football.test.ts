@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SupabaseFootballRepository } from './supabase.repository';
 import { db } from '../db';
+import { cacheService } from '../services/cache.service.js';
 
 const mockGet = vi.fn();
 vi.mock('axios', () => ({
@@ -24,6 +25,7 @@ describe('SupabaseFootballRepository', () => {
     beforeEach(() => {
         repo = new SupabaseFootballRepository();
         vi.clearAllMocks();
+        cacheService.clear();
         process.env.API_FOOTBALL_KEY = 'test-key';
     });
 
