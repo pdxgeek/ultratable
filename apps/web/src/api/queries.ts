@@ -1,8 +1,8 @@
 import { gql } from 'urql';
 
 export const SYNC_DATA_QUERY = gql`
-  query SyncData($leagueSourceId: Int!, $seasonYear: Int!, $since: DateTime) {
-    teams(leagueSourceId: $leagueSourceId, seasonYear: $seasonYear, since: $since) {
+  query SyncData($seasonId: String!, $since: DateTime) {
+    teams(seasonId: $seasonId, since: $since) {
       id
       name
       shortName
@@ -10,7 +10,7 @@ export const SYNC_DATA_QUERY = gql`
       logo
       updatedAt
     }
-    fixtures(leagueSourceId: $leagueSourceId, seasonYear: $seasonYear, since: $since) {
+    fixtures(seasonId: $seasonId, since: $since) {
       id
       seasonId
       homeTeamId
@@ -23,7 +23,7 @@ export const SYNC_DATA_QUERY = gql`
       gameweek
       updatedAt
     }
-    venues(leagueSourceId: $leagueSourceId, seasonYear: $seasonYear, since: $since) {
+    venues(seasonId: $seasonId, since: $since) {
       id
       name
       city
@@ -34,8 +34,8 @@ export const SYNC_DATA_QUERY = gql`
 `;
 
 export const LEAGUE_SEASON_QUERY = gql`
-  query GetLeagueSeason($leagueId: Int!, $season: Int!) {
-    seasons(leagueId: $leagueId, year: $season) {
+  query GetLeagueSeason($leagueId: String, $season: Int) {
+    seasons(leagueId: $leagueId) {
       id
       leagueId
       year

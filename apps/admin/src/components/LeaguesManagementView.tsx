@@ -176,15 +176,18 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
       // Fetch teams for the helper dropdown
       if (league) {
-        gqlFetch<{ teams: Record<string, unknown>[] }>(
-          `query($leagueSourceId: Int, $seasonYear: Int) { teams(leagueSourceId: $leagueSourceId, seasonYear: $seasonYear) { id name } }`,
-          { leagueSourceId: league.sourceId, seasonYear: season.year }
-        ).then(data => {
-          setConfigTeams(data.teams || []);
-          setHelperTeamId('');
-          setHelperPoints(0);
-          setHelperReason('');
-        }).catch(err => console.error(err));
+        const seasonObj = configSeasons.find(s => s.id === selectedConfigSeasonId);
+        if (seasonObj) {
+          gqlFetch<{ teams: Record<string, unknown>[] }>(
+            `query($seasonId: String) { teams(seasonId: $seasonId) { id name } }`,
+            { seasonId: seasonObj.id }
+          ).then(data => {
+            setConfigTeams(data.teams || []);
+            setHelperTeamId('');
+            setHelperPoints(0);
+            setHelperReason('');
+          }).catch(err => console.error(err));
+        }
       }
     } else {
       setPromoInput('');
