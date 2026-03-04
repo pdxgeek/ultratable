@@ -4,7 +4,7 @@ import { JobRunner } from '../workers/runner';
 import { cacheService } from '../services/cache.service';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { eq, and, gt, count, sql } from 'drizzle-orm';
 import { graphicsService } from '../services/graphics.service';
 
 // Define object refs first
@@ -386,14 +386,15 @@ builder.queryField('rankingFormulas', (t) =>
 
 builder.queryField('fixtures', (t) =>
     t.field({
+        description: 'Returns fixtures for a league/season. Triggers live polling for past-due fixtures if needed.',
         type: [FixtureRef],
         args: {
-            leagueId: t.arg.int({ required: true }),
-            season: t.arg.int({ required: true }),
-            since: t.arg({ type: 'DateTime', required: false }),
+            leagueSourceId: t.arg.int({ required: true, description: 'API-Football provider league ID (e.g. 40 = Championship)' }),
+            seasonYear: t.arg.int({ required: true, description: 'Calendar year of the season (e.g. 2025)' }),
+            since: t.arg({ type: 'DateTime', required: false, description: 'Delta sync: only return fixtures updated after this timestamp' }),
         },
-        resolve: async (_, { leagueId, season, since }) => {
-            return repository.football.getFixtures(leagueId, season, since || undefined);
+        resolve: async (_, { leagueSourceId, seasonYear, since }) => {
+            return repository.football.getFixtures(leagueSourceId, seasonYear, since || undefined);
         },
     })
 );
@@ -414,24 +415,31 @@ builder.queryField('fixture', (t) =>
 
 builder.queryField('venues', (t) =>
     t.field({
+        description: 'Returns venues used by fixtures in a given league/season.',
         type: [VenueRef],
         args: {
-            leagueId: t.arg.int({ required: true }),
-            season: t.arg.int({ required: true }),
+            leagueSourceId: t.arg.int({ required: true, description: 'API-Football provider league ID' }),
+            seasonYear: t.arg.int({ required: true, description: 'Calendar year of the season' }),
+            since: t.arg({ type: 'DateTime', required: false, description: 'Delta sync: only return venues updated after this timestamp' }),
         },
-        resolve: async (_, { leagueId, season }) => {
+        resolve: async (_, { leagueSourceId, seasonYear, since }) => {
             // Get all venue IDs referenced by fixtures for this league/season
-            const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+            const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
             if (!localLeague) return [];
 
             const [localSeason] = await db.select().from(schema.seasons)
-                .where(and(eq(schema.seasons.leagueId, localLeague.id), eq(schema.seasons.year, season)));
+                .where(and(eq(schema.seasons.leagueId, localLeague.id), eq(schema.seasons.year, seasonYear)));
             if (!localSeason) return [];
+
+            const conditions = [eq(schema.fixtures.seasonId, localSeason.id)];
+            if (since) {
+                conditions.push(gt(schema.venues.updatedAt, since));
+            }
 
             const result = await db.selectDistinct({ venue: schema.venues })
                 .from(schema.venues)
                 .innerJoin(schema.fixtures, eq(schema.fixtures.venueId, schema.venues.id))
-                .where(eq(schema.fixtures.seasonId, localSeason.id));
+                .where(and(...conditions));
 
             return result.map((r) => r.venue);
         },
@@ -440,20 +448,21 @@ builder.queryField('venues', (t) =>
 
 builder.queryField('teams', (t) =>
     t.field({
+        description: 'Returns teams for a league/season. Falls back to full sync if no cached data exists.',
         type: [TeamRef],
         args: {
-            leagueId: t.arg.int({ required: false }),
-            season: t.arg.int({ required: false }),
-            since: t.arg({ type: 'DateTime', required: false }),
+            leagueSourceId: t.arg.int({ required: false, description: 'API-Football provider league ID' }),
+            seasonYear: t.arg.int({ required: false, description: 'Calendar year of the season' }),
+            since: t.arg({ type: 'DateTime', required: false, description: 'Delta sync: only return teams updated after this timestamp' }),
         },
-        resolve: async (_, { leagueId, season, since }) => {
-            if (leagueId && season) {
+        resolve: async (_, { leagueSourceId, seasonYear, since }) => {
+            if (leagueSourceId && seasonYear) {
                 // Try cached data first (fast path)
-                const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+                const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
                 if (!localLeague) return [];
 
                 const [localSeason] = await db.select().from(schema.seasons)
-                    .where(and(eq(schema.seasons.leagueId, localLeague.id), eq(schema.seasons.year, season)));
+                    .where(and(eq(schema.seasons.leagueId, localLeague.id), eq(schema.seasons.year, seasonYear)));
                 if (!localSeason) return [];
 
                 const cached = await db.select({ team: schema.teams })
@@ -469,7 +478,7 @@ builder.queryField('teams', (t) =>
                 }
 
                 // No cached data — do full sync (first time only)
-                return repository.football.getTeams(leagueId, season, since || undefined);
+                return repository.football.getTeams(leagueSourceId, seasonYear, since || undefined);
             }
             return db.select().from(schema.teams);
         },
@@ -490,25 +499,26 @@ builder.mutationField('ingestLeagues', (t) =>
 
 builder.mutationField('syncFixtures', (t) =>
     t.field({
+        description: 'Admin only. Fetches all fixtures from the external API and upserts into the database.',
         type: [FixtureRef],
         args: {
-            leagueId: t.arg.int({ required: true }),
-            season: t.arg.int({ required: true }),
+            leagueSourceId: t.arg.int({ required: true, description: 'API-Football provider league ID' }),
+            seasonYear: t.arg.int({ required: true, description: 'Calendar year of the season' }),
         },
-        resolve: async (_, { leagueId, season }, ctx) => {
+        resolve: async (_, { leagueSourceId, seasonYear }, ctx) => {
             requireAdmin(ctx);
             let result: Array<typeof schema.fixtures.$inferSelect> = [];
-            await JobRunner.run(`sync-fixtures-${leagueId}-${season}`, async () => {
-                const syncRes = await repository.football.syncFixtures(leagueId, season);
+            await JobRunner.run(`sync-fixtures-${leagueSourceId}-${seasonYear}`, async () => {
+                const syncRes = await repository.football.syncFixtures(leagueSourceId, seasonYear);
                 result = syncRes.data;
                 return {
                     processedCount: syncRes.stats.processedCount,
                     apiCallsCount: syncRes.stats.apiCallsCount,
-                    context: { leagueId, season }
+                    context: { leagueSourceId, seasonYear }
                 };
             });
-            cacheService.invalidate(`fixtures:${leagueId}:${season}`);
-            cacheService.invalidate(`teams:${leagueId}:${season}`);
+            cacheService.invalidate(`fixtures:${leagueSourceId}:${seasonYear}`);
+            cacheService.invalidate(`teams:${leagueSourceId}:${seasonYear}`);
             return result;
         },
     })

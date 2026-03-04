@@ -12,6 +12,14 @@ import { cacheService, TTL, fixtureTTL, seasonTTL } from '../services/cache.serv
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+/**
+ * Postgres now() returns microsecond precision, but the GraphQL DateTime scalar
+ * truncates to milliseconds. Using raw now() causes phantom deltas: the client
+ * watermark (ms) is always less than the stored value (µs), so rows re-appear
+ * in every delta sync. Truncating to milliseconds keeps them in sync.
+ */
+const NOW_MS = sql`date_trunc('milliseconds', now())`;
+
 export class SupabaseConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
         // In production, the filesystem is ephemeral (Docker/Fly.io) — .env changes would be lost on redeploy.
@@ -175,16 +183,16 @@ export class SupabaseFootballRepository implements FootballRepository {
      * Read-only: returns teams for a given league+season from the database.
      * Does NOT call the external API. Cached for 30 minutes.
      */
-    async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
+    async getTeams(leagueSourceId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
         if (!db) return [];
 
-        const cacheKey = `teams:${leagueId}:${seasonYear}`;
+        const cacheKey = `teams:${leagueSourceId}:${seasonYear}`;
         if (!since) {
             const cached = cacheService.get<Array<typeof schema.teams.$inferSelect>>(cacheKey);
             if (cached) return cached;
         }
 
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
         if (!localLeague) return [];
 
         const [localSeason] = await db.select().from(schema.seasons)
@@ -218,19 +226,19 @@ export class SupabaseFootballRepository implements FootballRepository {
      * Sync: fetches teams from the external API, upserts into DB, and sideloads graphics.
      * Called by syncFixtures() and admin import operations — NOT by read queries.
      */
-    async syncTeams(leagueId: number, seasonYear: number): Promise<Array<typeof schema.teams.$inferSelect>> {
+    async syncTeams(leagueSourceId: number, seasonYear: number): Promise<Array<typeof schema.teams.$inferSelect>> {
         if (!db) return [];
 
         // 0. Ensure internal IDs exist
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
-        if (!localLeague) throw new Error(`League ${leagueId} not found`);
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
+        if (!localLeague) throw new Error(`League ${leagueSourceId} not found`);
 
         const [localSeason] = await db.select().from(schema.seasons)
             .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
-        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
+        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueSourceId}`);
 
         // 1. Fetch from provider
-        const { teams, venues } = await this.provider.getTeams(leagueId, seasonYear);
+        const { teams, venues } = await this.provider.getTeams(leagueSourceId, seasonYear);
 
         // 2. Upsert venues
         await this.upsertVenues(venues);
@@ -249,7 +257,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             sourceName: t.sourceName,
             sourceId: t.sourceId,
             metadata: {},
-            updatedAt: sql`now()`
+            updatedAt: NOW_MS
         }));
 
         await db.insert(schema.teams)
@@ -262,7 +270,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                     tla: sql`EXCLUDED.tla`,
                     logo: sql`EXCLUDED.logo`,
                     venueId: sql`EXCLUDED.venue_id`,
-                    updatedAt: sql`now()`
+                    updatedAt: NOW_MS
                 }
             });
 
@@ -311,7 +319,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             return {
                 seasonId: localSeason.id,
                 teamId: teamId,
-                updatedAt: sql`now()`
+                updatedAt: NOW_MS
             };
         }).filter(Boolean);
 
@@ -320,13 +328,13 @@ export class SupabaseFootballRepository implements FootballRepository {
                 .values(linkages as unknown as typeof schema.seasonsToTeams.$inferInsert[])
                 .onConflictDoUpdate({
                     target: [schema.seasonsToTeams.seasonId, schema.seasonsToTeams.teamId],
-                    set: { updatedAt: sql`now()` }
+                    set: { updatedAt: NOW_MS }
                 });
         }
 
         // 5. Invalidate cache and return fresh data
-        cacheService.invalidate(`teams:${leagueId}:${seasonYear}`);
-        return this.getTeams(leagueId, seasonYear);
+        cacheService.invalidate(`teams:${leagueSourceId}:${seasonYear}`);
+        return this.getTeams(leagueSourceId, seasonYear);
     }
 
     private async upsertVenues(venues: import('../integrations/types').IngestedVenue[]) {
@@ -353,7 +361,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                     capacity: sql`COALESCE(EXCLUDED.capacity, ${schema.venues.capacity})`,
                     surface: sql`COALESCE(EXCLUDED.surface, ${schema.venues.surface})`,
                     image: sql`COALESCE(EXCLUDED.image, ${schema.venues.image})`,
-                    updatedAt: sql`now()`
+                    updatedAt: NOW_MS
                 }
             });
     }
@@ -385,13 +393,13 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async syncFixtures(leagueId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>> {
+    async syncFixtures(leagueSourceId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
         let apiCallsCount = 0;
 
         // 1. Ensure season exists
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
-        if (!localLeague) throw new Error(`League ${leagueId} not found`);
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
+        if (!localLeague) throw new Error(`League ${leagueSourceId} not found`);
 
         let [localSeason] = await db.select().from(schema.seasons)
             .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
@@ -409,14 +417,14 @@ export class SupabaseFootballRepository implements FootballRepository {
             localSeason = created;
         }
 
-        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
+        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueSourceId}`);
 
         // 2. Ensure teams exist for this league/season
-        await this.syncTeams(leagueId, seasonYear);
+        await this.syncTeams(leagueSourceId, seasonYear);
         apiCallsCount++;
 
         // 3. Fetch fixtures and venues from provider
-        const { fixtures, venues } = await this.provider.getFixtures(leagueId, seasonYear);
+        const { fixtures, venues } = await this.provider.getFixtures(leagueSourceId, seasonYear);
         apiCallsCount++;
 
         // 3.1 Upsert any venues from fixtures (neutral grounds)
@@ -453,7 +461,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 awayGoals: normalized.awayGoals,
                 gameweek: normalized.gameweek,
                 metadata: {},
-                updatedAt: sql`now()`
+                updatedAt: NOW_MS
             };
         }).filter(Boolean);
 
@@ -474,7 +482,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                         homeGoals: sql`EXCLUDED.home_goals`,
                         awayGoals: sql`EXCLUDED.away_goals`,
                         gameweek: sql`EXCLUDED.gameweek`,
-                        updatedAt: sql`now()`
+                        updatedAt: NOW_MS
                     }
                 });
 
@@ -489,7 +497,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             await reporter.updateProgress({ processedCount, totalCount });
         }
 
-        const data = await this.getFixtures(leagueId, seasonYear);
+        const data = await this.getFixtures(leagueSourceId, seasonYear);
         return {
             data,
             stats: {
@@ -500,7 +508,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+    async getFixtures(leagueSourceId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
         // 1. Resolve the season record (needed by both polling and main query)
@@ -508,7 +516,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             .from(schema.seasons)
             .innerJoin(schema.leagues, eq(schema.seasons.leagueId, schema.leagues.id))
             .where(and(
-                eq(schema.leagues.sourceId, leagueId),
+                eq(schema.leagues.sourceId, leagueSourceId),
                 eq(schema.seasons.year, seasonYear)
             ));
 
@@ -529,7 +537,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
                 : Infinity;
 
-            logger.info({ leagueId, seasonYear, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
+            logger.info({ leagueSourceId, seasonYear, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
 
             if (timeSinceLastSync > FIVE_MINUTES_MS) {
                 // Atomic lock: claim the sync slot with a conditional UPDATE.
@@ -563,7 +571,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                     if (pastDue.length > 0) {
                         try {
                             const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
-                            logger.info({ leagueId, seasonYear }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+                            logger.info({ leagueSourceId, seasonYear }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
 
                             // Fetch latest status from upstream
                             const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
@@ -592,7 +600,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                                         homeGoals: normalized.homeGoals,
                                         awayGoals: normalized.awayGoals,
                                         gameweek: normalized.gameweek,
-                                        updatedAt: sql`now()`
+                                        updatedAt: NOW_MS
                                     };
                                 }).filter(Boolean);
 
@@ -606,7 +614,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                                                 homeGoals: sql`EXCLUDED.home_goals`,
                                                 awayGoals: sql`EXCLUDED.away_goals`,
                                                 gameweek: sql`EXCLUDED.gameweek`,
-                                                updatedAt: sql`now()`
+                                                updatedAt: NOW_MS
                                             }
                                         });
                                     pollingDidUpdate = true;
@@ -641,12 +649,12 @@ export class SupabaseFootballRepository implements FootballRepository {
                         const nonTerminalCount = Number(nonTerminal[0]?.count || 0);
 
                         if (futureCount === 0 && nonTerminalCount === 0) {
-                            logger.info({ leagueId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonYear} complete`);
+                            logger.info({ leagueSourceId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonYear} complete`);
                             await db.update(schema.seasons)
                                 .set({ isCompleted: true })
                                 .where(eq(schema.seasons.id, seasonRecord.id));
                         } else {
-                            logger.info({ leagueId, futureCount, nonTerminalCount }, `Live polling: season ${seasonYear} NOT complete`);
+                            logger.info({ leagueSourceId, futureCount, nonTerminalCount }, `Live polling: season ${seasonYear} NOT complete`);
                         }
                     }
                 } // end if (claimed.length > 0)
@@ -654,17 +662,17 @@ export class SupabaseFootballRepository implements FootballRepository {
                 logger.info({ timeSinceLastSyncMs: timeSinceLastSync }, 'Live polling: skipped — last sync too recent');
             }
         } else {
-            logger.info({ leagueId, seasonYear }, 'Live polling: skipped — season is completed');
+            logger.info({ leagueSourceId, seasonYear }, 'Live polling: skipped — season is completed');
         }
 
         // Invalidate cache if polling updated fixtures so we serve fresh data
         if (pollingDidUpdate) {
-            cacheService.invalidate(`fixtures:${leagueId}:${seasonYear}`);
+            cacheService.invalidate(`fixtures:${leagueSourceId}:${seasonYear}`);
         }
 
         // Cache check (skip if caller wants delta via `since`)
         if (!since) {
-            const cacheKey = `fixtures:${leagueId}:${seasonYear}`;
+            const cacheKey = `fixtures:${leagueSourceId}:${seasonYear}`;
             const cached = cacheService.get<Array<typeof schema.fixtures.$inferSelect>>(cacheKey);
             if (cached) return cached;
         }
@@ -680,7 +688,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         const result = await query;
         if (!since) {
-            cacheService.set(`fixtures:${leagueId}:${seasonYear}`, result, TTL.ACTIVE);
+            cacheService.set(`fixtures:${leagueSourceId}:${seasonYear}`, result, TTL.ACTIVE);
         }
         return result;
     }
@@ -1001,7 +1009,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                     set: {
                         name: sql`EXCLUDED.name`,
                         photo: sql`EXCLUDED.photo`,
-                        updatedAt: sql`now()`,
+                        updatedAt: NOW_MS,
                     }
                 });
 

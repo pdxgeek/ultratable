@@ -88,8 +88,8 @@ describe('useDeltaSync', () => {
         expect(mockClient.query).toHaveBeenCalledWith(
             expect.anything(),
             expect.objectContaining({
-                leagueId: 39,
-                season: 2024,
+                leagueSourceId: 39,
+                seasonYear: 2024,
                 since: '2026-02-23T10:00:00Z'
             }),
             {} // no stale remediation → default request policy

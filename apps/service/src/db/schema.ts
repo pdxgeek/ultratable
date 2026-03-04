@@ -1,7 +1,9 @@
 import { pgTable, uuid, varchar, integer, timestamp, jsonb, pgEnum, unique, boolean, text } from 'drizzle-orm/pg-core';
 
-// Helper for UTC timestamps
-const utcTimestamp = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+// Helper for UTC timestamps with millisecond precision.
+// Postgres now() returns microsecond precision, but the GraphQL DateTime scalar
+// truncates to milliseconds. Using precision: 3 prevents phantom deltas.
+const utcTimestamp = (name: string) => timestamp(name, { withTimezone: true, mode: 'date', precision: 3 });
 
 export const fixtureStatusEnum = pgEnum('fixture_status', [
     'scheduled',
@@ -25,8 +27,8 @@ export const users = pgTable("user", {
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
     roles: jsonb('roles').default('["user"]').notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull()
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull()
 });
 
 // --- Better Auth Native Schema ---
@@ -36,16 +38,16 @@ export const authUsers = pgTable("auth_user", {
     email: text("email").notNull().unique(),
     emailVerified: boolean("email_verified").notNull(),
     image: text("image"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at").notNull()
+    createdAt: utcTimestamp("created_at").notNull(),
+    updatedAt: utcTimestamp("updated_at").notNull()
 });
 
 export const authSessions = pgTable("auth_session", {
     id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: utcTimestamp("expires_at").notNull(),
     token: text("token").notNull().unique(),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at").notNull(),
+    createdAt: utcTimestamp("created_at").notNull(),
+    updatedAt: utcTimestamp("updated_at").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: 'cascade' })
@@ -59,27 +61,27 @@ export const authAccounts = pgTable("auth_account", {
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    accessTokenExpiresAt: utcTimestamp("access_token_expires_at"),
+    refreshTokenExpiresAt: utcTimestamp("refresh_token_expires_at"),
     scope: text("scope"),
     password: text("password"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at").notNull()
+    createdAt: utcTimestamp("created_at").notNull(),
+    updatedAt: utcTimestamp("updated_at").notNull()
 });
 
 export const authVerifications = pgTable("auth_verification", {
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at"),
-    updatedAt: timestamp("updated_at")
+    expiresAt: utcTimestamp("expires_at").notNull(),
+    createdAt: utcTimestamp("created_at"),
+    updatedAt: utcTimestamp("updated_at")
 });
 
 export const authLinks = pgTable("auth_link", {
     authUserId: text("auth_user_id").references(() => authUsers.id, { onDelete: 'cascade' }).notNull(),
     domainUserId: uuid("domain_user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    linkedAt: timestamp("linked_at").defaultNow().notNull()
+    linkedAt: utcTimestamp("linked_at").defaultNow().notNull()
 }, (table) => ({
     pk: unique().on(table.authUserId, table.domainUserId)
 }));

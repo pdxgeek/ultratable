@@ -10,21 +10,21 @@ export function useDeltaSync() {
     const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
-    const sync = useCallback(async (leagueId: number, season: number) => {
+    const sync = useCallback(async (leagueSourceId: number, seasonYear: number) => {
         setIsSyncing(true);
         setError(null);
 
         try {
-            const syncKey = `sync:${leagueId}:${season}`;
+            const syncKey = `sync:${leagueSourceId}:${seasonYear}`;
             const state = await db.syncState.get(syncKey);
             let since = state?.lastUpdatedAt || null;
 
             // Resolve human-readable names for logging
-            const leagueRecord = await db.leagues.where('sourceId').equals(leagueId).first();
+            const leagueRecord = await db.leagues.where('sourceId').equals(leagueSourceId).first();
             const leagueLabel = leagueRecord
                 ? `${leagueRecord.name} (${leagueRecord.id.slice(0, 8)})`
-                : `league#${leagueId}`;
-            const syncLabel = `${leagueLabel} ${season}`;
+                : `league#${leagueSourceId}`;
+            const syncLabel = `${leagueLabel} ${seasonYear}`;
 
             // Check Dexie for past-due fixtures that aren't resolved.
             // If any exist, clear the watermark to force a full re-pull so
@@ -79,8 +79,8 @@ export function useDeltaSync() {
             // Bypass urql's document cache only for stale remediation re-pulls;
             // normal delta syncs benefit from the cache.
             const result = await client.query(SYNC_DATA_QUERY, {
-                leagueId,
-                season,
+                leagueSourceId,
+                seasonYear,
                 since
             }, staleRemediation ? { requestPolicy: 'network-only' } : {}).toPromise();
 
