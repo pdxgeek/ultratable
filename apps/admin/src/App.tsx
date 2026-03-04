@@ -4,6 +4,7 @@ import { GraphicsView } from './components/GraphicsView';
 import { LogsView } from './components/LogsView';
 import type { LogEntry } from './components/LogsView';
 import { cn } from './utils';
+import { gqlFetch, API_BASE } from './lib/api';
 
 import { DevLoginTools } from './components/DevLoginTools';
 import ballerFailImg from './assets/baller_fail.png';
@@ -37,24 +38,18 @@ const App: React.FC = () => {
 
   const fetchWorkerData = async () => {
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          query: `
-                          query {
-                              jobs { id name scheduleCron isActive lastRunAt updatedAt }
-                              jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount totalCount apiCallsCount }
-                              systemLogs(limit: 100) { id level module message context createdAt }
-                          }
-                      `
-        })
-      });
-      const json = await resp.json();
-      setJobs(json.data?.jobs || []);
-      setExecutions(json.data?.jobExecutions || []);
-      setLogs(json.data?.systemLogs || []);
+      const data = await gqlFetch<{
+        jobs: Job[];
+        jobExecutions: Execution[];
+        systemLogs: LogEntry[];
+      }>(`query {
+        jobs { id name scheduleCron isActive lastRunAt updatedAt }
+        jobExecutions(limit: 20) { id jobId status startedAt finishedAt errorMessage processedCount totalCount apiCallsCount }
+        systemLogs(limit: 100) { id level module message context createdAt }
+      }`);
+      setJobs(data.jobs || []);
+      setExecutions(data.jobExecutions || []);
+      setLogs(data.systemLogs || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -64,16 +59,10 @@ const App: React.FC = () => {
 
   const fetchStatus = async () => {
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          query: `{ configStatus { isDatabaseConnected apiFootballKeyMasked databaseUrlMasked supabaseUrlMasked supabaseAnonKeyMasked } }`
-        })
-      });
-      const json = await resp.json();
-      setConfig(json.data?.configStatus);
+      const data = await gqlFetch<{ configStatus: ConfigStatus }>(
+        `{ configStatus { isDatabaseConnected apiFootballKeyMasked databaseUrlMasked supabaseUrlMasked supabaseAnonKeyMasked } }`
+      );
+      setConfig(data.configStatus);
     } catch (e) {
       console.error('Failed to fetch status:', e);
     }
@@ -84,7 +73,7 @@ const App: React.FC = () => {
     const fetchSession = async () => {
       try {
         // Fetch the domain user (UUID + roles) via the authLinks bridge
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
         const data = await res.json();
         if (mounted) setSession(data?.user ? { user: data.user } : null);
       } catch {
@@ -140,7 +129,7 @@ const App: React.FC = () => {
           <br /><br />
           Administrative access is required to view the Ultratable console.
         </p>
-        <DevLoginTools />
+        {import.meta.env.DEV && <DevLoginTools />}
       </div>
     );
   }
@@ -235,8 +224,8 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Global Dev Tools Component */}
-      <DevLoginTools />
+      {/* Dev-only login tools — hidden in production */}
+      {import.meta.env.DEV && <DevLoginTools />}
     </div>
   );
 };

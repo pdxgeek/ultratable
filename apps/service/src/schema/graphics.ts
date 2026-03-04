@@ -31,7 +31,8 @@ builder.queryFields((t) => ({
             entityType: t.arg.string({ required: true }),
             entityId: t.arg.string({ required: false })
         },
-        resolve: async (_root, args) => {
+        resolve: async (_root, args, ctx) => {
+            requireAdmin(ctx);
             const conditions: SQL<unknown>[] = [eq(schema.graphics.entityType, args.entityType)];
             if (args.entityId) {
                 conditions.push(eq(schema.graphics.entityId, args.entityId));

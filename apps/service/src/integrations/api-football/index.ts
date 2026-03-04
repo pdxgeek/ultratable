@@ -1,19 +1,22 @@
 import axios, { AxiosInstance } from 'axios';
 import { IFootballProvider, IngestedLeague, IngestedSeason, IngestedTeam, IngestedVenue, IngestedFixture, IngestedCountry, IngestedEvent, IngestedPlayer } from '../types';
 import { Normalizer, RawLeagueItem, RawSeasonItem, RawTeamItem, RawVenueItem, RawFixtureItem, RawEventItem, RawLineupItem } from './normalizer';
+import { globalLogger } from '../../services/log.service';
 
 export class ApiFootballProvider implements IFootballProvider {
     name = 'api-football';
     private client: AxiosInstance;
+    private logger = globalLogger.child({ module: 'ApiFootballProvider' });
 
     constructor() {
         const apiKey = process.env.API_FOOTBALL_KEY;
         if (!apiKey) {
-            console.warn('API_FOOTBALL_KEY not found in environment');
+            globalLogger.warn('API_FOOTBALL_KEY not found in environment');
         }
 
         this.client = axios.create({
             baseURL: 'https://v3.football.api-sports.io',
+            timeout: 15_000, // 15-second timeout per request
             headers: {
                 'x-rapidapi-key': apiKey || '',
                 'x-rapidapi-host': 'v3.football.api-sports.io'
@@ -53,6 +56,7 @@ export class ApiFootballProvider implements IFootballProvider {
     }
 
     async getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
+        this.logger.debug({ leagueId, season }, 'API: fetching fixtures');
         const resp = await this.client.get('/fixtures', { params: { league: leagueId, season } });
         const response = resp.data.response;
 
@@ -61,6 +65,7 @@ export class ApiFootballProvider implements IFootballProvider {
             .filter((item: RawFixtureItem) => item.fixture.venue?.id)
             .map((item: RawFixtureItem) => Normalizer.normalizeVenue(item.fixture.venue as RawVenueItem, this.name));
 
+        this.logger.debug({ leagueId, season, fixtureCount: fixtures.length, venueCount: venues.length }, 'API: fixtures fetched');
         return { fixtures, venues };
     }
 
@@ -70,6 +75,7 @@ export class ApiFootballProvider implements IFootballProvider {
 
         // API-Football allows max 20 ids per request via the `ids` parameter
         const CHUNK_SIZE = 20;
+        this.logger.debug({ count: sourceIds.length, chunks: Math.ceil(sourceIds.length / CHUNK_SIZE) }, 'API: fetching fixtures by IDs');
 
         for (let i = 0; i < sourceIds.length; i += CHUNK_SIZE) {
             const chunk = sourceIds.slice(i, i + CHUNK_SIZE);
@@ -87,10 +93,11 @@ export class ApiFootballProvider implements IFootballProvider {
                 fixtures.push(...chunkFixtures);
                 venues.push(...chunkVenues);
             } catch (err) {
-                console.error(`Error fetching proxy fixtures for ids ${idsList}:`, err);
+                this.logger.error({ ids: idsList, error: (err as Error).message }, `Error fetching proxy fixtures for ids ${idsList}`);
             }
         }
 
+        this.logger.debug({ fixtureCount: fixtures.length, venueCount: venues.length }, 'API: fixtures by IDs complete');
         return { fixtures, venues };
     }
 

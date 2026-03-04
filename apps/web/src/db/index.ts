@@ -44,8 +44,8 @@ export interface Fixture {
     venueId?: string;
     scheduledAt: string;
     status: string;
-    goalsHome?: number;
-    goalsAway?: number;
+    goalsHome: number | null;
+    goalsAway: number | null;
     gameweek?: number | null;
     updatedAt: string;
 }

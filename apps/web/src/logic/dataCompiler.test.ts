@@ -182,6 +182,20 @@ describe('compileStandings', () => {
         expect(standings.find(s => s.teamId === 't1')!.played).toBe(0);
     });
 
+    it('ignores played fixtures with null goals (data not yet available)', () => {
+        const fixtures: Fixture[] = [
+            makeFixture({ id: 'f1', homeTeamId: 't1', awayTeamId: 't2', status: 'played', goalsHome: null as unknown as number, goalsAway: null as unknown as number }),
+            makeFixture({ id: 'f2', homeTeamId: 't1', awayTeamId: 't3', status: 'played', goalsHome: 2, goalsAway: 0 }),
+        ];
+        const standings = compileStandings(teams, fixtures);
+
+        // Only the fixture with actual goals should be counted
+        const arsenal = standings.find(s => s.teamId === 't1')!;
+        expect(arsenal.played).toBe(1);
+        expect(arsenal.won).toBe(1);
+        expect(arsenal.goalsFor).toBe(2);
+    });
+
     it('handles empty fixtures list', () => {
         const standings = compileStandings(teams, []);
         expect(standings).toHaveLength(3);

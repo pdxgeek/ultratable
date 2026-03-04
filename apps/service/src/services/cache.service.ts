@@ -7,7 +7,7 @@
  *   - ACTIVE (5m): Frequently changing — live fixtures, player data, config
  */
 import { LRUCache } from 'lru-cache';
-import { globalLogger } from './log.service.js';
+import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'CacheService' });
 
@@ -20,17 +20,18 @@ export const TTL = {
 
 export type CacheTier = keyof typeof TTL;
 
-// Statuses considered "game over" — fixture data is immutable
-const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+// Normalized statuses stored in the database after normalizer.ts mapping.
+// 'played' = finished (FT, AET, PEN) — fixture data is immutable
+const FINISHED_STATUSES = new Set(['played']);
 
-// Statuses for in-progress matches
-const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE']);
+// 'live' = in-progress match (1H, HT, 2H, ET, BT, P, LIVE)
+const LIVE_STATUSES = new Set(['live']);
 
-/** Resolve TTL for fixture-related data based on match status */
+/** Resolve TTL for fixture-related data based on normalized match status */
 export function fixtureTTL(status: string): number {
     if (FINISHED_STATUSES.has(status)) return TTL.FROZEN;
     if (LIVE_STATUSES.has(status)) return TTL.ACTIVE;
-    return TTL.STABLE; // upcoming/scheduled
+    return TTL.STABLE; // scheduled, postponed, cancelled, unknown
 }
 
 /** Resolve TTL for season-related data based on completion */
@@ -63,8 +64,10 @@ class CacheService {
         const value = this.cache.get(key) as T | undefined;
         if (value !== undefined) {
             this.hits++;
+            logger.debug({ key }, 'Cache HIT');
         } else {
             this.misses++;
+            logger.debug({ key }, 'Cache MISS');
         }
         return value;
     }
@@ -72,6 +75,7 @@ class CacheService {
     /** Set a cached value with a specific TTL (in ms). */
     set<T>(key: string, value: T, ttl: number): void {
         if (ttl <= 0) return; // ttl of 0 means don't cache
+        logger.debug({ key, ttlMs: ttl }, 'Cache SET');
         this.cache.set(key, value, { ttl });
     }
 

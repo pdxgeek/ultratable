@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authClient } from '../lib/auth-client';
+import { API_BASE } from '../lib/api';
 
 interface DevAuthSession {
     user: {
@@ -39,7 +40,7 @@ export function DevLoginTools() {
             setLoading(true);
 
             // 1. Seed the dummy user natively into the backend DB via dev-login
-            const res = await fetch(`/api/auth/dev-login`, {
+            const res = await fetch(`${API_BASE}/api/auth/dev-login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role })

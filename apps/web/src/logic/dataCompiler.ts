@@ -62,7 +62,7 @@ export function compileStandings(
 
     // Process played fixtures for stats
     fixtures.filter(f => f.status === 'played').forEach(f => {
-        if (f.goalsHome === undefined || f.goalsAway === undefined) return;
+        if (f.goalsHome == null || f.goalsAway == null) return;
 
         const homeStats = statsMap.get(f.homeTeamId);
         const awayStats = statsMap.get(f.awayTeamId);

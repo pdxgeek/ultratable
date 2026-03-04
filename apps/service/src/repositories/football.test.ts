@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SupabaseFootballRepository } from './supabase.repository';
 import { db } from '../db';
-import { cacheService } from '../services/cache.service.js';
+import { cacheService } from '../services/cache.service';
 
 const mockGet = vi.fn();
 vi.mock('axios', () => ({
@@ -79,20 +79,23 @@ describe('SupabaseFootballRepository', () => {
         });
     });
 
-    describe('getTeams', () => {
+    describe('syncTeams', () => {
         it('should fetch teams from provider and insert into database', async () => {
             const leagueMock = [{ id: 'league-uuid', sourceId: 39 }];
             const seasonMock = [{ id: 'season-uuid' }];
             const venueMock = [{ id: 'venue-uuid', sourceId: 505 }];
             const teamMock = [{ id: 'team-uuid', sourceId: 42, name: 'Arsenal' }];
 
-            // Sequential calls for getTeams
+            // Sequential calls for syncTeams + getTeams (read-only at end)
             const m = vi.fn()
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league lookup in syncTeams
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season lookup in syncTeams
                 .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) })  // venues
                 .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) })   // teams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }) // existing graphics
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) })         // existing graphics
+                // getTeams (read-only) calls at end of syncTeams:
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league lookup in getTeams
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season lookup in getTeams
                 .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]) }) }) }); // result
 
             vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
@@ -118,7 +121,7 @@ describe('SupabaseFootballRepository', () => {
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
-            const result = await repo.getTeams(39, 2024);
+            const result = await repo.syncTeams(39, 2024);
 
             expect(result[0].name).toBe('Arsenal');
             expect(mockGet).toHaveBeenCalledWith('/teams', expect.anything());

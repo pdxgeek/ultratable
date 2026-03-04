@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Key, CheckCircle2, AlertCircle } from 'lucide-react';
+import { gqlFetch } from '../lib/api';
 
 const ApiKeyView = ({ onUpdate }: { onUpdate: () => void }) => {
   const [value, setValue] = useState('');
@@ -9,19 +10,12 @@ const ApiKeyView = ({ onUpdate }: { onUpdate: () => void }) => {
     e.preventDefault();
     setStatus('loading');
     try {
-      const response = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation ConfigureKey($key: String!) { configureApiKey(key: $key) }`,
-          variables: { key: value }
-        })
-      });
+      const data = await gqlFetch<{ configureApiKey: boolean }>(
+        `mutation ConfigureKey($key: String!) { configureApiKey(key: $key) }`,
+        { key: value }
+      );
 
-      if (!response.ok) throw new Error('Network response not ok');
-      const result = await response.json();
-
-      if (result.data?.configureApiKey) {
+      if (data.configureApiKey) {
         setStatus('success');
         setValue('');
         setTimeout(() => setStatus('idle'), 3000);

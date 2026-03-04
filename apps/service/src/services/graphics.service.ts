@@ -4,6 +4,9 @@ import { eq, and } from 'drizzle-orm';
 import axios from 'axios';
 import { storageProvider } from '../providers/supabase-storage.provider';
 import crypto from 'node:crypto';
+import { globalLogger } from './log.service';
+
+const logger = globalLogger.child({ module: 'GraphicsService' });
 
 export class GraphicsService {
     private readonly BUCKET_NAME = 'graphics';
@@ -17,7 +20,15 @@ export class GraphicsService {
      * @param url The external URL to download the image from
      */
     async registerFromUrl(entityId: string, entityType: string, url: string): Promise<string | null> {
+        logger.debug({ entityType, entityId, url }, 'Graphic: registering from URL');
         try {
+            // Validate URL scheme to prevent SSRF (e.g., file://, internal IPs)
+            const parsed = new URL(url);
+            if (!['http:', 'https:'].includes(parsed.protocol)) {
+                logger.warn({ entityType, entityId, url }, `Rejected graphic URL with disallowed protocol: ${parsed.protocol}`);
+                return null;
+            }
+
             // 1. Download image
             const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
             const buffer = Buffer.from(response.data);
@@ -52,7 +63,7 @@ export class GraphicsService {
 
             return publicUrl;
         } catch (error: unknown) {
-            console.error(`[GraphicsService] Failed to register graphic for ${entityType} ${entityId} from ${url}:`, (error as Error).message);
+            logger.error({ entityType, entityId, url, error: (error as Error).message }, `Failed to register graphic for ${entityType} ${entityId}`);
             return null;
         }
     }
@@ -100,7 +111,7 @@ export class GraphicsService {
         }
 
         if (!url) {
-            console.error(`[GraphicsService] Could not auto-resolve source URL for ${entityType} ${entityId}`);
+            logger.error({ entityType, entityId }, `Could not auto-resolve source URL for ${entityType} ${entityId}`);
             return null;
         }
 

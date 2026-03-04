@@ -5,7 +5,7 @@
  * prefix-based invalidation, and stats tracking.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { cacheService, TTL, fixtureTTL, seasonTTL } from './cache.service.js';
+import { cacheService, TTL, fixtureTTL, seasonTTL } from './cache.service';
 
 describe('CacheService', () => {
     beforeEach(() => {
@@ -187,48 +187,38 @@ describe('CacheService', () => {
 // TTL Resolution Helpers
 // ---------------------------------------------------------------------------
 describe('fixtureTTL', () => {
-    it('should return FROZEN for FT fixtures', () => {
-        expect(fixtureTTL('FT')).toBe(TTL.FROZEN);
+    // Normalized statuses — these are what the DB stores after normalizer.ts
+    it('should return FROZEN for played fixtures', () => {
+        expect(fixtureTTL('played')).toBe(TTL.FROZEN);
     });
 
-    it('should return FROZEN for AET fixtures', () => {
-        expect(fixtureTTL('AET')).toBe(TTL.FROZEN);
-    });
-
-    it('should return FROZEN for PEN fixtures', () => {
-        expect(fixtureTTL('PEN')).toBe(TTL.FROZEN);
-    });
-
-    it('should return ACTIVE for live 1H fixtures', () => {
-        expect(fixtureTTL('1H')).toBe(TTL.ACTIVE);
-    });
-
-    it('should return ACTIVE for halftime fixtures', () => {
-        expect(fixtureTTL('HT')).toBe(TTL.ACTIVE);
-    });
-
-    it('should return ACTIVE for 2H fixtures', () => {
-        expect(fixtureTTL('2H')).toBe(TTL.ACTIVE);
-    });
-
-    it('should return ACTIVE for extra time', () => {
-        expect(fixtureTTL('ET')).toBe(TTL.ACTIVE);
-    });
-
-    it('should return ACTIVE for LIVE fixtures', () => {
-        expect(fixtureTTL('LIVE')).toBe(TTL.ACTIVE);
+    it('should return ACTIVE for live fixtures', () => {
+        expect(fixtureTTL('live')).toBe(TTL.ACTIVE);
     });
 
     it('should return STABLE for scheduled fixtures', () => {
-        expect(fixtureTTL('NS')).toBe(TTL.STABLE);
+        expect(fixtureTTL('scheduled')).toBe(TTL.STABLE);
     });
 
-    it('should return STABLE for TBD fixtures', () => {
-        expect(fixtureTTL('TBD')).toBe(TTL.STABLE);
+    it('should return STABLE for postponed fixtures', () => {
+        expect(fixtureTTL('postponed')).toBe(TTL.STABLE);
+    });
+
+    it('should return STABLE for cancelled fixtures', () => {
+        expect(fixtureTTL('cancelled')).toBe(TTL.STABLE);
     });
 
     it('should return STABLE for unknown statuses', () => {
-        expect(fixtureTTL('PST')).toBe(TTL.STABLE);
+        expect(fixtureTTL('unknown_status')).toBe(TTL.STABLE);
+    });
+
+    // Guard against raw API statuses leaking through — these should NOT match
+    it('should NOT match raw API status FT (use "played" instead)', () => {
+        expect(fixtureTTL('FT')).toBe(TTL.STABLE); // not FROZEN
+    });
+
+    it('should NOT match raw API status 1H (use "live" instead)', () => {
+        expect(fixtureTTL('1H')).toBe(TTL.STABLE); // not ACTIVE
     });
 });
 

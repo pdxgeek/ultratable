@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { gqlFetch } from '../lib/api';
 
 import { CatalogBrowser } from './CatalogBrowser';
 import { SeasonImporter } from './SeasonImporter';
@@ -69,23 +70,13 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchData = async () => {
-    console.log('LeaguesManagementView: Fetching countries and managed leagues...');
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `
-            query {
-              catalogCountries { id name code flag }
-              leagues { id name sourceId }
-            }
-          `
-        })
-      });
-      const json = await resp.json();
-      setCountries(json.data?.catalogCountries || []);
-      setManagedLeagues(json.data?.leagues || []);
+      const data = await gqlFetch<{
+        catalogCountries: Country[];
+        leagues: ManagedLeague[];
+      }>(`query { catalogCountries { id name code flag } leagues { id name sourceId } }`);
+      setCountries(data.catalogCountries || []);
+      setManagedLeagues(data.leagues || []);
     } catch (e) {
       console.error('LeaguesManagementView: fetchData error:', e);
     } finally {
@@ -96,16 +87,11 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
   const fetchCatalogLeagues = async (countryId: string) => {
     if (!countryId) return;
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query($id: String!) { catalogLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
-          variables: { id: countryId }
-        })
-      });
-      const json = await resp.json();
-      setCatalogLeagues(json.data?.catalogLeagues || []);
+      const data = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
+        `query($id: String!) { catalogLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
+        { id: countryId }
+      );
+      setCatalogLeagues(data.catalogLeagues || []);
     } catch (e) {
       console.error('LeaguesManagementView: fetchCatalogLeagues error:', e);
     }
@@ -115,16 +101,11 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
   const fetchInternalSeasons = async (leagueId: string, setTask: (seasons: Season[]) => void) => {
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount } }`,
-          variables: { id: leagueId }
-        })
-      });
-      const json = await resp.json();
-      setTask(json.data?.seasons || []);
+      const data = await gqlFetch<{ seasons: Season[] }>(
+        `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount } }`,
+        { id: leagueId }
+      );
+      setTask(data.seasons || []);
     } catch (e) {
       console.error('LeaguesManagementView: fetchInternalSeasons error:', e);
     }
@@ -132,17 +113,12 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
   const fetchCatalogMetadataBySourceId = async (sourceId: number) => {
     try {
-      const resp = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query($sourceId: Int!) { catalogLeagues(sourceId: $sourceId) { id seasons { year current } } }`,
-          variables: { sourceId }
-        })
-      });
-      const json = await resp.json();
-      if (json.data?.catalogLeagues?.[0]) {
-        setCatalogLeagueMetadata(json.data.catalogLeagues[0]);
+      const data = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
+        `query($sourceId: Int!) { catalogLeagues(sourceId: $sourceId) { id seasons { year current } } }`,
+        { sourceId }
+      );
+      if (data.catalogLeagues?.[0]) {
+        setCatalogLeagueMetadata(data.catalogLeagues[0]);
       }
     } catch (e) {
       console.error('LeaguesManagementView: fetchCatalogMetadataBySourceId error:', e);
@@ -200,15 +176,11 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
       // Fetch teams for the helper dropdown
       if (league) {
-        fetch('/graphql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `query($leagueId: Int, $season: Int) { teams(leagueId: $leagueId, season: $season) { id name } }`,
-            variables: { leagueId: league.sourceId, season: season.year }
-          })
-        }).then(res => res.json()).then(json => {
-          setConfigTeams(json.data?.teams || []);
+        gqlFetch<{ teams: Record<string, unknown>[] }>(
+          `query($leagueId: Int, $season: Int) { teams(leagueId: $leagueId, season: $season) { id name } }`,
+          { leagueId: league.sourceId, season: season.year }
+        ).then(data => {
+          setConfigTeams(data.teams || []);
           setHelperTeamId('');
           setHelperPoints(0);
           setHelperReason('');
@@ -226,16 +198,14 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
   const activateLeague = async (catalogId: string) => {
     setActionLoading(catalogId);
     try {
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation($id: String!) { promoteLeague(catalogId: $id) { id name } }`,
-          variables: { id: catalogId }
-        })
-      });
+      await gqlFetch(
+        `mutation($id: String!) { promoteLeague(catalogId: $id) { id name } }`,
+        { id: catalogId }
+      );
       await fetchData();
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to activate league: ${msg}`);
       console.error(e);
     } finally {
       setActionLoading(null);
@@ -250,21 +220,19 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
       const catalogId = catalogLeagueMetadata?.id;
       if (!catalogId) {
-        console.error("No associated catalog league found.");
+        alert('No associated catalog league found.');
         return;
       }
 
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation($id: String!) { refreshCatalogSeasons(catalogId: $id) { id seasons { year current } } }`,
-          variables: { id: catalogId }
-        })
-      });
+      await gqlFetch(
+        `mutation($id: String!) { refreshCatalogSeasons(catalogId: $id) { id seasons { year current } } }`,
+        { id: catalogId }
+      );
 
       await fetchCatalogMetadataBySourceId(league.sourceId);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to refresh catalog seasons: ${msg}`);
       console.error(e);
     } finally {
       setActionLoading(null);
@@ -275,14 +243,10 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
     const key = `${leagueId}-${year}`;
     setActionLoading(key);
     try {
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation($id: String!, $year: Int!) { importSeason(leagueId: $id, year: $year) { id year } }`,
-          variables: { id: leagueId, year }
-        })
-      });
+      await gqlFetch(
+        `mutation($id: String!, $year: Int!) { importSeason(leagueId: $id, year: $year) { id year } }`,
+        { id: leagueId, year }
+      );
       // Refresh local seasons for both boxes if they happen to be showing this league
       if (selectedCatalogLeagueId === leagueId) {
         fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
@@ -291,6 +255,8 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         fetchInternalSeasons(leagueId, setConfigSeasons);
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to import season: ${msg}`);
       console.error(e);
     } finally {
       setActionLoading(null);
@@ -307,19 +273,17 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         return;
       }
 
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation($id: Int!, $year: Int!) { syncFixtures(leagueId: $id, season: $year) { id } }`,
-          variables: { id: league.sourceId, year }
-        })
-      });
+      await gqlFetch(
+        `mutation($id: Int!, $year: Int!) { syncFixtures(leagueId: $id, season: $year) { id } }`,
+        { id: league.sourceId, year }
+      );
 
       // Refresh to update counts
       await fetchInternalSeasons(leagueId, setConfigSeasons);
     } catch (e) {
-      console.error('syncSeasonData error:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Sync failed: ${msg}`);
+      console.error(e);
     } finally {
       setActionLoading(null);
     }
@@ -330,14 +294,10 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
     const key = `${leagueId}-${year}`;
     setActionLoading(key);
     try {
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation($id: String!) { removeSeason(seasonId: $id) }`,
-          variables: { id: seasonId }
-        })
-      });
+      await gqlFetch(
+        `mutation($id: String!) { removeSeason(seasonId: $id) }`,
+        { id: seasonId }
+      );
       // Refresh local seasons for both boxes
       if (selectedCatalogLeagueId === leagueId) {
         fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
@@ -349,6 +309,8 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         }
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to remove season: ${msg}`);
       console.error(e);
     } finally {
       setActionLoading(null);
@@ -382,23 +344,15 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         }
         if (parsedDeductions.length > 0) configObj.deductions = parsedDeductions;
 
-        await fetch('/graphql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `mutation($id: String!, $json: String!) { saveSeasonConfig(id: $id, configJson: $json) { id } }`,
-            variables: { id: selectedConfigSeasonId, json: JSON.stringify(configObj) }
-          })
-        });
+        await gqlFetch(
+          `mutation($id: String!, $json: String!) { saveSeasonConfig(id: $id, configJson: $json) { id } }`,
+          { id: selectedConfigSeasonId, json: JSON.stringify(configObj) }
+        );
       } else {
-        await fetch('/graphql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `mutation($id: String!, $json: String!) { saveLeagueConfig(id: $id, configJson: $json) { id } }`,
-            variables: { id: selectedConfigLeagueId, json: JSON.stringify(configObj) }
-          })
-        });
+        await gqlFetch(
+          `mutation($id: String!, $json: String!) { saveLeagueConfig(id: $id, configJson: $json) { id } }`,
+          { id: selectedConfigLeagueId, json: JSON.stringify(configObj) }
+        );
         await fetchData(); // refresh leagues
       }
 

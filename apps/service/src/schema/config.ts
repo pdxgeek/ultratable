@@ -1,6 +1,6 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
-import { cacheService } from '../services/cache.service.js';
+import { cacheService } from '../services/cache.service';
 
 const ConfigStatusRef = builder.objectRef<{
     isDatabaseConnected: boolean;

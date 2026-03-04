@@ -2,20 +2,34 @@ import { db } from '../db';
 import * as schema from '../db/schema';
 import pino from 'pino';
 
-// 1. Types
+// ── Types ─────────────────────────────────────────────────────
 export enum LogLevel {
+    DEBUG = 'debug',
     INFO = 'info',
     WARN = 'warn',
     ERROR = 'error'
 }
 
-// 2. Custom Stream for Postgres
+// ── Environment-driven log level ──────────────────────────────
+// LOG_LEVEL env var controls verbosity. Falls back to:
+//   - 'debug' in development (maximum visibility)
+//   - 'info'  in production  (no debug noise)
+// Valid values: 'trace', 'debug', 'info', 'warn', 'error', 'fatal'
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const LOG_LEVEL = process.env.LOG_LEVEL || (IS_PRODUCTION ? 'info' : 'debug');
+
+// ── Database Stream (info+ only) ──────────────────────────────
+// Writes structured log entries to the system_logs table for the admin UI.
+// Debug-level messages are filtered out — they're only for stdout/dev.
 const drizzleStream = {
     write: (msg: string) => {
         try {
             const info = JSON.parse(msg);
 
-            // Map Pino levels to our DB LogLevel enum
+            // Only persist info-level and above to the database
+            // Pino levels: trace=10, debug=20, info=30, warn=40, error=50
+            if (info.level < 30) return;
+
             let lvl = LogLevel.INFO;
             if (info.level >= 50) lvl = LogLevel.ERROR;
             else if (info.level >= 40) lvl = LogLevel.WARN;
@@ -23,7 +37,7 @@ const drizzleStream = {
             const message = info.msg || '';
             const mod = info.module || 'System';
 
-            // Filter out Pino core properties for the DB context JSON payload
+            // Strip Pino internal properties from the DB context payload
             const context = { ...info };
             delete context.level;
             delete context.msg;
@@ -47,28 +61,49 @@ const drizzleStream = {
     }
 };
 
-// 3. Central Logger Configuration
+// ── Stdout Transport ──────────────────────────────────────────
+// In development: pino-pretty for human-readable colored output.
+// In production:  raw JSON for log aggregators (ELK, Datadog, etc).
+const stdoutStream = IS_PRODUCTION
+    ? process.stdout
+    : pino.transport({
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss.l',
+            ignore: 'pid,hostname',
+        }
+    });
+
+// ── Central Logger ────────────────────────────────────────────
 export const globalLogger = pino(
-    {
-        level: 'info',
-        // We will output beautifully formatted logs to stdout, and the raw JSON to our DB stream
-    },
+    { level: LOG_LEVEL },
     pino.multistream([
-        { stream: process.stdout }, // Standard Output
-        { stream: drizzleStream }   // Postgres / Admin UI Intercept
+        { stream: stdoutStream },   // Human-readable (dev) or JSON (prod)
+        { stream: drizzleStream }   // Postgres / Admin UI (info+ only)
     ])
 );
 
-// Polyfill old static methods so we don't break un-migrated code instantly
+// Log the logger's own configuration on startup
+globalLogger.info({ logLevel: LOG_LEVEL, env: process.env.NODE_ENV || 'development' }, '📋 Logger initialized');
+
+// ── Legacy LogService Polyfill ────────────────────────────────
+// Wraps globalLogger for modules still using the static API.
 export class LogService {
     static async log(level: LogLevel, module: string, message: string, context?: Record<string, unknown>) {
         if (level === LogLevel.ERROR) {
             globalLogger.error({ module, ...context }, message);
         } else if (level === LogLevel.WARN) {
             globalLogger.warn({ module, ...context }, message);
+        } else if (level === LogLevel.DEBUG) {
+            globalLogger.debug({ module, ...context }, message);
         } else {
             globalLogger.info({ module, ...context }, message);
         }
+    }
+
+    static async debug(module: string, message: string, context?: Record<string, unknown>) {
+        globalLogger.debug({ module, ...context }, message);
     }
 
     static async info(module: string, message: string, context?: Record<string, unknown>) {

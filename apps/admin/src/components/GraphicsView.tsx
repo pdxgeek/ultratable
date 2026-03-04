@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Upload, Search, Image as ImageIcon, Loader2, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { gqlFetch } from '../lib/api';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
@@ -42,17 +43,12 @@ export const GraphicsView: React.FC = () => {
             let allGraphics: Graphic[] = [];
 
             for (const t of typesToFetch) {
-                const resp = await fetch('/graphql', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        query: `query GetGraphics($type: String!) { graphics(entityType: $type) { id entityType entityId url mimeType metadata sourceUrl createdAt } }`,
-                        variables: { type: t }
-                    })
-                });
-                const json = await resp.json();
-                if (json.data?.graphics) {
-                    allGraphics = [...allGraphics, ...json.data.graphics];
+                const data = await gqlFetch<{ graphics: Graphic[] }>(
+                    `query GetGraphics($type: String!) { graphics(entityType: $type) { id entityType entityId url mimeType metadata sourceUrl createdAt } }`,
+                    { type: t }
+                );
+                if (data.graphics) {
+                    allGraphics = [...allGraphics, ...data.graphics];
                 }
             }
             setGraphics(allGraphics);
@@ -88,14 +84,9 @@ export const GraphicsView: React.FC = () => {
                 ? { entityId: uploadEntityId, entityType: uploadType }
                 : { entityId: uploadEntityId, entityType: uploadType, url: uploadUrl };
 
-            const resp = await fetch('/graphql', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, variables })
-            });
+            const data = await gqlFetch<Record<string, string | null>>(query, variables);
 
-            const json = await resp.json();
-            if (json.data?.registerGraphic || json.data?.autoSideloadGraphic) {
+            if (data.registerGraphic || data.autoSideloadGraphic) {
                 setUploadStatus('success');
                 setUploadEntityId('');
                 setUploadUrl('');
@@ -103,7 +94,6 @@ export const GraphicsView: React.FC = () => {
                 fetchGraphics();
             } else {
                 setUploadStatus('error');
-                console.error('GraphQL Error:', json.errors);
             }
         } catch (err) {
             console.error(err);
