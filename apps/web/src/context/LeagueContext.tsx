@@ -122,18 +122,18 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
 
     // 3. Auto-sync when active season changes
     useEffect(() => {
-        if (activeLeague && activeSeason) {
+        if (activeSeason) {
             // Initial sync on season change
-            sync(activeLeague.sourceId, activeSeason.year);
+            sync(activeSeason.id);
 
             // Set up a 5-minute heartbeat to poll for live fixtures
             const intervalId = setInterval(() => {
-                sync(activeLeague.sourceId, activeSeason.year);
+                sync(activeSeason.id);
             }, 5 * 60 * 1000);
 
             return () => clearInterval(intervalId);
         }
-    }, [activeSeasonId, activeLeague, activeSeason, sync]);
+    }, [activeSeasonId, activeSeason, sync]);
 
     const setActiveSeasonId = useCallback((id: string) => {
         setActiveSeasonIdState(id);

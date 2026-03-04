@@ -8,6 +8,16 @@
 > - **BFF (Back-end for Front-end)**: We are currently building a new GraphQL service and Postgres database in `/apps/service`.
 > - **Rewriting Strategy**: When building new frontends, we use `/src` as a blueprint but rewrite it natively from scratch in a new `/apps/[app-name]` directory.
 >
+> **LOCAL DEV PORTS**
+> - **Service (GraphQL)**: `http://localhost:8080` — Fastify + Yoga GraphQL endpoint
+> - **Web App**: `http://localhost:5175` — Vite React frontend for end users
+> - **Admin App**: `http://localhost:5174` — Vite React frontend for admin operations
+>
+> **STARTING/STOPPING DEV SERVERS**
+> - **Start all**: `npm run start:all` (or `npm run dev`) — kills any existing processes on the ports, then starts all three services via `concurrently`. **Always use this instead of starting services individually.**
+> - **Stop all**: Kill the `start:all` process (Ctrl+C) — this will stop all three services cleanly.
+> - **Never use `pkill` or `kill -9`** to stop individual services — it leaves orphan child processes and dangling sockets. Always stop/restart via the `start:all` script.
+>
 > **ID GENERATION RULES**
 > - **EVERY ID IS A NATIVE POSTGRES UUID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**. 
 > - **NANOIDS WERE USED IN THE LEGACY SYSTEM BUT HAVE BEEN REPLACED BY `uuid().defaultRandom()` IN DRIZZLE ORM**.

@@ -30,6 +30,7 @@ builder.addScalarType('JSON', JSONResolver, {});
 builder.queryType({
     fields: (t) => ({
         health: t.string({
+            description: 'Simple health check endpoint. Returns a confirmation string when the service is running.',
             resolve: () => 'Service is up and running!',
         }),
         me: t.string({

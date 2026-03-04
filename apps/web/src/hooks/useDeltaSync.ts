@@ -10,33 +10,23 @@ export function useDeltaSync() {
     const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
-    const sync = useCallback(async (leagueSourceId: number, seasonYear: number) => {
+    const sync = useCallback(async (seasonId: string) => {
         setIsSyncing(true);
         setError(null);
 
         try {
-            const syncKey = `sync:${leagueSourceId}:${seasonYear}`;
+            const syncKey = `sync:season:${seasonId}`;
             const state = await db.syncState.get(syncKey);
             let since = state?.lastUpdatedAt || null;
 
-            // Resolve human-readable names for logging
-            const leagueRecord = await db.leagues.where('sourceId').equals(leagueSourceId).first();
-            const leagueLabel = leagueRecord
-                ? `${leagueRecord.name} (${leagueRecord.id.slice(0, 8)})`
-                : `league#${leagueSourceId}`;
-            const syncLabel = `${leagueLabel} ${seasonYear}`;
+            const syncLabel = `season#${seasonId.slice(0, 8)}`;
 
             // Check Dexie for past-due fixtures that aren't resolved.
             // If any exist, clear the watermark to force a full re-pull so
             // the server's live polling can update them.
-            //
-            // SCOPING: Only check fixtures for THIS league/season. We store the
-            // server-assigned seasonId in syncState.metadata after the first sync
-            // and use it to query db.fixtures.where('seasonId') instead of toArray().
             let staleRemediation = false;
-            const seasonId = state?.metadata?.seasonId as string | undefined;
 
-            if (since && seasonId) {
+            if (since) {
                 const now = new Date().toISOString();
 
                 const seasonFixtures = await db.fixtures.where('seasonId').equals(seasonId).toArray();
@@ -68,19 +58,13 @@ export function useDeltaSync() {
                     staleRemediation = true;
                     await db.syncState.delete(syncKey);
                 }
-            } else if (since && !seasonId) {
-                console.log(
-                    `[DeltaSync] ${syncLabel}: ` +
-                    `no seasonId in syncState — skipping stale check (first sync stored without it)`
-                );
             }
 
             // 2. Fetch from GQL.
             // Bypass urql's document cache only for stale remediation re-pulls;
             // normal delta syncs benefit from the cache.
             const result = await client.query(SYNC_DATA_QUERY, {
-                leagueSourceId,
-                seasonYear,
+                seasonId,
                 since
             }, staleRemediation ? { requestPolicy: 'network-only' } : {}).toPromise();
 
@@ -145,7 +129,6 @@ export function useDeltaSync() {
                 }
 
                 // 4. Update sync state with the latest updatedAt found in batch
-                // Also persist the seasonId so stale checks can scope by season
                 const allUpdates = [...(teams || []), ...(fixtures || []), ...(venues || [])];
                 if (allUpdates.length > 0) {
                     const latest = allUpdates.reduce((max, cur) =>
@@ -153,12 +136,9 @@ export function useDeltaSync() {
                         since || '1970-01-01T00:00:00Z'
                     );
 
-                    const resolvedSeasonId = fixtures?.[0]?.seasonId || seasonId;
-
                     await db.syncState.put({
                         key: syncKey,
                         lastUpdatedAt: latest,
-                        ...(resolvedSeasonId ? { metadata: { seasonId: resolvedSeasonId } } : {}),
                     });
                 }
             });

@@ -28,6 +28,8 @@ vi.mock('../repositories/supabase.repository', () => ({
         football: {
             getLeagues: vi.fn(),
             getFixtures: vi.fn(),
+            getFixturesBySeasonId: vi.fn(),
+            getTeamsBySeasonId: vi.fn(),
             syncFixtures: vi.fn(),
             getInternalSeasons: vi.fn(),
             getAllInternalSeasons: vi.fn(),
@@ -77,7 +79,7 @@ describe('GraphQL Schema', () => {
         const mockFixtures = [
             { id: '1', scheduledAt: new Date().toISOString(), status: 'scheduled', updatedAt: new Date().toISOString(), sourceName: 'api-football', sourceId: 101 }
         ];
-        vi.mocked(repository.football.getFixtures).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
+        vi.mocked(repository.football.getFixturesBySeasonId).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
 
         const since = "2026-02-21T00:00:00.000Z";
         const response = await yoga.fetch('http://localhost:8080/graphql', {
@@ -86,7 +88,7 @@ describe('GraphQL Schema', () => {
             body: JSON.stringify({
                 query: `
                     query GetFixtures($since: DateTime) {
-                        fixtures(leagueSourceId: 39, seasonYear: 2024, since: $since) {
+                        fixtures(seasonId: "season-uuid-1", since: $since) {
                             id
                             status
                             updatedAt
@@ -99,7 +101,7 @@ describe('GraphQL Schema', () => {
 
         const result = await response.json();
         expect(result.data.fixtures).toHaveLength(1);
-        expect(repository.football.getFixtures).toHaveBeenCalledWith(39, 2024, expect.any(Date));
+        expect(repository.football.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date));
     });
 
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
@@ -252,22 +254,8 @@ describe('GraphQL Schema', () => {
 
     describe('venues query', () => {
         const setupVenueMocks = () => {
-            const selectMock = vi.fn();
-            // league lookup
-            selectMock.mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }])
-                })
-            });
-            // season lookup
-            selectMock.mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ id: 'season-1', year: 2024, leagueId: 'league-1' }])
-                })
-            });
-            vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
-
-            // selectDistinct for venues
+            // selectDistinct for venues — no league/season lookup needed,
+            // the resolver now queries directly by seasonId
             const mockVenues = [
                 { venue: { id: 'v1', name: 'Emirates', city: 'London', updatedAt: '2026-03-01T00:00:00Z' } },
                 { venue: { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' } },
@@ -289,7 +277,7 @@ describe('GraphQL Schema', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `query { venues(leagueSourceId: 39, seasonYear: 2024) { id name } }`
+                    query: `query { venues(seasonId: "season-uuid-1") { id name } }`
                 })
             });
 
@@ -305,7 +293,7 @@ describe('GraphQL Schema', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `query($since: DateTime) { venues(leagueSourceId: 39, seasonYear: 2024, since: $since) { id name } }`,
+                    query: `query($since: DateTime) { venues(seasonId: "season-uuid-1", since: $since) { id name } }`,
                     variables: { since: '2026-03-02T00:00:00Z' }
                 })
             });

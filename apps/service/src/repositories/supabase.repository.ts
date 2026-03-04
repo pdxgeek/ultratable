@@ -223,6 +223,36 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 
     /**
+     * Read-only: returns teams for a given season UUID from the database.
+     * Queries directly by seasonId — no league/source ID resolution needed.
+     */
+    async getTeamsBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
+        if (!db) return [];
+
+        const cacheKey = `teams:season:${seasonId}`;
+        if (!since) {
+            const cached = cacheService.get<Array<typeof schema.teams.$inferSelect>>(cacheKey);
+            if (cached) return cached;
+        }
+
+        const conditions = [eq(schema.seasonsToTeams.seasonId, seasonId)];
+        if (since) {
+            conditions.push(gt(schema.teams.updatedAt, since));
+        }
+
+        const res = await db.select({ team: schema.teams })
+            .from(schema.teams)
+            .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
+            .where(and(...conditions));
+
+        const result = res.map((r) => r.team);
+        if (!since) {
+            cacheService.set(cacheKey, result, TTL.STABLE);
+        }
+        return result;
+    }
+
+    /**
      * Sync: fetches teams from the external API, upserts into DB, and sideloads graphics.
      * Called by syncFixtures() and admin import operations — NOT by read queries.
      */
@@ -689,6 +719,180 @@ export class SupabaseFootballRepository implements FootballRepository {
         const result = await query;
         if (!since) {
             cacheService.set(`fixtures:${leagueSourceId}:${seasonYear}`, result, TTL.ACTIVE);
+        }
+        return result;
+    }
+
+    /**
+     * Read-only: returns fixtures for a given season UUID.
+     * Queries directly by seasonId — no league/source ID resolution needed.
+     * Includes the same live polling logic as getFixtures().
+     */
+    async getFixturesBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+        if (!db) return [];
+
+        // 1. Resolve the season record directly by UUID
+        const [seasonRecord] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId));
+        if (!seasonRecord) return [];
+
+        // Resolve the league for logging and live polling API calls
+        const [leagueRecord] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, seasonRecord.leagueId));
+
+        // --- LIVE FIXTURE POLLING LOGIC (runs BEFORE cache) ---
+        const now = new Date();
+        const FIVE_MINUTES_MS = 5 * 60 * 1000;
+        let pollingDidUpdate = false;
+
+        if (!seasonRecord.isCompleted) {
+            const timeSinceLastSync = seasonRecord.lastLiveSyncAt
+                ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
+                : Infinity;
+
+            logger.info({ seasonId, seasonYear: seasonRecord.year, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
+
+            if (timeSinceLastSync > FIVE_MINUTES_MS) {
+                const threshold = new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
+                const claimed = await db.update(schema.seasons)
+                    .set({ lastLiveSyncAt: now })
+                    .where(and(
+                        eq(schema.seasons.id, seasonRecord.id),
+                        sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`
+                    ))
+                    .returning({ id: schema.seasons.id });
+
+                logger.info({ claimed: claimed.length }, 'Live polling: lock claim result');
+
+                if (claimed.length === 0) {
+                    logger.info('Live polling: skipped — lock not claimed');
+                } else {
+                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
+                    const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
+                        .from(schema.fixtures)
+                        .where(and(
+                            eq(schema.fixtures.seasonId, seasonRecord.id),
+                            lte(schema.fixtures.scheduledAt, now),
+                            notInArray(schema.fixtures.status, TERMINAL_STATUSES)
+                        ));
+
+                    if (pastDue.length > 0) {
+                        try {
+                            const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
+                            logger.info({ seasonId, seasonYear: seasonRecord.year }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+
+                            const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
+
+                            if (updatedFixtures.length > 0) {
+                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
+
+                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
+                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
+
+                                const fixturesToUpdate = updatedFixtures.map(normalized => {
+                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
+                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
+                                    if (!homeId || !awayId) return null;
+                                    return {
+                                        sourceName: normalized.sourceName,
+                                        sourceId: normalized.sourceId,
+                                        leagueId: seasonRecord.leagueId,
+                                        seasonId: seasonRecord.id,
+                                        homeTeamId: homeId,
+                                        awayTeamId: awayId,
+                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
+                                        scheduledAt: new Date(normalized.scheduledAt),
+                                        status: normalized.status,
+                                        homeGoals: normalized.homeGoals,
+                                        awayGoals: normalized.awayGoals,
+                                        gameweek: normalized.gameweek,
+                                        updatedAt: NOW_MS
+                                    };
+                                }).filter(Boolean);
+
+                                if (fixturesToUpdate.length > 0) {
+                                    await db.insert(schema.fixtures)
+                                        .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
+                                        .onConflictDoUpdate({
+                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            set: {
+                                                status: sql`EXCLUDED.status`,
+                                                homeGoals: sql`EXCLUDED.home_goals`,
+                                                awayGoals: sql`EXCLUDED.away_goals`,
+                                                gameweek: sql`EXCLUDED.gameweek`,
+                                                updatedAt: NOW_MS
+                                            }
+                                        });
+                                    pollingDidUpdate = true;
+                                }
+                            }
+                        } catch (e: unknown) {
+                            const err = e instanceof Error ? e : new Error(String(e));
+                            logger.error({ error: err.message }, 'Live polling failed');
+                        }
+                    } else {
+                        const TERMINAL_STATUSES_CHECK: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
+                        const futureMatches = await db.select({ count: sql`count(*)` })
+                            .from(schema.fixtures)
+                            .where(and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                gt(schema.fixtures.scheduledAt, now)
+                            ));
+
+                        const nonTerminal = await db.select({ count: sql`count(*)` })
+                            .from(schema.fixtures)
+                            .where(and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                notInArray(schema.fixtures.status, TERMINAL_STATUSES_CHECK)
+                            ));
+
+                        const futureCount = Number(futureMatches[0]?.count || 0);
+                        const nonTerminalCount = Number(nonTerminal[0]?.count || 0);
+
+                        if (futureCount === 0 && nonTerminalCount === 0) {
+                            logger.info({ seasonId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonRecord.year} complete`);
+                            await db.update(schema.seasons)
+                                .set({ isCompleted: true })
+                                .where(eq(schema.seasons.id, seasonRecord.id));
+                        } else {
+                            logger.info({ seasonId, futureCount, nonTerminalCount }, `Live polling: season ${seasonRecord.year} NOT complete`);
+                        }
+                    }
+                }
+            } else {
+                logger.info({ timeSinceLastSyncMs: timeSinceLastSync }, 'Live polling: skipped — last sync too recent');
+            }
+        } else {
+            logger.info({ seasonId, seasonYear: seasonRecord.year }, 'Live polling: skipped — season is completed');
+        }
+
+        // Invalidate cache if polling updated fixtures
+        if (pollingDidUpdate) {
+            cacheService.invalidate(`fixtures:season:${seasonId}`);
+            // Also invalidate legacy cache key if league info available
+            if (leagueRecord) {
+                cacheService.invalidate(`fixtures:${leagueRecord.sourceId}:${seasonRecord.year}`);
+            }
+        }
+
+        // Cache check
+        if (!since) {
+            const cacheKey = `fixtures:season:${seasonId}`;
+            const cached = cacheService.get<Array<typeof schema.fixtures.$inferSelect>>(cacheKey);
+            if (cached) return cached;
+        }
+
+        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonRecord.id));
+
+        if (since) {
+            query = db.select().from(schema.fixtures).where(and(
+                eq(schema.fixtures.seasonId, seasonRecord.id),
+                gt(schema.fixtures.updatedAt, since)
+            ));
+        }
+
+        const result = await query;
+        if (!since) {
+            cacheService.set(`fixtures:season:${seasonId}`, result, TTL.ACTIVE);
         }
         return result;
     }

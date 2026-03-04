@@ -27,9 +27,11 @@ export interface FootballRepository {
     getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<Array<typeof schema.seasons.$inferSelect>>;
     getAllInternalSeasons(): Promise<Array<typeof schema.seasons.$inferSelect>>;
     getTeams(leagueId: number, season: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>>;
+    getTeamsBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>>;
     syncSeasons(leagueId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>>;
     syncFixtures(leagueId: number, season: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>>;
     getFixtures(leagueId: number, season: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
+    getFixturesBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
 
     // Catalog Management
     syncCatalogCountries(): Promise<SyncResult<typeof schema.catalogCountries.$inferSelect>>;
