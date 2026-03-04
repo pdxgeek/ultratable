@@ -4,6 +4,7 @@ import * as schema from '../db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { JobRunner } from '../workers/runner';
 import { repository } from '../repositories/supabase.repository';
+import { GraphQLError } from 'graphql';
 
 const JobRef = builder.objectRef<typeof schema.jobs.$inferSelect>('Job');
 const JobExecutionRef = builder.objectRef<typeof schema.jobExecutions.$inferSelect>('JobExecution');
@@ -103,6 +104,9 @@ builder.mutationField('runJob', (t) =>
                     const parts = name.split('-');
                     const leagueId = parseInt(parts[2]);
                     const season = parseInt(parts[3]);
+                    if (isNaN(leagueId) || isNaN(season)) {
+                        throw new GraphQLError(`Invalid job name format: expected sync-fixtures-<leagueId>-<season>, got "${name}"`);
+                    }
                     const syncRes = await repository.football.syncFixtures(leagueId, season, reporter);
                     return {
                         processedCount: syncRes.stats.processedCount,
@@ -114,7 +118,13 @@ builder.mutationField('runJob', (t) =>
                 return { processedCount: 0, apiCallsCount: 0 };
             });
 
+            // Return the latest execution for THIS job specifically
+            const [job] = await db.select().from(schema.jobs).where(eq(schema.jobs.name, name));
+            if (!job) {
+                throw new GraphQLError(`Job "${name}" not found after execution`);
+            }
             const [execution] = await db.select().from(schema.jobExecutions)
+                .where(eq(schema.jobExecutions.jobId, job.id))
                 .orderBy(desc(schema.jobExecutions.startedAt))
                 .limit(1);
             return execution;

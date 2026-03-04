@@ -8,12 +8,16 @@ import { ApiFootballProvider } from '../integrations/api-football';
 import { MockFootballProvider } from '../integrations/mock';
 import { graphicsService } from '../services/graphics.service';
 import { globalLogger } from '../services/log.service';
-import { cacheService, TTL, fixtureTTL, seasonTTL } from '../services/cache.service.js';
+import { cacheService, TTL, fixtureTTL, seasonTTL } from '../services/cache.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export class SupabaseConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
+        // In production, the filesystem is ephemeral (Docker/Fly.io) — .env changes would be lost on redeploy.
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('Config mutations are disabled in production. Use environment variables instead.');
+        }
         const envPath = path.resolve(process.cwd(), '.env');
         let content = '';
         try {
@@ -167,7 +171,54 @@ export class SupabaseFootballRepository implements FootballRepository {
         return result;
     }
 
+    /**
+     * Read-only: returns teams for a given league+season from the database.
+     * Does NOT call the external API. Cached for 30 minutes.
+     */
     async getTeams(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>> {
+        if (!db) return [];
+
+        const cacheKey = `teams:${leagueId}:${seasonYear}`;
+        if (!since) {
+            const cached = cacheService.get<Array<typeof schema.teams.$inferSelect>>(cacheKey);
+            if (cached) return cached;
+        }
+
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
+        if (!localLeague) return [];
+
+        const [localSeason] = await db.select().from(schema.seasons)
+            .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
+        if (!localSeason) return [];
+
+        let query = db.select({ team: schema.teams })
+            .from(schema.teams)
+            .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
+            .where(eq(schema.seasonsToTeams.seasonId, localSeason.id));
+
+        if (since) {
+            query = db.select({ team: schema.teams })
+                .from(schema.teams)
+                .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
+                .where(and(
+                    eq(schema.seasonsToTeams.seasonId, localSeason.id),
+                    gt(schema.teams.updatedAt, since)
+                ));
+        }
+
+        const res = await query;
+        const result = res.map((r) => r.team);
+        if (!since) {
+            cacheService.set(cacheKey, result, TTL.STABLE);
+        }
+        return result;
+    }
+
+    /**
+     * Sync: fetches teams from the external API, upserts into DB, and sideloads graphics.
+     * Called by syncFixtures() and admin import operations — NOT by read queries.
+     */
+    async syncTeams(leagueId: number, seasonYear: number): Promise<Array<typeof schema.teams.$inferSelect>> {
         if (!db) return [];
 
         // 0. Ensure internal IDs exist
@@ -273,24 +324,9 @@ export class SupabaseFootballRepository implements FootballRepository {
                 });
         }
 
-        // 5. Return teams for THIS season
-        let query = db.select({ team: schema.teams })
-            .from(schema.teams)
-            .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
-            .where(eq(schema.seasonsToTeams.seasonId, localSeason.id));
-
-        if (since) {
-            query = db.select({ team: schema.teams })
-                .from(schema.teams)
-                .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
-                .where(and(
-                    eq(schema.seasonsToTeams.seasonId, localSeason.id),
-                    gt(schema.teams.updatedAt, since)
-                ));
-        }
-
-        const res = await query;
-        return res.map((r) => r.team);
+        // 5. Invalidate cache and return fresh data
+        cacheService.invalidate(`teams:${leagueId}:${seasonYear}`);
+        return this.getTeams(leagueId, seasonYear);
     }
 
     private async upsertVenues(venues: import('../integrations/types').IngestedVenue[]) {
@@ -376,7 +412,7 @@ export class SupabaseFootballRepository implements FootballRepository {
         if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueId}`);
 
         // 2. Ensure teams exist for this league/season
-        await this.getTeams(leagueId, seasonYear);
+        await this.syncTeams(leagueId, seasonYear);
         apiCallsCount++;
 
         // 3. Fetch fixtures and venues from provider
@@ -397,7 +433,11 @@ export class SupabaseFootballRepository implements FootballRepository {
             const homeId = teamMap.get(normalized.homeTeamSourceId);
             const awayId = teamMap.get(normalized.awayTeamSourceId);
 
-            if (!homeId || !awayId) return null;
+            if (!homeId || !awayId) {
+                logger.warn({ homeSource: normalized.homeTeamSourceId, awaySource: normalized.awayTeamSourceId, fixtureSource: normalized.sourceId },
+                    `Dropping fixture ${normalized.sourceId}: missing team mapping (home=${!!homeId}, away=${!!awayId})`);
+                return null;
+            }
 
             return {
                 sourceName: normalized.sourceName,
@@ -463,13 +503,7 @@ export class SupabaseFootballRepository implements FootballRepository {
     async getFixtures(leagueId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
-        // Cache check (skip if caller wants delta via `since`)
-        if (!since) {
-            const cacheKey = `fixtures:${leagueId}:${seasonYear}`;
-            const cached = cacheService.get<Array<typeof schema.fixtures.$inferSelect>>(cacheKey);
-            if (cached) return cached;
-        }
-
+        // 1. Resolve the season record (needed by both polling and main query)
         const [season] = await db.select()
             .from(schema.seasons)
             .innerJoin(schema.leagues, eq(schema.seasons.leagueId, schema.leagues.id))
@@ -480,109 +514,160 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         if (!season) return [];
 
-        // --- LIVE FIXTURE POLLING LOGIC ---
+        const seasonRecord = season.seasons;
+
+        // --- LIVE FIXTURE POLLING LOGIC (runs BEFORE cache) ---
+        // This must run before the cache check so that past-due fixtures
+        // ("out of state" games) are always detected and updated, even when
+        // the cache is populated with stale data.
         const now = new Date();
         const FIVE_MINUTES_MS = 5 * 60 * 1000;
-
-        const seasonRecord = season.seasons;
+        let pollingDidUpdate = false;
 
         if (!seasonRecord.isCompleted) {
             const timeSinceLastSync = seasonRecord.lastLiveSyncAt
                 ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
                 : Infinity;
 
+            logger.info({ leagueId, seasonYear, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
+
             if (timeSinceLastSync > FIVE_MINUTES_MS) {
-                // 1. Set concurrency lock immediately
-                await db.update(schema.seasons)
+                // Atomic lock: claim the sync slot with a conditional UPDATE.
+                // If another request already set lastLiveSyncAt recently, 0 rows will be returned.
+                const threshold = new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
+                const claimed = await db.update(schema.seasons)
                     .set({ lastLiveSyncAt: now })
-                    .where(eq(schema.seasons.id, seasonRecord.id));
-
-                // 2. Find past-due fixtures that aren't in a terminal state
-                const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
-                const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
-                    .from(schema.fixtures)
                     .where(and(
-                        eq(schema.fixtures.seasonId, seasonRecord.id),
-                        lte(schema.fixtures.scheduledAt, now),
-                        notInArray(schema.fixtures.status, TERMINAL_STATUSES)
-                    ));
+                        eq(schema.seasons.id, seasonRecord.id),
+                        sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`
+                    ))
+                    .returning({ id: schema.seasons.id });
 
-                if (pastDue.length > 0) {
-                    try {
-                        const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
-                        logger.info({ leagueId, seasonYear }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+                logger.info({ claimed: claimed.length }, 'Live polling: lock claim result');
 
-                        // Fetch latest status from upstream
-                        const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
-
-                        if (updatedFixtures.length > 0) {
-                            const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-                            const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
-
-                            const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-                            const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
-
-                            const fixturesToUpdate = updatedFixtures.map(normalized => {
-                                const homeId = teamMap.get(normalized.homeTeamSourceId);
-                                const awayId = teamMap.get(normalized.awayTeamSourceId);
-                                if (!homeId || !awayId) return null;
-                                return {
-                                    sourceName: normalized.sourceName,
-                                    sourceId: normalized.sourceId,
-                                    leagueId: season.leagues.id,
-                                    seasonId: seasonRecord.id,
-                                    homeTeamId: homeId,
-                                    awayTeamId: awayId,
-                                    venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
-                                    scheduledAt: new Date(normalized.scheduledAt),
-                                    status: normalized.status,
-                                    homeGoals: normalized.homeGoals,
-                                    awayGoals: normalized.awayGoals,
-                                    gameweek: normalized.gameweek,
-                                    updatedAt: sql`now()`
-                                };
-                            }).filter(Boolean);
-
-                            if (fixturesToUpdate.length > 0) {
-                                await db.insert(schema.fixtures)
-                                    .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
-                                    .onConflictDoUpdate({
-                                        target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
-                                        set: {
-                                            status: sql`EXCLUDED.status`,
-                                            homeGoals: sql`EXCLUDED.home_goals`,
-                                            awayGoals: sql`EXCLUDED.away_goals`,
-                                            gameweek: sql`EXCLUDED.gameweek`,
-                                            updatedAt: sql`EXCLUDED.updated_at`
-                                        }
-                                    });
-                            }
-                        }
-                    } catch (e: unknown) {
-                        const err = e instanceof Error ? e : new Error(String(e));
-                        logger.error({ error: err.message }, 'Live polling failed');
-                    }
+                // If 0 rows returned, another process already claimed this sync window
+                if (claimed.length === 0) {
+                    logger.info('Live polling: skipped — lock not claimed');
                 } else {
-                    // Check if there are any remaining matches that *will* happen in the future
-                    const futureMatches = await db.select({ count: sql`count(*)` })
+
+                    // 2. Find past-due fixtures that aren't in a terminal state
+                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
+                    const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
                         .from(schema.fixtures)
                         .where(and(
                             eq(schema.fixtures.seasonId, seasonRecord.id),
-                            gt(schema.fixtures.scheduledAt, now)
+                            lte(schema.fixtures.scheduledAt, now),
+                            notInArray(schema.fixtures.status, TERMINAL_STATUSES)
                         ));
 
-                    if (Number(futureMatches[0]?.count || 0) === 0) {
-                        // All matches in this season have passed and have no remaining 'scheduled' block
-                        // Mark season as completed to prevent future polling
-                        logger.info({ leagueId }, `Live polling: marking season ${seasonYear} complete`);
-                        await db.update(schema.seasons)
-                            .set({ isCompleted: true })
-                            .where(eq(schema.seasons.id, seasonRecord.id));
+                    if (pastDue.length > 0) {
+                        try {
+                            const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
+                            logger.info({ leagueId, seasonYear }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+
+                            // Fetch latest status from upstream
+                            const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
+
+                            if (updatedFixtures.length > 0) {
+                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
+
+                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
+                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
+
+                                const fixturesToUpdate = updatedFixtures.map(normalized => {
+                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
+                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
+                                    if (!homeId || !awayId) return null;
+                                    return {
+                                        sourceName: normalized.sourceName,
+                                        sourceId: normalized.sourceId,
+                                        leagueId: season.leagues.id,
+                                        seasonId: seasonRecord.id,
+                                        homeTeamId: homeId,
+                                        awayTeamId: awayId,
+                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
+                                        scheduledAt: new Date(normalized.scheduledAt),
+                                        status: normalized.status,
+                                        homeGoals: normalized.homeGoals,
+                                        awayGoals: normalized.awayGoals,
+                                        gameweek: normalized.gameweek,
+                                        updatedAt: sql`now()`
+                                    };
+                                }).filter(Boolean);
+
+                                if (fixturesToUpdate.length > 0) {
+                                    await db.insert(schema.fixtures)
+                                        .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
+                                        .onConflictDoUpdate({
+                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            set: {
+                                                status: sql`EXCLUDED.status`,
+                                                homeGoals: sql`EXCLUDED.home_goals`,
+                                                awayGoals: sql`EXCLUDED.away_goals`,
+                                                gameweek: sql`EXCLUDED.gameweek`,
+                                                updatedAt: sql`now()`
+                                            }
+                                        });
+                                    pollingDidUpdate = true;
+                                }
+                            }
+                        } catch (e: unknown) {
+                            const err = e instanceof Error ? e : new Error(String(e));
+                            logger.error({ error: err.message }, 'Live polling failed');
+                        }
+                    } else {
+                        // Check if the season is truly complete:
+                        // 1. No future matches remain
+                        // 2. No non-terminal fixtures remain (scheduled/live/etc.)
+                        // Both conditions must hold to avoid false positives where
+                        // a poll resolves one batch of stale fixtures but other
+                        // non-terminal fixtures remain.
+                        const futureMatches = await db.select({ count: sql`count(*)` })
+                            .from(schema.fixtures)
+                            .where(and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                gt(schema.fixtures.scheduledAt, now)
+                            ));
+
+                        const nonTerminal = await db.select({ count: sql`count(*)` })
+                            .from(schema.fixtures)
+                            .where(and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                notInArray(schema.fixtures.status, TERMINAL_STATUSES)
+                            ));
+
+                        const futureCount = Number(futureMatches[0]?.count || 0);
+                        const nonTerminalCount = Number(nonTerminal[0]?.count || 0);
+
+                        if (futureCount === 0 && nonTerminalCount === 0) {
+                            logger.info({ leagueId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonYear} complete`);
+                            await db.update(schema.seasons)
+                                .set({ isCompleted: true })
+                                .where(eq(schema.seasons.id, seasonRecord.id));
+                        } else {
+                            logger.info({ leagueId, futureCount, nonTerminalCount }, `Live polling: season ${seasonYear} NOT complete`);
+                        }
                     }
-                }
+                } // end if (claimed.length > 0)
+            } else {
+                logger.info({ timeSinceLastSyncMs: timeSinceLastSync }, 'Live polling: skipped — last sync too recent');
             }
+        } else {
+            logger.info({ leagueId, seasonYear }, 'Live polling: skipped — season is completed');
         }
-        // --- END LIVE FIXTURE POLLING LOGIC ---
+
+        // Invalidate cache if polling updated fixtures so we serve fresh data
+        if (pollingDidUpdate) {
+            cacheService.invalidate(`fixtures:${leagueId}:${seasonYear}`);
+        }
+
+        // Cache check (skip if caller wants delta via `since`)
+        if (!since) {
+            const cacheKey = `fixtures:${leagueId}:${seasonYear}`;
+            const cached = cacheService.get<Array<typeof schema.fixtures.$inferSelect>>(cacheKey);
+            if (cached) return cached;
+        }
 
         let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonRecord.id));
 

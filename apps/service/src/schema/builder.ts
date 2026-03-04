@@ -1,12 +1,13 @@
 import SchemaBuilder from '@pothos/core';
 import SimpleObjectsPlugin from '@pothos/plugin-simple-objects';
 import { DateTimeResolver, JSONResolver } from 'graphql-scalars';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 
 import { GraphQLError } from 'graphql';
 
 export interface Context {
-    req: any;
-    reply: any;
+    req: FastifyRequest;
+    reply?: FastifyReply;
     user?: {
         id: string;
         roles: string[];

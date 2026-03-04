@@ -67,22 +67,24 @@ const yoga = createYoga<{
         try {
             session = await auth.api.getSession({ headers });
         } catch {
-            // Malformed or expired cookie — treat as unauthenticated Guest
+            globalLogger.debug({ path: req.url }, 'Auth: malformed/expired cookie — treating as guest');
         }
 
         if (!session?.user?.id) {
+            globalLogger.debug({ path: req.url }, 'Auth: no session — guest context');
             return { req, user: undefined };
         }
 
         // Resolve domain user via cached authLinks bridge lookup
         const domainUser = await resolveDomainUser(session.user.id);
 
-        return {
-            req,
-            user: domainUser
-                ? { id: domainUser.id, roles: domainUser.roles }
-                : { id: session.user.id, roles: ['user'] }
-        };
+        const user = domainUser
+            ? { id: domainUser.id, roles: domainUser.roles }
+            : { id: session.user.id, roles: ['user'] };
+
+        globalLogger.debug({ userId: user.id, roles: user.roles, path: req.url }, 'Auth: context resolved');
+
+        return { req, user };
     },
     // We use fastify's built-in error handling
     logging: globalLogger
@@ -104,15 +106,31 @@ server.register(fastifyRateLimit, {
     timeWindow: '1 minute',
 });
 
+// Build the set of allowed origins from env.
+// In dev (ALLOWED_ORIGINS not set), localhost Vite ports are accepted.
+// In production, only explicitly listed origins pass.
+const DEV_ORIGINS = [
+    'http://localhost:5174', 'http://localhost:5175',
+    'http://127.0.0.1:5174', 'http://127.0.0.1:5175',
+];
+const allowedOrigins = new Set(
+    process.env.ALLOWED_ORIGINS
+        ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+        : DEV_ORIGINS
+);
+// In dev, always include the localhost origins alongside any ALLOWED_ORIGINS
+if (process.env.NODE_ENV !== 'production') {
+    DEV_ORIGINS.forEach(o => allowedOrigins.add(o));
+}
+
+function isOriginAllowed(origin: string | undefined): boolean {
+    if (!origin) return true; // same-origin / server-to-server
+    return allowedOrigins.has(origin);
+}
+
 server.register(fastifyCors, {
     origin: (origin, cb) => {
-        if (!origin || /localhost:517[4-5]/.test(origin) || /127\.0\.0\.1:517[4-5]/.test(origin)) {
-            cb(null, true);
-            return;
-        }
-        // cb(new Error("Not allowed"), false);
-        // FIXME: For development, just allow all origins if not explicitly one of the vite ones
-        cb(null, true);
+        cb(null, isOriginAllowed(origin));
     },
     credentials: true,
 });
@@ -160,7 +178,7 @@ server.post('/api/auth/dev-login', async (request, reply) => {
     let devUser = domainUsers[0];
 
     if (!devUser) {
-        console.info(`[Dev Login] Seeding missing domain user for role: ${role}...`);
+        globalLogger.info(`[Dev Login] Seeding missing domain user for role: ${role}...`);
         const insertedUsers = await db.insert(schema.users).values({
             name: `Dev ${role}`,
             email: email,
@@ -175,7 +193,7 @@ server.post('/api/auth/dev-login', async (request, reply) => {
     const providerUser = providerUsers[0];
 
     if (!providerUser) {
-        console.info(`[Dev Login] Seeding missing BetterAuth credentials for: ${email}...`);
+        globalLogger.info(`[Dev Login] Seeding missing BetterAuth credentials for: ${email}...`);
         try {
             await auth.api.signUpEmail({
                 body: {
@@ -195,12 +213,12 @@ server.post('/api/auth/dev-login', async (request, reply) => {
             }
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e);
-            console.error('[Dev Login] Error seeding BetterAuth credentials:', message);
+            globalLogger.error({ error: message }, '[Dev Login] Error seeding BetterAuth credentials');
             return reply.status(500).send({ error: 'Failed to seed dev auth credentials' });
         }
     }
 
-    console.info(`[Dev Login] Seed verified for: ${email}. The client may now natively sign-in.`);
+    globalLogger.info(`[Dev Login] Seed verified for: ${email}. The client may now natively sign-in.`);
 
     return reply.status(200).send({
         message: 'Dev User Seeded',
@@ -216,7 +234,7 @@ server.all('/api/auth/*', async (request, reply) => {
         // Fastify CORS evaluates dynamically in onSend which BetterAuth bypasses.
         // We manually write the core CORS headers for valid origins directly to the stream.
         const origin = request.headers.origin;
-        if (origin && (/localhost:517[4-5]/.test(origin) || /127\.0\.0\.1:517[4-5]/.test(origin))) {
+        if (origin && isOriginAllowed(origin)) {
             reply.raw.setHeader('Access-Control-Allow-Origin', origin);
             reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
         }

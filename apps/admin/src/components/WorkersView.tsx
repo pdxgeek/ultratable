@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Activity, Globe, CheckCircle2, Play, History, Settings, Loader2 } from 'lucide-react';
 import { cn } from '../utils';
+import { gqlFetch } from '../lib/api';
 
 export interface Job {
   id: string;
@@ -32,16 +33,14 @@ const WorkersView = ({ jobs, executions, loading, onRefresh }: {
   const runJob = async (name: string) => {
     setRunningJob(name);
     try {
-      await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation Run($name: String!) { runJob(name: $name) { id status } }`,
-          variables: { name }
-        })
-      });
+      await gqlFetch(
+        `mutation Run($name: String!) { runJob(name: $name) { id status } }`,
+        { name }
+      );
       await onRefresh();
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Job failed: ${msg}`);
       console.error(e);
     } finally {
       setRunningJob(null);

@@ -169,6 +169,8 @@ const ADMIN_QUERIES: RbacTestCase[] = [
     { name: 'systemLogs', query: '{ systemLogs { id } }' },
     { name: 'catalogCountries', query: '{ catalogCountries { id } }' },
     { name: 'catalogLeagues', query: '{ catalogLeagues { id } }' },
+    // graphics.ts — was previously missing auth, now correctly gated
+    { name: 'graphics', query: '{ graphics(entityType: "team") { id } }' },
 ];
 
 describe('RBAC Security Verification', () => {

@@ -1,9 +1,10 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
-import { cacheService } from '../services/cache.service.js';
+import { cacheService } from '../services/cache.service';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
 import { LeagueRef, SeasonRef } from './football';
+import { GraphQLError } from 'graphql';
 
 const CatalogCountryRef = builder.objectRef<typeof schema.catalogCountries.$inferSelect>('CatalogCountry');
 const CatalogLeagueRef = builder.objectRef<typeof schema.catalogLeagues.$inferSelect>('CatalogLeague');
@@ -148,7 +149,12 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { seasonId, configJson }, ctx) => {
             requireAdmin(ctx);
-            const config = JSON.parse(configJson);
+            let config: Record<string, unknown>;
+            try {
+                config = JSON.parse(configJson);
+            } catch {
+                throw new GraphQLError(`Invalid JSON in configJson: ${configJson.slice(0, 100)}`);
+            }
             const result = await repository.football.updateSeasonConfig(seasonId, config);
             cacheService.invalidate('seasons');
             return result;

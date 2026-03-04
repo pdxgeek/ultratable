@@ -36,7 +36,7 @@ export class JobRunner {
         }
 
         if (!job.isActive) {
-            console.log(`Skipping inactive job: ${name}`);
+            logger.info({ jobId: job.id }, `Skipping inactive job: ${name}`);
             return;
         }
 
@@ -47,8 +47,8 @@ export class JobRunner {
             startedAt: new Date(),
         }).returning();
 
-        console.log(`[Job: ${name}] Started (ID: ${execution.id})`);
         logger.info({ jobId: job.id, executionId: execution.id }, `Job [${name}] started`);
+        const startMs = Date.now();
 
         const reporter: JobReporter = {
             updateProgress: async (stats) => {
@@ -84,16 +84,15 @@ export class JobRunner {
                 .set({ lastRunAt: new Date() })
                 .where(eq(schema.jobs.id, job.id));
 
-            console.log(`[Job: ${name}] Finished successfully (Count: ${stats.processedCount || 0})`);
             logger.info({
                 jobId: job.id,
                 executionId: execution.id,
+                durationMs: Date.now() - startMs,
                 processedCount: stats.processedCount,
                 apiCallsCount: stats.apiCallsCount
-            }, `Job [${name}] finished successfully`);
+            }, `Job [${name}] completed in ${Date.now() - startMs}ms`);
         } catch (error: unknown) {
             // 5. Record failure
-            console.error(`[Job: ${name}] Failed:`, error);
             const err = error as Error;
 
             await db.update(schema.jobExecutions)
@@ -107,9 +106,10 @@ export class JobRunner {
             logger.error({
                 jobId: job.id,
                 executionId: execution.id,
+                durationMs: Date.now() - startMs,
                 error: err.message || String(error),
                 stack: err.stack
-            }, `Job [${name}] failed: ${err.message || error}`);
+            }, `Job [${name}] failed after ${Date.now() - startMs}ms: ${err.message || error}`);
 
             throw error; // Re-throw to caller
         }

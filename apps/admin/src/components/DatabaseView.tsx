@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Database, Globe, AlertCircle } from 'lucide-react';
 import { cn } from '../utils';
+import { gqlFetch } from '../lib/api';
 
 interface ConfigStatus {
   isDatabaseConnected: boolean;
@@ -21,17 +22,11 @@ const DatabaseView = ({ config, onUpdate }: { config: ConfigStatus | null, onUpd
     e.preventDefault();
     setDbStatus('loading');
     try {
-      const response = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation Configure($url: String!) { configureDatabase(url: $url) }`,
-          variables: { url: dbUrl }
-        })
-      });
-      if (!response.ok) throw new Error('Response Error');
-      const result = await response.json();
-      if (result.data?.configureDatabase) {
+      const data = await gqlFetch<{ configureDatabase: boolean }>(
+        `mutation Configure($url: String!) { configureDatabase(url: $url) }`,
+        { url: dbUrl }
+      );
+      if (data.configureDatabase) {
         setDbStatus('success');
         setDbUrl('');
         setTimeout(() => setDbStatus('idle'), 3000);
@@ -49,17 +44,11 @@ const DatabaseView = ({ config, onUpdate }: { config: ConfigStatus | null, onUpd
     e.preventDefault();
     setSStatus('loading');
     try {
-      const response = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `mutation ConfigureSup($url: String!, $key: String!) { configureSupabase(url: $url, anonKey: $key) }`,
-          variables: { url: sUrl, key: sKey }
-        })
-      });
-      if (!response.ok) throw new Error('Response Error');
-      const result = await response.json();
-      if (result.data?.configureSupabase) {
+      const data = await gqlFetch<{ configureSupabase: boolean }>(
+        `mutation ConfigureSup($url: String!, $key: String!) { configureSupabase(url: $url, anonKey: $key) }`,
+        { url: sUrl, key: sKey }
+      );
+      if (data.configureSupabase) {
         setSStatus('success');
         setSUrl('');
         setSKey('');

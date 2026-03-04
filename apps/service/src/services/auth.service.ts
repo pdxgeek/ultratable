@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
+import { LRUCache } from 'lru-cache';
+import { globalLogger } from './log.service';
 
 /**
  * Resolved domain user identity from the authLinks bridge table.
@@ -19,25 +21,14 @@ export interface DomainUser {
  * the BetterAuth NanoID → Domain UUID mapping.
  *
  * Entries expire after 5 minutes and the cache holds at most 500 entries.
+ * Uses lru-cache for proper LRU eviction (by access order, not insertion order).
  */
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_MAX_SIZE = 500;
-
-interface CacheEntry {
-    user: DomainUser;
-    expiresAt: number;
-}
-
-const domainUserCache = new Map<string, CacheEntry>();
-
-function evictExpired(): void {
-    const now = Date.now();
-    for (const [key, entry] of domainUserCache) {
-        if (entry.expiresAt <= now) {
-            domainUserCache.delete(key);
-        }
-    }
-}
+const domainUserCache = new LRUCache<string, DomainUser>({
+    max: 500,
+    ttl: 5 * 60 * 1000,
+    allowStale: false,
+    updateAgeOnGet: false,
+});
 
 /**
  * Resolves a BetterAuth NanoID user → Domain UUID user via the authLinks bridge.
@@ -46,9 +37,11 @@ function evictExpired(): void {
 export async function resolveDomainUser(authUserId: string): Promise<DomainUser | null> {
     // Check cache first
     const cached = domainUserCache.get(authUserId);
-    if (cached && cached.expiresAt > Date.now()) {
-        return cached.user;
+    if (cached) {
+        globalLogger.debug({ authUserId, domainUserId: cached.id }, 'DomainUser: cache hit');
+        return cached;
     }
+    globalLogger.debug({ authUserId }, 'DomainUser: cache miss — querying DB');
 
     // Cache miss — query the bridge table
     const links = await db.select({
@@ -75,20 +68,8 @@ export async function resolveDomainUser(authUserId: string): Promise<DomainUser 
         roles: Array.isArray(row.roles) ? (row.roles as string[]) : ['user']
     };
 
-    // Evict stale entries before inserting
-    if (domainUserCache.size >= CACHE_MAX_SIZE) {
-        evictExpired();
-    }
-    // If still full after eviction, clear oldest quarter
-    if (domainUserCache.size >= CACHE_MAX_SIZE) {
-        const keysToDelete = Array.from(domainUserCache.keys()).slice(0, CACHE_MAX_SIZE / 4);
-        keysToDelete.forEach(k => domainUserCache.delete(k));
-    }
-
-    domainUserCache.set(authUserId, {
-        user: domainUser,
-        expiresAt: Date.now() + CACHE_TTL_MS
-    });
+    domainUserCache.set(authUserId, domainUser);
+    globalLogger.debug({ authUserId, domainUserId: domainUser.id, roles: domainUser.roles }, 'DomainUser: resolved and cached');
 
     return domainUser;
 }

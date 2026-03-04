@@ -71,10 +71,6 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                // Clear sync watermarks so the first delta sync does a full pull
-                // This ensures we never show stale data from a previous session
-                await db.syncState.clear();
-
                 const result = await client.query(LIST_LEAGUES_QUERY, {}).toPromise();
 
                 if (result.error) {

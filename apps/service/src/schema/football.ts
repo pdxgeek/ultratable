@@ -1,7 +1,7 @@
 import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories/supabase.repository';
 import { JobRunner } from '../workers/runner';
-import { cacheService } from '../services/cache.service.js';
+import { cacheService } from '../services/cache.service';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, and, count, sql } from 'drizzle-orm';
@@ -113,6 +113,10 @@ builder.objectType(TeamRef, {
             }
         }),
         sourceId: t.exposeInt('sourceId'),
+        // N+1 WARNING: This resolver fires per-team. Not triggered by the web app's
+        // SYNC_DATA_QUERY (scalar fields only), but custom queries requesting nested
+        // team.venue will trigger O(N) individual DB queries. Consider a dataloader if
+        // this becomes a hotspot.
         venue: t.field({
             type: VenueRef,
             nullable: true,
@@ -215,6 +219,11 @@ builder.objectType(FixtureRef, {
             resolve: (parent) => parent.awayGoals,
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+        // N+1 WARNING: homeTeam, awayTeam, venue, and season resolvers each fire
+        // individual DB queries per fixture. The web app's SYNC_DATA_QUERY only
+        // requests scalar fields, so these never fire on the hot path. Custom
+        // queries requesting nested objects on 380+ fixtures will be slow.
+        // Consider a dataloader pattern if this becomes a performance issue.
         homeTeam: t.field({
             type: TeamRef,
             resolve: async (parent) => {
