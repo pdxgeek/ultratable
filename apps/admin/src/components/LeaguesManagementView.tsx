@@ -177,8 +177,8 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
       // Fetch teams for the helper dropdown
       if (league) {
         gqlFetch<{ teams: Record<string, unknown>[] }>(
-          `query($leagueId: Int, $season: Int) { teams(leagueId: $leagueId, season: $season) { id name } }`,
-          { leagueId: league.sourceId, season: season.year }
+          `query($leagueSourceId: Int, $seasonYear: Int) { teams(leagueSourceId: $leagueSourceId, seasonYear: $seasonYear) { id name } }`,
+          { leagueSourceId: league.sourceId, seasonYear: season.year }
         ).then(data => {
           setConfigTeams(data.teams || []);
           setHelperTeamId('');
@@ -274,7 +274,7 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
       }
 
       await gqlFetch(
-        `mutation($id: Int!, $year: Int!) { syncFixtures(leagueId: $id, season: $year) { id } }`,
+        `mutation($id: Int!, $year: Int!) { syncFixtures(leagueSourceId: $id, seasonYear: $year) { id } }`,
         { id: league.sourceId, year }
       );
 

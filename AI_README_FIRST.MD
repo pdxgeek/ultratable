@@ -29,6 +29,40 @@ UltraTable uses a **Dual-ID System**. Never assume an ID from an API is our prim
 - **Storage**: Stored in `source_id` columns on catalog tables.
 - **Purpose**: Only used for fetching data from upstream.
 
+### ⚠️ ID Naming Convention (MANDATORY)
+**NEVER use the same variable/parameter/field name for both a UUID and a source ID.** This caused a critical bug where `leagueId` meant UUID in one context and source ID in another.
+
+| Name Pattern | Type | Meaning | Example |
+|---|---|---|---|
+| `leagueId`, `seasonId`, `teamId` | `String` (UUID) | Internal Postgres primary key | `60bea9cc-4c53-...` |
+| `leagueSourceId`, `teamSourceId` | `Int` (number) | External API-Football provider ID | `40` (Championship) |
+| `seasonYear` | `Int` (number) | Calendar year of the season | `2025` |
+
+**Rules:**
+1. GraphQL args that accept an **external/provider ID** MUST use `sourceId` suffix (e.g., `leagueSourceId: Int!`)
+2. GraphQL args that accept an **internal UUID** use plain names (e.g., `leagueId: String!`)
+3. Repository method parameters MUST always be explicit: `leagueSourceId: number` for provider IDs
+4. Never pass a source ID where a UUID is expected, or vice versa
+5. All GraphQL fields and args MUST have a `description` property documenting what ID type they expect
+
+### ⚠️ Timestamp & Timezone Consistency (MANDATORY)
+**EVERY timestamp column MUST be `timestamptz(3)`** — timezone-aware (`with time zone`) and millisecond precision (`(3)`). This was a hard-won fix after phantom delta sync bugs caused by precision mismatches.
+
+**Rules:**
+1. **ALWAYS use the `utcTimestamp()` helper** in `schema.ts` for every timestamp column. NEVER use bare `timestamp()`. The helper enforces `withTimezone: true, mode: 'date', precision: 3`.
+2. **ALWAYS use `NOW_MS`** (defined in `supabase.repository.ts`) instead of `sql\`now()\`` for server-side timestamps. It wraps `date_trunc('milliseconds', now())` to match column precision.
+3. **NEVER mix precisions.** Postgres `now()` returns microseconds (6 digits). JavaScript `Date` and the GraphQL `DateTime` scalar both use milliseconds (3 digits). If you store microseconds but compare with milliseconds, you get phantom results on every delta query.
+4. **Supabase runs in UTC.** All timestamps are stored and compared in UTC. No timezone conversion is needed in application code.
+
+| Layer | Precision | Format |
+|-------|-----------|--------|
+| Postgres column | `timestamptz(3)` — 3 decimal places | `2026-03-03T22:41:20.072+00` |
+| GraphQL DateTime | milliseconds | `2026-03-03T22:41:20.072Z` |
+| JavaScript Date | milliseconds | `1709506880072` |
+
+> [!CAUTION]
+> If you add a new table or column with a timestamp, you MUST use `utcTimestamp('column_name')`. Using bare `timestamp()` will create a column without timezone awareness and with microsecond precision, both of which cause bugs.
+
 ---
 
 ## 2. The ID Resolution Flow

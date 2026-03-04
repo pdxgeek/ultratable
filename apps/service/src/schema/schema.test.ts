@@ -86,7 +86,7 @@ describe('GraphQL Schema', () => {
             body: JSON.stringify({
                 query: `
                     query GetFixtures($since: DateTime) {
-                        fixtures(leagueId: 39, season: 2024, since: $since) {
+                        fixtures(leagueSourceId: 39, seasonYear: 2024, since: $since) {
                             id
                             status
                             updatedAt
@@ -123,7 +123,7 @@ describe('GraphQL Schema', () => {
             body: JSON.stringify({
                 query: `
                     mutation Sync {
-                        syncFixtures(leagueId: 39, season: 2024) {
+                        syncFixtures(leagueSourceId: 39, seasonYear: 2024) {
                             id
                         }
                     }
@@ -247,6 +247,72 @@ describe('GraphQL Schema', () => {
             const result = await response.json();
             expect(result.errors).toBeUndefined();
             expect(result.data.me).toBe('Authenticated as user admin-456 with roles user, admin');
+        });
+    });
+
+    describe('venues query', () => {
+        const setupVenueMocks = () => {
+            const selectMock = vi.fn();
+            // league lookup
+            selectMock.mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }])
+                })
+            });
+            // season lookup
+            selectMock.mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ id: 'season-1', year: 2024, leagueId: 'league-1' }])
+                })
+            });
+            vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
+
+            // selectDistinct for venues
+            const mockVenues = [
+                { venue: { id: 'v1', name: 'Emirates', city: 'London', updatedAt: '2026-03-01T00:00:00Z' } },
+                { venue: { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' } },
+            ];
+            (db as unknown as Record<string, unknown>).selectDistinct = vi.fn().mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue(mockVenues)
+                    })
+                })
+            });
+            return mockVenues;
+        };
+
+        it('should return all venues without since', async () => {
+            setupVenueMocks();
+
+            const response = await yoga.fetch('http://localhost:8080/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `query { venues(leagueSourceId: 39, seasonYear: 2024) { id name } }`
+                })
+            });
+
+            const result = await response.json();
+            expect(result.data.venues).toHaveLength(2);
+            expect(result.data.venues[0].name).toBe('Emirates');
+        });
+
+        it('should accept since arg for delta sync', async () => {
+            setupVenueMocks();
+
+            const response = await yoga.fetch('http://localhost:8080/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `query($since: DateTime) { venues(leagueSourceId: 39, seasonYear: 2024, since: $since) { id name } }`,
+                    variables: { since: '2026-03-02T00:00:00Z' }
+                })
+            });
+
+            const result = await response.json();
+            expect(result.data.venues).toBeDefined();
+            expect(result.errors).toBeUndefined();
         });
     });
 });

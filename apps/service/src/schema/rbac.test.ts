@@ -146,7 +146,7 @@ const MUTATIONS: RbacTestCase[] = [
     { name: 'updateSeasonConfig', query: 'mutation { updateSeasonConfig(seasonId: "test-id", configJson: "{}") { id } }' },
     // football.ts
     { name: 'ingestLeagues', query: 'mutation { ingestLeagues { id } }' },
-    { name: 'syncFixtures', query: 'mutation { syncFixtures(leagueId: 39, season: 2024) { id } }' },
+    { name: 'syncFixtures', query: 'mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }' },
     { name: 'saveLeagueConfig', query: 'mutation { saveLeagueConfig(id: "test-id", configJson: "{}") { id } }' },
     { name: 'saveSeasonConfig', query: 'mutation { saveSeasonConfig(id: "test-id", configJson: "{}") { id } }' },
     // workers.ts

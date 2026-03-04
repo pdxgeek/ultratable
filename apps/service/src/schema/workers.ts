@@ -102,17 +102,17 @@ builder.mutationField('runJob', (t) =>
             await JobRunner.run(name, async (reporter) => {
                 if (name.startsWith('sync-fixtures-')) {
                     const parts = name.split('-');
-                    const leagueId = parseInt(parts[2]);
-                    const season = parseInt(parts[3]);
-                    if (isNaN(leagueId) || isNaN(season)) {
-                        throw new GraphQLError(`Invalid job name format: expected sync-fixtures-<leagueId>-<season>, got "${name}"`);
+                    const leagueSourceId = parseInt(parts[2]);
+                    const seasonYear = parseInt(parts[3]);
+                    if (isNaN(leagueSourceId) || isNaN(seasonYear)) {
+                        throw new GraphQLError(`Invalid job name format: expected sync-fixtures-<leagueSourceId>-<seasonYear>, got "${name}"`);
                     }
-                    const syncRes = await repository.football.syncFixtures(leagueId, season, reporter);
+                    const syncRes = await repository.football.syncFixtures(leagueSourceId, seasonYear, reporter);
                     return {
                         processedCount: syncRes.stats.processedCount,
                         totalCount: syncRes.stats.totalCount,
                         apiCallsCount: syncRes.stats.apiCallsCount,
-                        context: { leagueId, season }
+                        context: { leagueSourceId, seasonYear }
                     };
                 }
                 return { processedCount: 0, apiCallsCount: 0 };
