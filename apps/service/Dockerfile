@@ -35,8 +35,6 @@ WORKDIR /app
 
 # Copy compiled code from builder stage
 COPY --from=builder /app/apps/service/dist ./ultratable-service/dist
-COPY apps/service/.env ./ultratable-service/.env
-
 # Set permissions for the non-root 'node' user
 RUN chown -R node:node /app
 
