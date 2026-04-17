@@ -308,6 +308,7 @@ const start = async () => {
         const host = process.env.HOST || '0.0.0.0'
         const port = Number(process.env.PORT) || 8080
         await server.listen({ host, port })
+        globalLogger.info({ host, port }, `🚀 Server listening on http://${host}:${port}`)
     } catch (err) {
         server.log.error(err)
         process.exit(1)

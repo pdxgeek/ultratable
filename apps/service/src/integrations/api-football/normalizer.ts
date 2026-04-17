@@ -75,9 +75,9 @@ export class Normalizer {
 
         let status: IngestedFixture['status'] = 'scheduled';
         const shortStatus = fixture.status.short;
-        if (['FT', 'AET', 'PEN'].includes(shortStatus)) status = 'played';
+        if (['FT', 'AET', 'PEN', 'WO', 'AWD'].includes(shortStatus)) status = 'played';
         else if (['1H', 'HT', '2H', 'ET', 'P'].includes(shortStatus)) status = 'live';
-        else if (['PST', 'CANC', 'ABD'].includes(shortStatus)) status = 'postponed';
+        else if (['PST', 'CANC', 'ABD', 'SUSP', 'INT'].includes(shortStatus)) status = 'postponed';
 
         return {
             sourceId: fixture.id,

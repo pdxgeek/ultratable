@@ -1,7 +1,7 @@
 import { gql } from 'urql';
 
 export const SYNC_DATA_QUERY = gql`
-  query SyncData($seasonId: String!, $since: DateTime) {
+  query SyncData($seasonId: String!, $since: DateTime, $forceRefresh: Boolean) {
     teams(seasonId: $seasonId, since: $since) {
       id
       name
@@ -10,7 +10,7 @@ export const SYNC_DATA_QUERY = gql`
       logo
       updatedAt
     }
-    fixtures(seasonId: $seasonId, since: $since) {
+    fixtures(seasonId: $seasonId, since: $since, forceRefresh: $forceRefresh) {
       id
       seasonId
       homeTeamId

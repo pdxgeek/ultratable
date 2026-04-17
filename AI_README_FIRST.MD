@@ -73,6 +73,19 @@ UltraTable uses a **Dual-ID System**. Never assume an ID from an API is our prim
 > [!CAUTION]
 > If you add a new table or column with a timestamp, you MUST use `utcTimestamp('column_name')`. Using bare `timestamp()` will create a column without timezone awareness and with microsecond precision, both of which cause bugs.
 
+### ⚠️ Column vs JSONB — Hybrid Schema (MANDATORY)
+**We use a hybrid SQL/JSONB pattern.** Only columns that the database engine needs to operate on should be explicit. Everything else goes in `metadata: jsonb('metadata')`.
+
+| **Use a column** | **Use `metadata` JSONB** |
+|---|---|
+| Foreign keys / joins | Display-only attributes (name, age, photo, etc.) |
+| UNIQUE / index constraints | Provider-specific raw data |
+| WHERE / filter / ORDER BY targets | Optional or future-enrichment fields |
+| Identity fields used for lookups | Data that varies by source or context |
+
+> [!CAUTION]
+> Don't add columns just because the data "feels important." If you're not joining on it, filtering by it, or constraining it — it belongs in `metadata`. Adding unnecessary columns makes the schema brittle and requires migrations for every enrichment change.
+
 ---
 
 ## 2. The ID Resolution Flow

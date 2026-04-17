@@ -184,8 +184,10 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                                     if (filter === 'away') return f.awayTeamId === row.teamId;
                                     return true;
                                 });
+                            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
                             const futureFixtures = teamFixtures
-                                .filter(f => f.status === 'scheduled' || f.status === 'postponed')
+                                .filter(f => (f.status === 'scheduled' || f.status === 'postponed') &&
+                                    new Date(f.scheduledAt).getTime() > twoHoursAgo.getTime())
                                 .filter(f => {
                                     if (filter === 'home') return f.homeTeamId === row.teamId;
                                     if (filter === 'away') return f.awayTeamId === row.teamId;

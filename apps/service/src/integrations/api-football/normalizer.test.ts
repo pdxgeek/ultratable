@@ -162,6 +162,26 @@ describe('Normalizer', () => {
             }
         });
 
+        it('maps WO (walkover) and AWD (awarded) to played — prevents stuck fixtures', () => {
+            for (const short of ['WO', 'AWD']) {
+                const f = Normalizer.normalizeFixture({
+                    ...baseFixture,
+                    fixture: { ...baseFixture.fixture, status: { short } }
+                });
+                expect(f.status).toBe('played');
+            }
+        });
+
+        it('maps SUSP (suspended) and INT (interrupted) to postponed', () => {
+            for (const short of ['SUSP', 'INT']) {
+                const f = Normalizer.normalizeFixture({
+                    ...baseFixture,
+                    fixture: { ...baseFixture.fixture, status: { short } }
+                });
+                expect(f.status).toBe('postponed');
+            }
+        });
+
         it('handles missing venue', () => {
             const f = Normalizer.normalizeFixture({
                 ...baseFixture,

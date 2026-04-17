@@ -31,7 +31,7 @@ export interface FootballRepository {
     syncSeasons(leagueId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>>;
     syncFixtures(leagueId: number, season: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>>;
     getFixtures(leagueId: number, season: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
-    getFixturesBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
+    getFixturesBySeasonId(seasonId: string, since?: Date, forceRefresh?: boolean): Promise<Array<typeof schema.fixtures.$inferSelect>>;
 
     // Catalog Management
     syncCatalogCountries(): Promise<SyncResult<typeof schema.catalogCountries.$inferSelect>>;
@@ -55,7 +55,12 @@ export interface FootballRepository {
     // Real-time / Lazy-load data
     getMatchEvents(fixtureId: number): Promise<import('../integrations/types').IngestedEvent[]>;
     getLineups(fixtureId: number): Promise<import('../integrations/types').IngestedLineup[]>;
-    getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null }) | null>;
+    getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; metadata: Record<string, unknown>; statistics?: unknown }) | null>;
+
+    // Roster & Source Mappings
+    importSquad(teamId: string, teamSourceId: number, seasonId: string): Promise<(typeof schema.teamRosters.$inferSelect)[]>;
+    getTeamRoster(teamId: string, seasonId: string): Promise<(typeof schema.teamRosters.$inferSelect & { player: typeof schema.players.$inferSelect })[]>;
+    resolvePlayerBySourceId(sourceName: string, sourceId: number): Promise<string | null>;
 }
 
 export interface IRepository {

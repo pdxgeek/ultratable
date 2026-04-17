@@ -117,4 +117,19 @@ export class ApiFootballProvider implements IFootballProvider {
         const resp = await this.client.get('/fixtures/lineups', { params: { fixture: fixtureId } });
         return resp.data.response.map((item: RawLineupItem) => Normalizer.normalizeLineup(item));
     }
+
+    async getSquad(teamSourceId: number): Promise<import('../types').IngestedSquadPlayer[]> {
+        this.logger.debug({ teamSourceId }, 'API: fetching squad');
+        const resp = await this.client.get('/players/squads', { params: { team: teamSourceId } });
+        const teamData = resp.data.response[0];
+        if (!teamData?.players) return [];
+        return teamData.players.map((p: { id: number; name: string; age: number; number: number; position: string; photo: string }) => ({
+            sourceId: p.id,
+            name: p.name,
+            age: p.age || null,
+            number: p.number || null,
+            position: p.position || null,
+            photo: p.photo || null,
+        }));
+    }
 }

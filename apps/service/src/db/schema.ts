@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, jsonb, pgEnum, unique, boolean, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, timestamp, jsonb, pgEnum, unique, boolean, text, primaryKey, index } from 'drizzle-orm/pg-core';
 
 // Helper for UTC timestamps with millisecond precision.
 // Postgres now() returns microsecond precision, but the GraphQL DateTime scalar
@@ -269,18 +269,36 @@ export const rankingFormulas = pgTable('ranking_formulas', {
 export const players = pgTable('players', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 255 }).notNull(),
-    firstname: varchar('firstname', { length: 255 }),
-    lastname: varchar('lastname', { length: 255 }),
-    age: integer('age'),
-    nationality: varchar('nationality', { length: 100 }),
-    photo: varchar('photo', { length: 500 }),
-    injured: boolean('injured').default(false).notNull(),
+    sourceName: varchar('source_name', { length: 50 }).notNull(),
+    sourceId: integer('source_id').notNull(),
+    metadata: jsonb('metadata'),
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.sourceName, table.sourceId),
+}));
+
+export const teamRosters = pgTable('team_rosters', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }).notNull(),
+    playerId: uuid('player_id').references(() => players.id, { onDelete: 'cascade' }).notNull(),
+    seasonId: uuid('season_id').references(() => seasons.id, { onDelete: 'cascade' }).notNull(),
+    metadata: jsonb('metadata'), // { squadNumber, position, startedAt, endedAt, registered, ... }
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.teamId, table.playerId, table.seasonId),
+}));
+
+export const playerSourceMappings = pgTable('player_source_mappings', {
+    playerId: uuid('player_id').references(() => players.id, { onDelete: 'cascade' }).notNull(),
     sourceName: varchar('source_name', { length: 50 }).notNull(),
     sourceId: integer('source_id').notNull(),
     createdAt: utcTimestamp('created_at').defaultNow().notNull(),
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
+    pk: primaryKey({ columns: [table.sourceName, table.sourceId] }),
+    playerIdx: index('psm_player_id_idx').on(table.playerId),
 }));
 
 export const graphics = pgTable('graphics', {

@@ -94,6 +94,15 @@ export interface IngestedPlayer {
     statistics?: Record<string, unknown>[];
 }
 
+export interface IngestedSquadPlayer {
+    sourceId: number;
+    name: string;
+    age: number | null;
+    number: number | null;
+    position: string | null;
+    photo: string | null;
+}
+
 export interface IFootballProvider {
     name: string;
     getCountries(): Promise<IngestedCountry[]>;
@@ -105,4 +114,5 @@ export interface IFootballProvider {
     getMatchEvents(fixtureId: number): Promise<IngestedEvent[]>;
     getLineups(fixtureId: number): Promise<IngestedLineup[]>;
     getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null>;
+    getSquad(teamSourceId: number): Promise<IngestedSquadPlayer[]>;
 }

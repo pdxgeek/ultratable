@@ -9,7 +9,8 @@ import {
     IngestedFixture,
     IngestedEvent,
     IngestedPlayer,
-    IngestedCountry
+    IngestedCountry,
+    IngestedSquadPlayer
 } from '../types';
 import { Normalizer, RawLeagueItem, RawSeasonItem, RawTeamItem, RawVenueItem, RawFixtureItem, RawEventItem, RawPlayerItem } from '../api-football/normalizer';
 
@@ -83,5 +84,9 @@ export class MockFootballProvider implements IFootballProvider {
         const player = raw.find((p) => p.player.id === playerId);
         if (!player) return null;
         return Normalizer.normalizePlayer(player);
+    }
+
+    async getSquad(): Promise<IngestedSquadPlayer[]> {
+        return [];
     }
 }

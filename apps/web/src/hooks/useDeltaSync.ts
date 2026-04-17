@@ -65,7 +65,8 @@ export function useDeltaSync() {
             // normal delta syncs benefit from the cache.
             const result = await client.query(SYNC_DATA_QUERY, {
                 seasonId,
-                since
+                since,
+                forceRefresh: staleRemediation || undefined
             }, staleRemediation ? { requestPolicy: 'network-only' } : {}).toPromise();
 
             if (result.error) throw result.error;

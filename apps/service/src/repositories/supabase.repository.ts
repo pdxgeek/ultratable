@@ -362,7 +362,21 @@ export class SupabaseFootballRepository implements FootballRepository {
                 });
         }
 
-        // 5. Invalidate cache and return fresh data
+        // 5. Auto-import squad rosters for each team
+        let squadApiCalls = 0;
+        for (const t of teams) {
+            const teamId = teamMap.get(t.sourceId);
+            if (!teamId) continue;
+            try {
+                await this.importSquad(teamId, t.sourceId, localSeason.id);
+                squadApiCalls++;
+            } catch (e: unknown) {
+                logger.warn({ error: (e as Error).message, teamSourceId: t.sourceId }, 'Soft-fail on squad import');
+            }
+        }
+        logger.info({ leagueSourceId, seasonYear, teamCount: teams.length, squadApiCalls }, 'Squad import complete');
+
+        // 6. Invalidate cache and return fresh data
         cacheService.invalidate(`teams:${leagueSourceId}:${seasonYear}`);
         return this.getTeams(leagueSourceId, seasonYear);
     }
@@ -508,9 +522,11 @@ export class SupabaseFootballRepository implements FootballRepository {
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                     set: {
+                        scheduledAt: sql`EXCLUDED.scheduled_at`,
                         status: sql`EXCLUDED.status`,
                         homeGoals: sql`EXCLUDED.home_goals`,
                         awayGoals: sql`EXCLUDED.away_goals`,
+                        venueId: sql`EXCLUDED.venue_id`,
                         gameweek: sql`EXCLUDED.gameweek`,
                         updatedAt: NOW_MS
                     }
@@ -640,9 +656,11 @@ export class SupabaseFootballRepository implements FootballRepository {
                                         .onConflictDoUpdate({
                                             target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                                             set: {
+                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
                                                 status: sql`EXCLUDED.status`,
                                                 homeGoals: sql`EXCLUDED.home_goals`,
                                                 awayGoals: sql`EXCLUDED.away_goals`,
+                                                venueId: sql`EXCLUDED.venue_id`,
                                                 gameweek: sql`EXCLUDED.gameweek`,
                                                 updatedAt: NOW_MS
                                             }
@@ -728,7 +746,7 @@ export class SupabaseFootballRepository implements FootballRepository {
      * Queries directly by seasonId — no league/source ID resolution needed.
      * Includes the same live polling logic as getFixtures().
      */
-    async getFixturesBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+    async getFixturesBySeasonId(seasonId: string, since?: Date, forceRefresh?: boolean): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
         // 1. Resolve the season record directly by UUID
@@ -748,10 +766,15 @@ export class SupabaseFootballRepository implements FootballRepository {
                 ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
                 : Infinity;
 
-            logger.info({ seasonId, seasonYear: seasonRecord.year, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
+            logger.info({ seasonId, seasonYear: seasonRecord.year, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS, forceRefresh: !!forceRefresh }, 'Live polling: decision check');
 
-            if (timeSinceLastSync > FIVE_MINUTES_MS) {
-                const threshold = new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
+            if (forceRefresh || timeSinceLastSync > FIVE_MINUTES_MS) {
+                // When forceRefresh is true, use current time as threshold so the lock
+                // claim succeeds even if the last sync was recent. The CAS pattern
+                // still prevents truly concurrent polls.
+                const threshold = forceRefresh
+                    ? now.toISOString()
+                    : new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
                 const claimed = await db.update(schema.seasons)
                     .set({ lastLiveSyncAt: now })
                     .where(and(
@@ -774,10 +797,11 @@ export class SupabaseFootballRepository implements FootballRepository {
                             notInArray(schema.fixtures.status, TERMINAL_STATUSES)
                         ));
 
+                    // --- STALE FIXTURE POLLING (runs every 5 min when past-due exist) ---
                     if (pastDue.length > 0) {
                         try {
                             const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
-                            logger.info({ seasonId, seasonYear: seasonRecord.year }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+                            logger.info({ seasonId, seasonYear: seasonRecord.year, count: sourceIdsToFetch.length }, 'Stale polling: fetching past-due fixtures by ID');
 
                             const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
 
@@ -815,21 +839,108 @@ export class SupabaseFootballRepository implements FootballRepository {
                                         .onConflictDoUpdate({
                                             target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                                             set: {
+                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
                                                 status: sql`EXCLUDED.status`,
                                                 homeGoals: sql`EXCLUDED.home_goals`,
                                                 awayGoals: sql`EXCLUDED.away_goals`,
+                                                venueId: sql`EXCLUDED.venue_id`,
                                                 gameweek: sql`EXCLUDED.gameweek`,
                                                 updatedAt: NOW_MS
                                             }
                                         });
                                     pollingDidUpdate = true;
+                                    logger.info({ updated: fixturesToUpdate.length }, 'Stale polling: upsert complete');
                                 }
+                            } else {
+                                logger.info({ requested: sourceIdsToFetch.length }, 'Stale polling: API returned 0 fixtures (ids param may not be available — daily discovery will catch them)');
                             }
                         } catch (e: unknown) {
                             const err = e instanceof Error ? e : new Error(String(e));
-                            logger.error({ error: err.message }, 'Live polling failed');
+                            logger.error({ error: err.message }, 'Stale polling failed');
                         }
-                    } else {
+                    }
+
+                    // --- DAILY FIXTURE DISCOVERY (catches new/rescheduled matches) ---
+                    // Runs once per day per season, or immediately on forceRefresh.
+                    // Uses in-memory cache as gate — runs on first access after restart.
+                    const discoveryKey = `fixture-discovery:${seasonId}`;
+                    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+                    const lastDiscovery = cacheService.get<number>(discoveryKey);
+                    const discoveryNeeded = forceRefresh || !lastDiscovery;
+
+                    if (discoveryNeeded && leagueRecord) {
+                        try {
+                            logger.info({ seasonId, seasonYear: seasonRecord.year, leagueSourceId: leagueRecord.sourceId, forceRefresh: !!forceRefresh }, 'Fixture discovery: fetching full season to find new/rescheduled matches');
+
+                            const { fixtures: allFixtures } = await this.provider.getFixtures(leagueRecord.sourceId, seasonRecord.year);
+
+                            if (allFixtures.length > 0) {
+                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
+                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
+
+                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
+                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
+
+                                const fixturesToUpsert = allFixtures.map(normalized => {
+                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
+                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
+                                    if (!homeId || !awayId) return null;
+                                    return {
+                                        sourceName: normalized.sourceName,
+                                        sourceId: normalized.sourceId,
+                                        leagueId: seasonRecord.leagueId,
+                                        seasonId: seasonRecord.id,
+                                        homeTeamId: homeId,
+                                        awayTeamId: awayId,
+                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
+                                        scheduledAt: new Date(normalized.scheduledAt),
+                                        status: normalized.status,
+                                        homeGoals: normalized.homeGoals,
+                                        awayGoals: normalized.awayGoals,
+                                        gameweek: normalized.gameweek,
+                                        updatedAt: NOW_MS
+                                    };
+                                }).filter(Boolean);
+
+                                if (fixturesToUpsert.length > 0) {
+                                    // Only update (and bump updatedAt) when data actually changed.
+                                    // IS DISTINCT FROM handles NULLs correctly.
+                                    await db.insert(schema.fixtures)
+                                        .values(fixturesToUpsert as unknown as typeof schema.fixtures.$inferInsert[])
+                                        .onConflictDoUpdate({
+                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            set: {
+                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
+                                                status: sql`EXCLUDED.status`,
+                                                homeGoals: sql`EXCLUDED.home_goals`,
+                                                awayGoals: sql`EXCLUDED.away_goals`,
+                                                venueId: sql`EXCLUDED.venue_id`,
+                                                gameweek: sql`EXCLUDED.gameweek`,
+                                                updatedAt: NOW_MS
+                                            },
+                                            where: sql`
+                                                ${schema.fixtures.scheduledAt} IS DISTINCT FROM EXCLUDED.scheduled_at
+                                                OR ${schema.fixtures.status} IS DISTINCT FROM EXCLUDED.status
+                                                OR ${schema.fixtures.homeGoals} IS DISTINCT FROM EXCLUDED.home_goals
+                                                OR ${schema.fixtures.awayGoals} IS DISTINCT FROM EXCLUDED.away_goals
+                                                OR ${schema.fixtures.venueId} IS DISTINCT FROM EXCLUDED.venue_id
+                                                OR ${schema.fixtures.gameweek} IS DISTINCT FROM EXCLUDED.gameweek
+                                            `
+                                        });
+                                    pollingDidUpdate = true;
+                                    logger.info({ total: fixturesToUpsert.length }, 'Fixture discovery: upsert complete (only changed/new rows affected)');
+                                }
+                            }
+
+                            // Gate the next discovery for 24 hours
+                            cacheService.set(discoveryKey, Date.now(), ONE_DAY_MS);
+                        } catch (e: unknown) {
+                            const err = e instanceof Error ? e : new Error(String(e));
+                            logger.error({ error: err.message }, 'Fixture discovery failed');
+                        }
+                    }
+
+                    if (pastDue.length === 0 && !discoveryNeeded) {
                         const TERMINAL_STATUSES_CHECK: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
                         const futureMatches = await db.select({ count: sql`count(*)` })
                             .from(schema.fixtures)
@@ -1146,6 +1257,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             .filter((id: number | null) => id != null);
 
         if (sourceIds.length > 0) {
+            // Batch 1: Check players table (primary source)
             const existingPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
                 .from(schema.players)
                 .where(and(
@@ -1153,6 +1265,20 @@ export class SupabaseFootballRepository implements FootballRepository {
                     inArray(schema.players.sourceId, sourceIds)
                 ));
             const playerMap = new Map<number, string>(existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]));
+
+            // Batch 2: Check playerSourceMappings for any unresolved sourceIds
+            const unresolvedIds = sourceIds.filter((id: number) => !playerMap.has(id));
+            if (unresolvedIds.length > 0) {
+                const mappings = await db.select({ playerId: schema.playerSourceMappings.playerId, sourceId: schema.playerSourceMappings.sourceId })
+                    .from(schema.playerSourceMappings)
+                    .where(and(
+                        eq(schema.playerSourceMappings.sourceName, this.provider.name),
+                        inArray(schema.playerSourceMappings.sourceId, unresolvedIds)
+                    ));
+                for (const m of mappings) {
+                    playerMap.set(m.sourceId, m.playerId);
+                }
+            }
 
             for (const event of events) {
                 if (event.playerSourceId) {
@@ -1203,8 +1329,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             await db.insert(schema.players)
                 .values(newPlayers.map(p => ({
                     name: p.name,
-                    photo: p.photo,
-                    injured: false,
+                    metadata: { photo: p.photo },
                     sourceName: this.provider.name,
                     sourceId: p.sourceId,
                 })))
@@ -1212,7 +1337,6 @@ export class SupabaseFootballRepository implements FootballRepository {
                     target: [schema.players.sourceName, schema.players.sourceId],
                     set: {
                         name: sql`EXCLUDED.name`,
-                        photo: sql`EXCLUDED.photo`,
                         updatedAt: NOW_MS,
                     }
                 });
@@ -1248,36 +1372,39 @@ export class SupabaseFootballRepository implements FootballRepository {
         return lineups;
     }
 
-    async getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null }) | null> {
+    async getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; metadata: Record<string, unknown>; statistics?: unknown }) | null> {
         const cacheKey = `player:${playerId}:${season}`;
-        type PlayerResult = typeof schema.players.$inferSelect & { sourceId: number; name: string; injured: boolean; statistics?: unknown; height?: string | null; weight?: string | null };
+        type PlayerResult = typeof schema.players.$inferSelect & { sourceId: number; name: string; metadata: Record<string, unknown>; statistics?: unknown };
         const cached = cacheService.get<PlayerResult>(cacheKey);
         if (cached) return cached;
 
         const data = await this.provider.getPlayerData(playerId, season);
         if (!data) return null;
 
+        const playerMetadata = {
+            firstname: data.firstname || null,
+            lastname: data.lastname || null,
+            age: data.age || null,
+            nationality: data.nationality || null,
+            photo: data.photo || null,
+            injured: data.injured || false,
+            height: data.height || null,
+            weight: data.weight || null,
+        };
+
         // Upsert into local players table to assign a native UUID
         const [upserted] = await db.insert(schema.players)
             .values({
                 name: data.name,
-                firstname: data.firstname || null,
-                lastname: data.lastname || null,
-                age: data.age || null,
-                nationality: data.nationality || null,
-                photo: data.photo || null,
-                injured: data.injured || false,
                 sourceName: this.provider.name,
                 sourceId: playerId,
+                metadata: playerMetadata,
             })
             .onConflictDoUpdate({
                 target: [schema.players.sourceName, schema.players.sourceId],
                 set: {
                     name: data.name,
-                    age: data.age || null,
-                    nationality: data.nationality || null,
-                    photo: data.photo || null,
-                    injured: data.injured || false,
+                    metadata: playerMetadata,
                     updatedAt: new Date(),
                 }
             })
@@ -1290,15 +1417,143 @@ export class SupabaseFootballRepository implements FootballRepository {
             );
         }
 
-        const result = {
-            ...data,
-            id: upserted.id,
-            sourceName: this.provider.name,
-            createdAt: upserted.createdAt,
-            updatedAt: upserted.updatedAt
+        const result: PlayerResult = {
+            ...upserted,
+            sourceId: playerId,
+            metadata: playerMetadata,
+            statistics: data.statistics,
         };
         cacheService.set(cacheKey, result, TTL.ACTIVE);
         return result;
+    }
+
+    /**
+     * Fetches the squad for a team from the external provider and creates:
+     * 1. Player records (upserted)
+     * 2. Player source mappings (for multi-source resolution)
+     * 3. Team roster entries (with metadata for display data)
+     */
+    async importSquad(teamId: string, teamSourceId: number, seasonId: string): Promise<(typeof schema.teamRosters.$inferSelect)[]> {
+        const squad = await this.provider.getSquad(teamSourceId);
+        if (!squad.length) return [];
+
+        const rosterEntries: (typeof schema.teamRosters.$inferSelect)[] = [];
+
+        for (const member of squad) {
+            // Upsert player record
+            const playerMetadata = {
+                age: member.age,
+                photo: member.photo,
+            };
+
+            const [player] = await db.insert(schema.players)
+                .values({
+                    name: member.name,
+                    sourceName: this.provider.name,
+                    sourceId: member.sourceId,
+                    metadata: playerMetadata,
+                })
+                .onConflictDoUpdate({
+                    target: [schema.players.sourceName, schema.players.sourceId],
+                    set: {
+                        name: member.name,
+                        metadata: playerMetadata,
+                        updatedAt: NOW_MS,
+                    }
+                })
+                .returning();
+
+            // Upsert source mapping
+            await db.insert(schema.playerSourceMappings)
+                .values({
+                    playerId: player.id,
+                    sourceName: this.provider.name,
+                    sourceId: member.sourceId,
+                })
+                .onConflictDoUpdate({
+                    target: [schema.playerSourceMappings.sourceName, schema.playerSourceMappings.sourceId],
+                    set: {
+                        playerId: player.id,
+                        updatedAt: NOW_MS,
+                    }
+                });
+
+            // Upsert roster entry with display data in metadata
+            const rosterMetadata = {
+                squadNumber: member.number,
+                position: member.position,
+            };
+
+            const [rosterEntry] = await db.insert(schema.teamRosters)
+                .values({
+                    teamId,
+                    playerId: player.id,
+                    seasonId,
+                    metadata: rosterMetadata,
+                })
+                .onConflictDoUpdate({
+                    target: [schema.teamRosters.teamId, schema.teamRosters.playerId, schema.teamRosters.seasonId],
+                    set: {
+                        metadata: rosterMetadata,
+                        updatedAt: NOW_MS,
+                    }
+                })
+                .returning();
+
+            rosterEntries.push(rosterEntry);
+
+            // Sideload player photo
+            if (member.photo && player.id) {
+                graphicsService.registerFromUrl(player.id, 'player', member.photo).catch((e: Error) =>
+                    logger.warn({ error: e.message }, `Soft-fail on squad photo sideload for player ${player.id}`)
+                );
+            }
+        }
+
+        logger.info({ teamId, seasonId, playerCount: rosterEntries.length }, 'Squad imported');
+        return rosterEntries;
+    }
+
+    /**
+     * Returns the roster for a team in a given season, joined with player data.
+     */
+    async getTeamRoster(teamId: string, seasonId: string): Promise<(typeof schema.teamRosters.$inferSelect & { player: typeof schema.players.$inferSelect })[]> {
+        const rows = await db.select()
+            .from(schema.teamRosters)
+            .innerJoin(schema.players, eq(schema.teamRosters.playerId, schema.players.id))
+            .where(and(
+                eq(schema.teamRosters.teamId, teamId),
+                eq(schema.teamRosters.seasonId, seasonId),
+            ));
+
+        return rows.map(row => ({
+            ...row.team_rosters,
+            player: row.players,
+        }));
+    }
+
+    /**
+     * Resolves an external source ID to an internal player UUID.
+     * Checks player_source_mappings first, falls back to players table.
+     */
+    async resolvePlayerBySourceId(sourceName: string, sourceId: number): Promise<string | null> {
+        // Check source mappings first (supports multi-source)
+        const [mapping] = await db.select({ playerId: schema.playerSourceMappings.playerId })
+            .from(schema.playerSourceMappings)
+            .where(and(
+                eq(schema.playerSourceMappings.sourceName, sourceName),
+                eq(schema.playerSourceMappings.sourceId, sourceId),
+            ));
+        if (mapping) return mapping.playerId;
+
+        // Fall back to players table primary source
+        const [player] = await db.select({ id: schema.players.id })
+            .from(schema.players)
+            .where(and(
+                eq(schema.players.sourceName, sourceName),
+                eq(schema.players.sourceId, sourceId),
+            ));
+        return player?.id || null;
     }
 }
 
