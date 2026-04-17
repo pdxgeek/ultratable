@@ -69,6 +69,9 @@ vi.mock('../repositories/supabase.repository', () => ({
             getMatchEvents: vi.fn().mockResolvedValue([]),
             getLineups: vi.fn().mockResolvedValue([]),
             getPlayerData: vi.fn().mockResolvedValue(null),
+            importSquad: vi.fn().mockResolvedValue([]),
+            getTeamRoster: vi.fn().mockResolvedValue([]),
+            resolvePlayerBySourceId: vi.fn().mockResolvedValue(null),
         },
         config: {
             getDatabaseUrlMasked: vi.fn().mockResolvedValue('postgres://***'),

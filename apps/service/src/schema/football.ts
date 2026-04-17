@@ -15,9 +15,14 @@ const FixtureRef = builder.objectRef<typeof schema.fixtures.$inferSelect>('Fixtu
 const VenueRef = builder.objectRef<typeof schema.venues.$inferSelect>('Venue');
 const MatchEventRef = builder.objectRef<import('../integrations/types').IngestedEvent>('MatchEvent');
 
-type PlayerShape = Partial<typeof schema.players.$inferSelect> & { sourceId: number, name: string, injured: boolean, statistics?: unknown, height?: string | null, weight?: string | null };
+type PlayerMeta = { firstname?: string | null; lastname?: string | null; age?: number | null; nationality?: string | null; photo?: string | null; injured?: boolean; height?: string | null; weight?: string | null };
+type PlayerShape = Partial<typeof schema.players.$inferSelect> & { sourceId: number; name: string; metadata?: PlayerMeta | null; statistics?: unknown };
 const PlayerRef = builder.objectRef<PlayerShape>('Player');
+const playerMeta = (parent: PlayerShape): PlayerMeta => (parent.metadata as PlayerMeta) || {};
 const LineupRef = builder.objectRef<import('../integrations/types').IngestedLineup>('Lineup');
+
+type RosterEntryShape = typeof schema.teamRosters.$inferSelect & { player: typeof schema.players.$inferSelect };
+const RosterEntryRef = builder.objectRef<RosterEntryShape>('RosterEntry');
 
 builder.objectType(VenueRef, {
     fields: (t) => ({
@@ -142,6 +147,16 @@ builder.objectType(TeamRef, {
             }),
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime', description: 'ISO-8601 timestamp of the last update. Used for delta sync watermarking.' }),
+        roster: t.field({
+            description: 'Squad roster for this team in a given season. Returns players with jersey numbers and positions from metadata.',
+            type: [RosterEntryRef],
+            args: {
+                seasonId: t.arg.string({ required: true, description: 'UUID of the season to retrieve the roster for.' }),
+            },
+            resolve: async (parent, { seasonId }) => {
+                return repository.football.getTeamRoster(parent.id, seasonId);
+            },
+        }),
     }),
 });
 
@@ -319,25 +334,24 @@ builder.objectType(PlayerRef, {
         }),
         sourceId: t.exposeInt('sourceId', { description: 'External API-Football player ID. Used to fetch player data on demand via the player query and to resolve match event participants.' }),
         name: t.exposeString('name', { description: 'Full display name of the player.' }),
-        firstname: t.exposeString('firstname', { nullable: true, description: 'Player first name. Null if not reported.' }),
-        lastname: t.exposeString('lastname', { nullable: true, description: 'Player last name. Null if not reported.' }),
-        age: t.exposeInt('age', { nullable: true, description: 'Player age in years. Null if not reported.' }),
-        nationality: t.exposeString('nationality', { nullable: true, description: 'Player nationality (e.g. "Egypt"). Null if not reported.' }),
-        height: t.string({ description: 'Player height as a string (e.g. "175 cm"). Null if not reported.', nullable: true, resolve: (parent) => parent.height || null }),
-        weight: t.string({ description: 'Player weight as a string (e.g. "71 kg"). Null if not reported.', nullable: true, resolve: (parent) => parent.weight || null }),
-        injured: t.exposeBoolean('injured', { description: 'Whether the player is currently flagged as injured by the upstream provider.' }),
+        firstname: t.string({ nullable: true, description: 'Player first name. Null if not reported.', resolve: (parent) => playerMeta(parent).firstname ?? null }),
+        lastname: t.string({ nullable: true, description: 'Player last name. Null if not reported.', resolve: (parent) => playerMeta(parent).lastname ?? null }),
+        age: t.int({ nullable: true, description: 'Player age in years. Null if not reported.', resolve: (parent) => playerMeta(parent).age ?? null }),
+        nationality: t.string({ nullable: true, description: 'Player nationality (e.g. "Egypt"). Null if not reported.', resolve: (parent) => playerMeta(parent).nationality ?? null }),
+        height: t.string({ description: 'Player height as a string (e.g. "175 cm"). Null if not reported.', nullable: true, resolve: (parent) => playerMeta(parent).height ?? null }),
+        weight: t.string({ description: 'Player weight as a string (e.g. "71 kg"). Null if not reported.', nullable: true, resolve: (parent) => playerMeta(parent).weight ?? null }),
+        injured: t.boolean({ description: 'Whether the player is currently flagged as injured by the upstream provider.', resolve: (parent) => playerMeta(parent).injured ?? false }),
         photo: t.string({
             description: 'Public URL to the player headshot. Resolved from graphics registry, then upstream.',
             nullable: true,
             resolve: async (parent) => {
-                // If we have an internal UUID, check the graphics registry first
                 if (parent.id) {
                     try {
                         const url = await graphicsService.resolveUrl(parent.id, 'player');
                         if (url) return url;
                     } catch { /* fall through */ }
                 }
-                return parent.photo || null;
+                return playerMeta(parent).photo ?? null;
             }
         }),
         statistics: t.expose('statistics', { type: 'JSON', nullable: true, description: 'Season-specific player statistics as raw JSON from the upstream provider (appearances, goals, assists, etc.).' }),
@@ -354,6 +368,43 @@ builder.objectType(LineupRef, {
         coachPhoto: t.exposeString('coachPhoto', { nullable: true, description: 'URL to the coach headshot photo. Null if not available.' }),
         startXI: t.expose('startXI', { type: [PlayerRef], description: 'List of 11 Player objects in the starting lineup.' }),
         substitutes: t.expose('substitutes', { type: [PlayerRef], description: 'List of Player objects on the bench.' }),
+    }),
+});
+
+builder.objectType(RosterEntryRef, {
+    description: 'A player membership in a team for a specific season, with display metadata (jersey number, position) stored in JSONB.',
+    fields: (t) => ({
+        id: t.exposeString('id', { description: 'UUID of this roster entry.' }),
+        teamId: t.exposeString('teamId', { description: 'UUID of the team this roster entry belongs to.' }),
+        playerId: t.exposeString('playerId', { description: 'UUID of the player.' }),
+        seasonId: t.exposeString('seasonId', { description: 'UUID of the season this roster entry applies to.' }),
+        squadNumber: t.int({
+            nullable: true,
+            description: 'Jersey/squad number. Null if not known. Sourced from metadata.',
+            resolve: (parent) => {
+                const meta = parent.metadata as Record<string, unknown> | null;
+                return (meta?.squadNumber as number) ?? null;
+            },
+        }),
+        position: t.string({
+            nullable: true,
+            description: 'Position category ("Goalkeeper", "Defender", "Midfielder", "Attacker"). Null if not known. Sourced from metadata.',
+            resolve: (parent) => {
+                const meta = parent.metadata as Record<string, unknown> | null;
+                return (meta?.position as string) ?? null;
+            },
+        }),
+        player: t.field({
+            description: 'Full player record for this roster entry.',
+            type: PlayerRef,
+            resolve: (parent) => ({
+                ...parent.player,
+                metadata: parent.player.metadata as PlayerMeta | null,
+                statistics: undefined,
+            }),
+        }),
+        createdAt: t.expose('createdAt', { type: 'DateTime', description: 'When this roster entry was first created.' }),
+        updatedAt: t.expose('updatedAt', { type: 'DateTime', description: 'When this roster entry was last updated.' }),
     }),
 });
 
@@ -421,9 +472,10 @@ builder.queryField('fixtures', (t) =>
         args: {
             seasonId: t.arg.string({ required: true, description: 'UUID of the season whose fixtures to retrieve. Obtain this from the seasons query or from a Season object.' }),
             since: t.arg({ type: 'DateTime', required: false, description: 'ISO-8601 timestamp for delta sync. When provided, only fixtures updated after this timestamp are returned, reducing payload size for incremental refreshes.' }),
+            forceRefresh: t.arg.boolean({ required: false, description: 'When true, bypasses the 5-minute live polling cooldown to immediately re-check past-due fixtures against the upstream API. The atomic lock still prevents concurrent polls.' }),
         },
-        resolve: async (_, { seasonId, since }) => {
-            return repository.football.getFixturesBySeasonId(seasonId, since || undefined);
+        resolve: async (_, { seasonId, since, forceRefresh }) => {
+            return repository.football.getFixturesBySeasonId(seasonId, since || undefined, forceRefresh || undefined);
         },
     })
 );
@@ -542,7 +594,9 @@ builder.queryField('player', (t) =>
                 resolvedSourceId = player.sourceId;
             }
             if (!resolvedSourceId) return null;
-            return repository.football.getPlayerData(resolvedSourceId, season);
+            const data = await repository.football.getPlayerData(resolvedSourceId, season);
+            if (!data) return null;
+            return { ...data, metadata: data.metadata as PlayerMeta | null };
         },
     })
 );
@@ -605,3 +659,36 @@ builder.mutationField('saveSeasonConfig', (t) =>
     })
 );
 
+builder.queryField('teamRoster', (t) =>
+    t.field({
+        description: 'Returns the squad roster for a team in a given season, including player details and metadata (jersey number, position).',
+        type: [RosterEntryRef],
+        args: {
+            teamId: t.arg.string({ required: true, description: 'UUID of the team.' }),
+            seasonId: t.arg.string({ required: true, description: 'UUID of the season.' }),
+        },
+        resolve: async (_, { teamId, seasonId }) => {
+            return repository.football.getTeamRoster(teamId, seasonId);
+        },
+    })
+);
+
+builder.mutationField('importSquad', (t) =>
+    t.field({
+        description: 'Admin only. Fetches the current squad for a team from the upstream provider and populates roster entries, player records, and source mappings.',
+        type: [RosterEntryRef],
+        args: {
+            teamId: t.arg.string({ required: true, description: 'UUID of the team to import the squad for.' }),
+            seasonId: t.arg.string({ required: true, description: 'UUID of the season to associate the roster with.' }),
+        },
+        resolve: async (_, { teamId, seasonId }, ctx) => {
+            requireAdmin(ctx);
+            // Look up the team's sourceId for the provider call
+            const [team] = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId));
+            if (!team) throw new Error(`Team not found: ${teamId}`);
+            await repository.football.importSquad(teamId, team.sourceId, seasonId);
+            // Return the full roster with player joins
+            return repository.football.getTeamRoster(teamId, seasonId);
+        },
+    })
+);
