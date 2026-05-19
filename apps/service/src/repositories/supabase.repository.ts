@@ -2,7 +2,7 @@ import { ConfigRepository, FootballRepository, IRepository, SyncResult } from '.
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, sql, and, gt, inArray, notInArray, lte } from 'drizzle-orm';
-import { IFootballProvider } from '../integrations/types';
+import { IFootballProvider, IngestedFixture } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
 import { graphicsService } from '../services/graphics.service';
@@ -25,6 +25,27 @@ const NOW_MS = sql`date_trunc('milliseconds', now())`;
  * (Disciplinary record is part of the EFL spec too but isn't implemented yet — card data isn't synced.)
  */
 const DEFAULT_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
+
+/**
+ * Shared SET clause for fixture upserts. Centralised because four code paths
+ * (initial sync, live polling, stale polling, daily discovery) all upsert
+ * fixtures and must stay aligned on which columns get overwritten.
+ */
+const FIXTURE_UPSERT_SET = {
+    scheduledAt: sql`EXCLUDED.scheduled_at`,
+    status: sql`EXCLUDED.status`,
+    homeGoals: sql`EXCLUDED.home_goals`,
+    awayGoals: sql`EXCLUDED.away_goals`,
+    venueId: sql`EXCLUDED.venue_id`,
+    gameweek: sql`EXCLUDED.gameweek`,
+    updatedAt: NOW_MS
+};
+
+interface FixtureLookups {
+    teamMap: Map<number, string>;
+    teamVenueMap: Map<string, string>;
+    venueMap: Map<number, string>;
+}
 
 export class SupabaseConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
@@ -364,6 +385,61 @@ export class SupabaseFootballRepository implements FootballRepository {
         return this.getTeams(leagueSourceId, seasonYear);
     }
 
+    /**
+     * Loads the team, venue, and home-venue maps used to map IngestedFixture → DB row.
+     * Centralised so every code path that imports fixtures has the same view of
+     * team/venue identity and the same home-venue fallback.
+     */
+    private async loadFixtureLookups(): Promise<FixtureLookups> {
+        // venues first then teams — preserves call ordering for tests that
+        // distinguish select() calls by index.
+        const [currentVenues, teams] = await Promise.all([
+            db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name)),
+            db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name)),
+        ]);
+        return {
+            teamMap: new Map<number, string>(teams.map((t) => [t.sourceId, t.id])),
+            teamVenueMap: new Map<string, string>(teams.filter((t) => t.venueId).map((t) => [t.id, t.venueId!])),
+            venueMap: new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id])),
+        };
+    }
+
+    /**
+     * Maps a provider-normalised fixture to a DB row. Returns null when team
+     * mapping is missing (so the caller can drop it). Venue falls back to the
+     * home team's home venue when the provider omits `fixture.venue.id`, which
+     * API-Football routinely does for league play.
+     */
+    private buildFixtureRow(
+        normalized: IngestedFixture,
+        leagueId: string,
+        seasonId: string,
+        lookups: FixtureLookups,
+    ): typeof schema.fixtures.$inferInsert | null {
+        const homeId = lookups.teamMap.get(normalized.homeTeamSourceId);
+        const awayId = lookups.teamMap.get(normalized.awayTeamSourceId);
+        if (!homeId || !awayId) return null;
+
+        const fixtureVenueId = normalized.venueSourceId ? lookups.venueMap.get(normalized.venueSourceId) : undefined;
+
+        return {
+            sourceName: normalized.sourceName,
+            sourceId: normalized.sourceId,
+            leagueId,
+            seasonId,
+            homeTeamId: homeId,
+            awayTeamId: awayId,
+            venueId: fixtureVenueId ?? lookups.teamVenueMap.get(homeId) ?? null,
+            scheduledAt: new Date(normalized.scheduledAt),
+            status: normalized.status,
+            homeGoals: normalized.homeGoals,
+            awayGoals: normalized.awayGoals,
+            gameweek: normalized.gameweek,
+            metadata: {},
+            updatedAt: NOW_MS as unknown as Date,
+        };
+    }
+
     private async upsertVenues(venues: import('../integrations/types').IngestedVenue[]) {
         if (!db || venues.length === 0) return;
 
@@ -457,43 +533,19 @@ export class SupabaseFootballRepository implements FootballRepository {
         // 3.1 Upsert any venues from fixtures (neutral grounds)
         await this.upsertVenues(venues);
 
-        const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-        const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
-
-        // Fetch all teams for this provider to get IDs
-        const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-        const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
-        // Home team's venue is the league-play default when the provider omits fixture.venue.id.
-        const teamVenueMap = new Map<string, string>(teams.filter((t) => t.venueId).map((t) => [t.id, t.venueId!]));
+        const lookups = await this.loadFixtureLookups();
 
         const fixturesToInsert = fixtures.map((normalized) => {
-            const homeId = teamMap.get(normalized.homeTeamSourceId);
-            const awayId = teamMap.get(normalized.awayTeamSourceId);
-
-            if (!homeId || !awayId) {
-                logger.warn({ homeSource: normalized.homeTeamSourceId, awaySource: normalized.awayTeamSourceId, fixtureSource: normalized.sourceId },
-                    `Dropping fixture ${normalized.sourceId}: missing team mapping (home=${!!homeId}, away=${!!awayId})`);
-                return null;
+            const row = this.buildFixtureRow(normalized, localLeague.id, localSeason.id, lookups);
+            if (!row) {
+                const homeMapped = lookups.teamMap.has(normalized.homeTeamSourceId);
+                const awayMapped = lookups.teamMap.has(normalized.awayTeamSourceId);
+                logger.warn(
+                    { homeSource: normalized.homeTeamSourceId, awaySource: normalized.awayTeamSourceId, fixtureSource: normalized.sourceId },
+                    `Dropping fixture ${normalized.sourceId}: missing team mapping (home=${homeMapped}, away=${awayMapped})`
+                );
             }
-
-            const fixtureVenueId = normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : undefined;
-
-            return {
-                sourceName: normalized.sourceName,
-                sourceId: normalized.sourceId,
-                leagueId: localLeague.id,
-                seasonId: localSeason.id,
-                homeTeamId: homeId,
-                awayTeamId: awayId,
-                venueId: fixtureVenueId ?? teamVenueMap.get(homeId) ?? null,
-                scheduledAt: new Date(normalized.scheduledAt),
-                status: normalized.status,
-                homeGoals: normalized.homeGoals,
-                awayGoals: normalized.awayGoals,
-                gameweek: normalized.gameweek,
-                metadata: {},
-                updatedAt: NOW_MS
-            };
+            return row;
         }).filter(Boolean);
 
         // 4. Batch upsert with progress reporting
@@ -508,15 +560,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 .values(batch as unknown as typeof schema.fixtures.$inferInsert[])
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
-                    set: {
-                        scheduledAt: sql`EXCLUDED.scheduled_at`,
-                        status: sql`EXCLUDED.status`,
-                        homeGoals: sql`EXCLUDED.home_goals`,
-                        awayGoals: sql`EXCLUDED.away_goals`,
-                        venueId: sql`EXCLUDED.venue_id`,
-                        gameweek: sql`EXCLUDED.gameweek`,
-                        updatedAt: NOW_MS
-                    }
+                    set: FIXTURE_UPSERT_SET,
                 });
 
             processedCount += batch.length;
@@ -613,47 +657,17 @@ export class SupabaseFootballRepository implements FootballRepository {
                             const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
 
                             if (updatedFixtures.length > 0) {
-                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
-
-                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
-
-                                const fixturesToUpdate = updatedFixtures.map(normalized => {
-                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
-                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
-                                    if (!homeId || !awayId) return null;
-                                    return {
-                                        sourceName: normalized.sourceName,
-                                        sourceId: normalized.sourceId,
-                                        leagueId: season.leagues.id,
-                                        seasonId: seasonRecord.id,
-                                        homeTeamId: homeId,
-                                        awayTeamId: awayId,
-                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
-                                        scheduledAt: new Date(normalized.scheduledAt),
-                                        status: normalized.status,
-                                        homeGoals: normalized.homeGoals,
-                                        awayGoals: normalized.awayGoals,
-                                        gameweek: normalized.gameweek,
-                                        updatedAt: NOW_MS
-                                    };
-                                }).filter(Boolean);
+                                const lookups = await this.loadFixtureLookups();
+                                const fixturesToUpdate = updatedFixtures
+                                    .map(n => this.buildFixtureRow(n, season.leagues.id, seasonRecord.id, lookups))
+                                    .filter(Boolean);
 
                                 if (fixturesToUpdate.length > 0) {
                                     await db.insert(schema.fixtures)
                                         .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
                                         .onConflictDoUpdate({
                                             target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
-                                            set: {
-                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
-                                                status: sql`EXCLUDED.status`,
-                                                homeGoals: sql`EXCLUDED.home_goals`,
-                                                awayGoals: sql`EXCLUDED.away_goals`,
-                                                venueId: sql`EXCLUDED.venue_id`,
-                                                gameweek: sql`EXCLUDED.gameweek`,
-                                                updatedAt: NOW_MS
-                                            }
+                                            set: FIXTURE_UPSERT_SET,
                                         });
                                     pollingDidUpdate = true;
                                 }
@@ -796,47 +810,17 @@ export class SupabaseFootballRepository implements FootballRepository {
                             const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
 
                             if (updatedFixtures.length > 0) {
-                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
-
-                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
-
-                                const fixturesToUpdate = updatedFixtures.map(normalized => {
-                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
-                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
-                                    if (!homeId || !awayId) return null;
-                                    return {
-                                        sourceName: normalized.sourceName,
-                                        sourceId: normalized.sourceId,
-                                        leagueId: seasonRecord.leagueId,
-                                        seasonId: seasonRecord.id,
-                                        homeTeamId: homeId,
-                                        awayTeamId: awayId,
-                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
-                                        scheduledAt: new Date(normalized.scheduledAt),
-                                        status: normalized.status,
-                                        homeGoals: normalized.homeGoals,
-                                        awayGoals: normalized.awayGoals,
-                                        gameweek: normalized.gameweek,
-                                        updatedAt: NOW_MS
-                                    };
-                                }).filter(Boolean);
+                                const lookups = await this.loadFixtureLookups();
+                                const fixturesToUpdate = updatedFixtures
+                                    .map(n => this.buildFixtureRow(n, seasonRecord.leagueId, seasonRecord.id, lookups))
+                                    .filter(Boolean);
 
                                 if (fixturesToUpdate.length > 0) {
                                     await db.insert(schema.fixtures)
                                         .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
                                         .onConflictDoUpdate({
                                             target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
-                                            set: {
-                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
-                                                status: sql`EXCLUDED.status`,
-                                                homeGoals: sql`EXCLUDED.home_goals`,
-                                                awayGoals: sql`EXCLUDED.away_goals`,
-                                                venueId: sql`EXCLUDED.venue_id`,
-                                                gameweek: sql`EXCLUDED.gameweek`,
-                                                updatedAt: NOW_MS
-                                            }
+                                            set: FIXTURE_UPSERT_SET,
                                         });
                                     pollingDidUpdate = true;
                                     logger.info({ updated: fixturesToUpdate.length }, 'Stale polling: upsert complete');
@@ -865,32 +849,10 @@ export class SupabaseFootballRepository implements FootballRepository {
                             const { fixtures: allFixtures } = await this.provider.getFixtures(leagueRecord.sourceId, seasonRecord.year);
 
                             if (allFixtures.length > 0) {
-                                const currentVenues = await db.select().from(schema.venues).where(eq(schema.venues.sourceName, this.provider.name));
-                                const venueMap = new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id]));
-
-                                const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
-                                const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
-
-                                const fixturesToUpsert = allFixtures.map(normalized => {
-                                    const homeId = teamMap.get(normalized.homeTeamSourceId);
-                                    const awayId = teamMap.get(normalized.awayTeamSourceId);
-                                    if (!homeId || !awayId) return null;
-                                    return {
-                                        sourceName: normalized.sourceName,
-                                        sourceId: normalized.sourceId,
-                                        leagueId: seasonRecord.leagueId,
-                                        seasonId: seasonRecord.id,
-                                        homeTeamId: homeId,
-                                        awayTeamId: awayId,
-                                        venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
-                                        scheduledAt: new Date(normalized.scheduledAt),
-                                        status: normalized.status,
-                                        homeGoals: normalized.homeGoals,
-                                        awayGoals: normalized.awayGoals,
-                                        gameweek: normalized.gameweek,
-                                        updatedAt: NOW_MS
-                                    };
-                                }).filter(Boolean);
+                                const lookups = await this.loadFixtureLookups();
+                                const fixturesToUpsert = allFixtures
+                                    .map(n => this.buildFixtureRow(n, seasonRecord.leagueId, seasonRecord.id, lookups))
+                                    .filter(Boolean);
 
                                 if (fixturesToUpsert.length > 0) {
                                     // Only update (and bump updatedAt) when data actually changed.
@@ -899,15 +861,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                                         .values(fixturesToUpsert as unknown as typeof schema.fixtures.$inferInsert[])
                                         .onConflictDoUpdate({
                                             target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
-                                            set: {
-                                                scheduledAt: sql`EXCLUDED.scheduled_at`,
-                                                status: sql`EXCLUDED.status`,
-                                                homeGoals: sql`EXCLUDED.home_goals`,
-                                                awayGoals: sql`EXCLUDED.away_goals`,
-                                                venueId: sql`EXCLUDED.venue_id`,
-                                                gameweek: sql`EXCLUDED.gameweek`,
-                                                updatedAt: NOW_MS
-                                            },
+                                            set: FIXTURE_UPSERT_SET,
                                             where: sql`
                                                 ${schema.fixtures.scheduledAt} IS DISTINCT FROM EXCLUDED.scheduled_at
                                                 OR ${schema.fixtures.status} IS DISTINCT FROM EXCLUDED.status

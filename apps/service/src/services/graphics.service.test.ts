@@ -4,6 +4,11 @@ vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
         insert: vi.fn(),
+        update: vi.fn(() => ({
+            set: vi.fn(() => ({
+                where: vi.fn().mockResolvedValue(undefined),
+            })),
+        })),
     }
 }));
 
