@@ -33,8 +33,8 @@ export class ApiFootballProvider implements IFootballProvider {
         }));
     }
 
-    async getLeagues(): Promise<IngestedLeague[]> {
-        const resp = await this.client.get('/leagues');
+    async getLeagues(country?: string): Promise<IngestedLeague[]> {
+        const resp = await this.client.get('/leagues', country ? { params: { country } } : undefined);
         return resp.data.response.map((item: RawLeagueItem) => Normalizer.normalizeLeague(item, this.name));
     }
 

@@ -1,73 +1,29 @@
-# React + TypeScript + Vite
+# UltraTable — Admin
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The administrative interface for UltraTable. Used by operators to manage the football data inventory (countries, leagues, seasons, fixtures), configure ranking and zone rules, run sync jobs, and inspect system logs.
 
-Currently, two official plugins are available:
+React + TypeScript + Vite. Talks to the BFF GraphQL service at `apps/service` via the `/graphql` endpoint.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Local dev
 
-## React Compiler
+From the monorepo root: `npm run start:all`. Admin runs at <http://localhost:5174/>.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Sign in via the **Dev Auth Tools** floating panel (bottom-right, dev mode only) — click **Admin** to mint a Better Auth session as a dev admin user. Without a session, the admin GraphQL queries return 401.
 
-## Expanding the ESLint configuration
+## Pages
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Tab | Purpose | Docs |
+|---|---|---|
+| Dashboard | At-a-glance system + integration status. | — |
+| Inventory | Browse the upstream catalog, activate leagues, import seasons, configure ranking and zones. | **[docs/inventory.md](./docs/inventory.md)** |
+| Integrations | Manage external API credentials (API-Football). | — |
+| Database | Database connection status and tooling. | — |
+| Workers | Background job runs and progress. | — |
+| Graphics | Team / venue / league logo registry. | — |
+| Logs | System log viewer. | — |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+(Pages without a docs link are either self-explanatory or pending documentation.)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Documentation
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+All admin-specific documentation lives in [`docs/`](./docs/). Link new page docs from the table above so they are discoverable.

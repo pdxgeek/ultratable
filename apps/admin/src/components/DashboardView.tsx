@@ -28,9 +28,9 @@ const DashboardView = ({ config }: { config: ConfigStatus | null }) => (
         icon={Globe}
       />
       <StatCard
-        label="RapidAPI"
+        label="API-Football"
         value={config?.apiFootballKeyMasked ? 'Authorized' : 'Restricted'}
-        subValue={config?.apiFootballKeyMasked ? 'X-RapidAPI Key Active' : 'Access key missing'}
+        subValue={config?.apiFootballKeyMasked || 'Access key missing'}
         isError={!config?.apiFootballKeyMasked}
         icon={Key}
       />

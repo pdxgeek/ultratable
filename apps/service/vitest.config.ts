@@ -17,7 +17,6 @@ export default defineConfig({
                 'src/index.ts',
                 'src/db/schema.ts',        // Drizzle table declarations — no logic
                 'src/db/migrate.ts',        // Migration runner entrypoint
-                'src/integrations/mock/**', // Test infrastructure
                 'src/integrations/types.ts', // Pure type definitions
                 'src/api/**',               // Fastify route wiring
                 'src/providers/storage.provider.ts', // Interface-only file

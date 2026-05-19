@@ -5,7 +5,6 @@ import { eq, sql, and, gt, inArray, notInArray, lte } from 'drizzle-orm';
 import { IFootballProvider } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
-import { MockFootballProvider } from '../integrations/mock';
 import { graphicsService } from '../services/graphics.service';
 import { globalLogger } from '../services/log.service';
 import { cacheService, TTL, fixtureTTL, seasonTTL } from '../services/cache.service';
@@ -19,6 +18,13 @@ import path from 'node:path';
  * in every delta sync. Truncating to milliseconds keeps them in sync.
  */
 const NOW_MS = sql`date_trunc('milliseconds', now())`;
+
+/**
+ * Default sort order for a newly-promoted league, copied onto each season at import time.
+ * Mirrors the EFL tiebreaker hierarchy: Points → GD → Goals For → Head-to-Head → Wins → Away Goals.
+ * (Disciplinary record is part of the EFL spec too but isn't implemented yet — card data isn't synced.)
+ */
+const DEFAULT_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
 
 export class SupabaseConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
@@ -101,16 +107,7 @@ export class SupabaseFootballRepository implements FootballRepository {
     private provider: IFootballProvider;
 
     constructor(providerOverride?: IFootballProvider) {
-        if (providerOverride) {
-            this.provider = providerOverride;
-        } else {
-            const providerName = process.env.FOOTBALL_PROVIDER || 'api-football';
-            if (providerName === 'mock') {
-                this.provider = new MockFootballProvider();
-            } else {
-                this.provider = new ApiFootballProvider();
-            }
-        }
+        this.provider = providerOverride ?? new ApiFootballProvider();
     }
 
     async getLeagues(): Promise<Array<typeof schema.leagues.$inferSelect>> {
@@ -119,27 +116,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         if (cached) return cached;
 
         const existing = await db.select().from(schema.leagues);
-        if (existing.length > 0) {
-            cacheService.set('leagues', existing, TTL.STABLE);
-            return existing;
-        }
-
-        const ingested = await this.provider.getLeagues();
-
-        const leaguesToInsert = ingested.map((l) => ({
-            name: l.name,
-            slug: l.slug,
-            country: l.country,
-            logo: l.logo,
-            sourceName: l.sourceName,
-            sourceId: l.sourceId,
-            metadata: {}
-        }));
-
-        await db.insert(schema.leagues).values(leaguesToInsert).onConflictDoNothing();
-        const result = await db.select().from(schema.leagues);
-        cacheService.set('leagues', result, TTL.STABLE);
-        return result;
+        cacheService.set('leagues', existing, TTL.STABLE);
+        return existing;
     }
 
     async getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<Array<typeof schema.seasons.$inferSelect>> {
@@ -362,6 +340,11 @@ export class SupabaseFootballRepository implements FootballRepository {
                 });
         }
 
+        // The legacy `teams:${sourceId}:${year}` invalidation is done by the caller,
+        // but the UUID-keyed cache used by getTeamsBySeasonId lives under `teams:season:${seasonId}`.
+        // Invalidate it here so the next read picks up the freshly linked teams.
+        cacheService.invalidate(`teams:season:${localSeason.id}`);
+
         // 5. Auto-import squad rosters for each team
         let squadApiCalls = 0;
         for (const t of teams) {
@@ -542,6 +525,9 @@ export class SupabaseFootballRepository implements FootballRepository {
         if (reporter) {
             await reporter.updateProgress({ processedCount, totalCount });
         }
+
+        // Invalidate the UUID-keyed cache used by getFixturesBySeasonId, which the BFF reads via the `fixtures(seasonId)` GraphQL query.
+        cacheService.invalidate(`fixtures:season:${localSeason.id}`);
 
         const data = await this.getFixtures(leagueSourceId, seasonYear);
         return {
@@ -1035,23 +1021,36 @@ export class SupabaseFootballRepository implements FootballRepository {
         };
     }
 
-    async syncCatalogLeagues(): Promise<SyncResult<typeof schema.catalogLeagues.$inferSelect>> {
+    async syncCatalogLeagues(countryId?: string): Promise<SyncResult<typeof schema.catalogLeagues.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
 
-        // Ensure countries exist first
-        await this.syncCatalogCountries();
-
-        const ingested = await this.provider.getLeagues();
+        // Ensure countries exist first. Skipped when scoping to a single country — the caller already has it.
+        let apiCallsCount = 1; // for the upcoming getLeagues call
+        if (!countryId) {
+            await this.syncCatalogCountries();
+            apiCallsCount = 2;
+        }
 
         const localCountries = await this.getCatalogCountries();
         const countryMap = new Map<string, string>(localCountries.map(c => [c.name as string, c.id as string]));
 
+        let scopedCountryName: string | undefined;
+        if (countryId) {
+            const country = localCountries.find(c => c.id === countryId);
+            if (!country) {
+                throw new Error(`Catalog country not found: ${countryId}`);
+            }
+            scopedCountryName = country.name;
+        }
+
+        const ingested = await this.provider.getLeagues(scopedCountryName);
+
         const toInsert = ingested.map((item) => {
-            const countryId = countryMap.get(item.country || '');
-            if (!countryId) return null;
+            const itemCountryId = countryMap.get(item.country || '');
+            if (!itemCountryId) return null;
 
             return {
-                countryId,
+                countryId: itemCountryId,
                 name: item.name,
                 type: 'league', // Default or from metadata if we tracked it
                 logo: item.logo,
@@ -1076,7 +1075,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         return {
             data: [],
-            stats: { processedCount: toInsert.length, apiCallsCount: 2 } // countries + leagues
+            stats: { processedCount: toInsert.length, apiCallsCount }
         };
     }
 
@@ -1141,6 +1140,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         // For now, we'll just use the external URL but we've planned for storage
 
         // 2. Insert into managed leagues
+        const catMetadata = (catLeague.metadata as Record<string, unknown> | null) ?? {};
+        const managedMetadata = { ...catMetadata, rankingCriteria: DEFAULT_RANKING_CRITERIA };
         const [managed] = await db.insert(schema.leagues).values({
             name: catLeague.name,
             slug: catLeague.name.toLowerCase().replace(/ /g, '-'),
@@ -1148,7 +1149,7 @@ export class SupabaseFootballRepository implements FootballRepository {
             logo: catLeague.logo,
             sourceName: catLeague.sourceName,
             sourceId: catLeague.sourceId,
-            metadata: catLeague.metadata
+            metadata: managedMetadata
         }).onConflictDoUpdate({
             target: [schema.leagues.sourceName, schema.leagues.sourceId],
             set: { updatedAt: new Date() }
@@ -1171,9 +1172,16 @@ export class SupabaseFootballRepository implements FootballRepository {
         const [managedLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
         if (!managedLeague) throw new Error('Managed league not found');
 
+        // Season inherits its ranking criteria from the league at creation time; later edits on the season are independent.
+        const leagueMeta = (managedLeague.metadata as Record<string, unknown> | null) ?? {};
+        const seedMetadata = {
+            rankingCriteria: (leagueMeta.rankingCriteria as string[]) ?? DEFAULT_RANKING_CRITERIA,
+        };
+
         const [season] = await db.insert(schema.seasons).values({
             leagueId: managedLeague.id,
             year,
+            metadata: seedMetadata,
             updatedAt: new Date()
         }).onConflictDoUpdate({
             target: [schema.seasons.leagueId, schema.seasons.year],

@@ -5,6 +5,7 @@ import type { CatalogLeague, Season, ManagedLeague } from './LeaguesManagementVi
 
 interface SeasonImporterProps {
     managedLeagues: ManagedLeague[];
+    hasCountrySelected: boolean;
     selectedCatalogLeagueId: string;
     setSelectedCatalogLeagueId: (id: string) => void;
     catalogLeagueMetadata: CatalogLeague | null;
@@ -17,6 +18,7 @@ interface SeasonImporterProps {
 
 export const SeasonImporter: React.FC<SeasonImporterProps> = ({
     managedLeagues,
+    hasCountrySelected,
     selectedCatalogLeagueId,
     setSelectedCatalogLeagueId,
     catalogLeagueMetadata,
@@ -37,17 +39,24 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                     </h3>
                     <p className="text-sm text-slate-400 mt-2">Browse provider years and import them as local seasons.</p>
                 </div>
-                <select
-                    value={selectedCatalogLeagueId}
-                    onChange={(e) => setSelectedCatalogLeagueId(e.target.value)}
-                    className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all min-w-[200px]"
-                >
-                    <option value="">Select League...</option>
-                    {managedLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+                {hasCountrySelected && (
+                    <select
+                        value={selectedCatalogLeagueId}
+                        onChange={(e) => setSelectedCatalogLeagueId(e.target.value)}
+                        className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all min-w-[200px]"
+                    >
+                        <option value="">Select League...</option>
+                        {managedLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                )}
             </div>
 
-            {selectedCatalogLeagueId ? (
+            {!hasCountrySelected ? (
+                <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
+                    <Globe className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-30" />
+                    <p className="text-sm text-slate-500 font-medium tracking-tight">Select a country in the catalog browser above.</p>
+                </div>
+            ) : selectedCatalogLeagueId ? (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 relative z-10">
                     <div className="flex items-center justify-between px-2">
                         <div className="flex items-center gap-4">
