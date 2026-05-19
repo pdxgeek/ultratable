@@ -20,7 +20,6 @@ export default defineConfig({
                 // Service: schema declarations, wiring, infra
                 '**/db/schema.ts',
                 '**/db/migrate.ts',
-                '**/integrations/mock/**',
                 '**/integrations/types.ts',
                 '**/api/**',
                 '**/providers/storage.provider.ts',

@@ -106,7 +106,7 @@ export interface IngestedSquadPlayer {
 export interface IFootballProvider {
     name: string;
     getCountries(): Promise<IngestedCountry[]>;
-    getLeagues(): Promise<IngestedLeague[]>;
+    getLeagues(country?: string): Promise<IngestedLeague[]>;
     getSeasons(leagueId: number): Promise<IngestedSeason[]>;
     getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }>;
     getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
