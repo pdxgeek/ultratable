@@ -24,6 +24,13 @@ const LineupRef = builder.objectRef<import('../integrations/types').IngestedLine
 type RosterEntryShape = typeof schema.teamRosters.$inferSelect & { player: typeof schema.players.$inferSelect };
 const RosterEntryRef = builder.objectRef<RosterEntryShape>('RosterEntry');
 
+/**
+ * Fallback ranking-criteria order used when a season has no `metadata.rankingCriteria`
+ * (e.g. seasons imported before importSeason started persisting it).
+ * Mirrors the EFL hierarchy and must stay in sync with DEFAULT_RANKING_CRITERIA in supabase.repository.ts.
+ */
+const FALLBACK_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
+
 builder.objectType(VenueRef, {
     fields: (t) => ({
         id: t.exposeString('id', { description: 'Unique internal UUID for this venue. Use this ID when referencing a venue in other queries or mutations.' }),
@@ -202,9 +209,12 @@ builder.objectType(SeasonRef, {
             type: [RankingFormulaRef],
             resolve: async (parent) => {
                 const metadata = parent.metadata as Record<string, unknown> | null;
-                const criteria = (metadata?.rankingCriteria as string[]) || ['standard_pts', 'goal_diff', 'goals_for'];
+                const criteria = (metadata?.rankingCriteria as string[]) || FALLBACK_RANKING_CRITERIA;
                 const all = await repository.football.getRankingFormulas();
-                return all.filter(f => criteria.includes(f.id));
+                const byId = new Map(all.map(f => [f.id, f]));
+                // Preserve the order defined in the criteria array — the repo returns formulas ORDER BY id
+                // so a naive filter would silently break tiebreaker precedence.
+                return criteria.map(id => byId.get(id)).filter((f): f is typeof all[number] => f !== undefined);
             }
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime', description: 'ISO-8601 timestamp of the last update. Used for delta sync watermarking.' }),
