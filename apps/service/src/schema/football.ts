@@ -202,9 +202,12 @@ builder.objectType(SeasonRef, {
             type: [RankingFormulaRef],
             resolve: async (parent) => {
                 const metadata = parent.metadata as Record<string, unknown> | null;
-                const criteria = (metadata?.rankingCriteria as string[]) || ['standard_pts', 'goal_diff', 'goals_for'];
+                const criteria = (metadata?.rankingCriteria as string[]) || ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
                 const all = await repository.football.getRankingFormulas();
-                return all.filter(f => criteria.includes(f.id));
+                const byId = new Map(all.map(f => [f.id, f]));
+                // Preserve the order defined in the criteria array — the repo returns formulas ORDER BY id
+                // so a naive filter would silently break tiebreaker precedence.
+                return criteria.map(id => byId.get(id)).filter((f): f is typeof all[number] => f !== undefined);
             }
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime', description: 'ISO-8601 timestamp of the last update. Used for delta sync watermarking.' }),

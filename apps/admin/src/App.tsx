@@ -207,7 +207,7 @@ const App: React.FC = () => {
         <div className="p-12 max-w-6xl mx-auto">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all ease-out">
             {activeTab === 'dashboard' && <DashboardView config={config} />}
-            {activeTab === 'api-keys' && <ApiKeyView onUpdate={fetchStatus} />}
+            {activeTab === 'api-keys' && <ApiKeyView onUpdate={fetchStatus} currentKeyMasked={config?.apiFootballKeyMasked} />}
             {activeTab === 'database' && <DatabaseView config={config} onUpdate={fetchStatus} />}
             {activeTab === 'leagues' && <LeaguesManagementView jobs={jobs} executions={executions} />}
             {activeTab === 'workers' && (

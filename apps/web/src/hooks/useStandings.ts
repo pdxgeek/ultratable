@@ -6,7 +6,7 @@ import type { StandingsOptions } from '../logic/dataCompiler';
 
 export function useStandings(seasonId: string, options: StandingsOptions = {}) {
     const data = useLiveQuery(async () => {
-        const [fixtures, season] = await Promise.all([
+        const [allFixtures, season] = await Promise.all([
             db.fixtures.where('seasonId').equals(seasonId).toArray(),
             db.seasons.get(seasonId)
         ]);
@@ -14,6 +14,10 @@ export function useStandings(seasonId: string, options: StandingsOptions = {}) {
         if (!season) return null;
 
         const league = await db.leagues.get(season.leagueId);
+
+        // Exclude playoff matches from the main league table. The provider's "Play-offs - …" rounds
+        // have no integer gameweek, so a null gameweek is a reliable marker for non-regular-season fixtures.
+        const fixtures = allFixtures.filter(f => f.gameweek != null);
 
         // Only include teams that appear in this season's fixtures
         const teamIds = new Set<string>();

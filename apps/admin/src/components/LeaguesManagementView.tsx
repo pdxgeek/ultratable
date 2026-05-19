@@ -28,6 +28,7 @@ export interface ManagedLeague {
   id: string;
   sourceId: number;
   name: string;
+  country?: string | null;
   logo?: string;
   metadata?: Record<string, unknown>;
 }
@@ -74,7 +75,7 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
       const data = await gqlFetch<{
         catalogCountries: Country[];
         leagues: ManagedLeague[];
-      }>(`query { catalogCountries { id name code flag } leagues { id name sourceId } }`);
+      }>(`query { catalogCountries { id name code flag } leagues { id name sourceId country } }`);
       setCountries(data.catalogCountries || []);
       setManagedLeagues(data.leagues || []);
     } catch (e) {
@@ -86,14 +87,26 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
   const fetchCatalogLeagues = async (countryId: string) => {
     if (!countryId) return;
+    setActionLoading(`country-${countryId}`);
     try {
-      const data = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
+      // Read what we have locally first; only pull from upstream if there's no cached row for this country.
+      const cached = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
         `query($id: String!) { catalogLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
         { id: countryId }
       );
-      setCatalogLeagues(data.catalogLeagues || []);
+      if (cached.catalogLeagues?.length) {
+        setCatalogLeagues(cached.catalogLeagues);
+        return;
+      }
+      const synced = await gqlFetch<{ syncCountryLeagues: CatalogLeague[] }>(
+        `mutation($id: String!) { syncCountryLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
+        { id: countryId }
+      );
+      setCatalogLeagues(synced.syncCountryLeagues || []);
     } catch (e) {
       console.error('LeaguesManagementView: fetchCatalogLeagues error:', e);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -127,9 +140,16 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
   useEffect(() => { fetchData(); }, []);
 
+  const selectedCountryName = countries.find(c => c.id === selectedCountry)?.name;
+  const filteredManagedLeagues = selectedCountryName
+    ? managedLeagues.filter(l => l.country === selectedCountryName)
+    : [];
+
   useEffect(() => {
+    setCatalogLeagues([]); // Clear stale leagues immediately on country change.
     if (selectedCountry) fetchCatalogLeagues(selectedCountry);
-    else setCatalogLeagues([]);
+    // Clear Box 2 league selection when country changes — the old league may not belong to the new country.
+    setSelectedCatalogLeagueId('');
   }, [selectedCountry]);
 
   // Box 2 Effect
@@ -197,6 +217,22 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
       setConfigTeams([]);
     }
   }, [selectedConfigSeasonId, configSeasons, selectedConfigLeagueId, managedLeagues, configTab]);
+
+  const initializeCatalog = async () => {
+    setActionLoading('init-catalog');
+    try {
+      await gqlFetch<{ syncCatalog: { success: boolean; processedCount: number } }>(
+        `mutation { syncCatalog { success processedCount } }`
+      );
+      await fetchData();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to initialize catalog: ${msg}`);
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const activateLeague = async (catalogId: string) => {
     setActionLoading(catalogId);
@@ -386,11 +422,13 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         managedLeagues={managedLeagues}
         activateLeague={activateLeague}
         actionLoading={actionLoading}
+        initializeCatalog={initializeCatalog}
       />
 
       {/* Box 2: Catalog Seasons */}
       <SeasonImporter
-        managedLeagues={managedLeagues}
+        managedLeagues={filteredManagedLeagues}
+        hasCountrySelected={!!selectedCountry}
         selectedCatalogLeagueId={selectedCatalogLeagueId}
         setSelectedCatalogLeagueId={setSelectedCatalogLeagueId}
         catalogLeagueMetadata={catalogLeagueMetadata}

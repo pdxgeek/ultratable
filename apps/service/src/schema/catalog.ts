@@ -93,6 +93,19 @@ builder.mutationFields((t) => ({
             return { success: true, processedCount };
         },
     }),
+    syncCountryLeagues: t.field({
+        description: 'Admin only. Pulls the league catalog for a single country from the upstream provider and upserts it into catalog_leagues.',
+        type: [CatalogLeagueRef],
+        args: {
+            countryId: t.arg.string({ required: true, description: 'UUID of the catalog country whose leagues to fetch and persist.' }),
+        },
+        resolve: async (_, { countryId }, ctx) => {
+            requireAdmin(ctx);
+            await repository.football.syncCatalogLeagues(countryId);
+            cacheService.invalidate('catalog:');
+            return repository.football.getCatalogLeagues(countryId);
+        },
+    }),
     promoteLeague: t.field({
         description: 'Admin only. Promotes a catalog league into a managed (active) league, enabling season imports and fixture syncing.',
         type: LeagueRef, // Reusing LeagueRef if possible
