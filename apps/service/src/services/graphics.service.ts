@@ -1,12 +1,29 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import axios from 'axios';
 import { storageProvider } from '../providers/supabase-storage.provider';
 import crypto from 'node:crypto';
 import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'GraphicsService' });
+
+const NOW_MS = sql`date_trunc('milliseconds', now())`;
+
+const ENTITY_TABLES = {
+    team: schema.teams,
+    venue: schema.venues,
+    league: schema.leagues,
+    player: schema.players,
+} as const;
+
+type GraphicEntityType = keyof typeof ENTITY_TABLES;
+
+async function bumpEntityUpdatedAt(entityType: string, entityId: string): Promise<void> {
+    const table = ENTITY_TABLES[entityType as GraphicEntityType];
+    if (!table) return;
+    await db.update(table).set({ updatedAt: NOW_MS }).where(eq(table.id, entityId));
+}
 
 export class GraphicsService {
     private readonly BUCKET_NAME = 'graphics';
@@ -60,6 +77,9 @@ export class GraphicsService {
                         updatedAt: new Date()
                     }
                 });
+
+            // Bump parent's updatedAt so delta-sync clients re-fetch and pick up the registry URL.
+            await bumpEntityUpdatedAt(entityType, entityId);
 
             return publicUrl;
         } catch (error: unknown) {

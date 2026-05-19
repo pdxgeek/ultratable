@@ -463,6 +463,8 @@ export class SupabaseFootballRepository implements FootballRepository {
         // Fetch all teams for this provider to get IDs
         const teams = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
         const teamMap = new Map<number, string>(teams.map((t) => [t.sourceId, t.id]));
+        // Home team's venue is the league-play default when the provider omits fixture.venue.id.
+        const teamVenueMap = new Map<string, string>(teams.filter((t) => t.venueId).map((t) => [t.id, t.venueId!]));
 
         const fixturesToInsert = fixtures.map((normalized) => {
             const homeId = teamMap.get(normalized.homeTeamSourceId);
@@ -474,6 +476,8 @@ export class SupabaseFootballRepository implements FootballRepository {
                 return null;
             }
 
+            const fixtureVenueId = normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : undefined;
+
             return {
                 sourceName: normalized.sourceName,
                 sourceId: normalized.sourceId,
@@ -481,7 +485,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                 seasonId: localSeason.id,
                 homeTeamId: homeId,
                 awayTeamId: awayId,
-                venueId: normalized.venueSourceId ? venueMap.get(normalized.venueSourceId) : null,
+                venueId: fixtureVenueId ?? teamVenueMap.get(homeId) ?? null,
                 scheduledAt: new Date(normalized.scheduledAt),
                 status: normalized.status,
                 homeGoals: normalized.homeGoals,
