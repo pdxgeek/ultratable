@@ -307,40 +307,17 @@ export class SupabaseFootballRepository implements FootballRepository {
         const teamList = await db.select().from(schema.teams).where(eq(schema.teams.sourceName, this.provider.name));
         const teamMap = new Map<number, string>(teamList.map((t) => [t.sourceId, t.id]));
 
-        // 3.1 Sideload Graphics (only for entities not already registered)
-        const allEntityIds = [
-            ...teams.map(t => teamMap.get(t.sourceId)).filter(Boolean).map(id => ({ id: id!, type: 'team' })),
-            ...venues.map(v => venueMap.get(v.sourceId)).filter(Boolean).map(id => ({ id: id!, type: 'venue' })),
-        ];
-        const existingGraphicIds = new Set<string>();
-        if (allEntityIds.length > 0) {
-            const existing = await db.select({ entityId: schema.graphics.entityId })
-                .from(schema.graphics)
-                .where(inArray(schema.graphics.entityId, allEntityIds.map(e => e.id)));
-            for (const g of existing) existingGraphicIds.add(g.entityId);
-        }
-
-        for (const t of teams) {
-            if (t.logo) {
-                const teamId = teamMap.get(t.sourceId);
-                if (teamId && !existingGraphicIds.has(teamId)) {
-                    graphicsService.registerFromUrl(teamId, 'team', t.logo).catch((e: Error) =>
-                        logger.warn({ error: e.message }, `Soft-fail on sideload for team ${teamId}`)
-                    );
-                }
-            }
-        }
-
-        for (const v of venues) {
-            if (v.image) {
-                const venueId = venueMap.get(v.sourceId);
-                if (venueId && !existingGraphicIds.has(venueId)) {
-                    graphicsService.registerFromUrl(venueId, 'venue', v.image).catch((e: Error) =>
-                        logger.warn({ error: e.message }, `Soft-fail on sideload for venue ${venueId}`)
-                    );
-                }
-            }
-        }
+        // 3.1 Sideload Graphics (sideloadMissing dedups against the graphics table internally)
+        await graphicsService.sideloadMissing([
+            ...teams.flatMap(t => {
+                const id = teamMap.get(t.sourceId);
+                return id ? [{ entityId: id, entityType: 'team', url: t.logo }] : [];
+            }),
+            ...venues.flatMap(v => {
+                const id = venueMap.get(v.sourceId);
+                return id ? [{ entityId: id, entityType: 'venue', url: v.image }] : [];
+            }),
+        ]);
 
         const linkages = teams.map((item) => {
             const teamId = teamMap.get(item.sourceId);
@@ -1115,9 +1092,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // 3. Sideload Logo (CAS)
         if (managed.logo) {
-            graphicsService.registerFromUrl(managed.id, 'league', managed.logo).catch(e =>
-                logger.warn({ error: e.message }, `Soft-fail on sideload for league ${managed.id}`)
-            );
+            graphicsService.sideload(managed.id, 'league', managed.logo);
         }
 
         return managed;
@@ -1327,9 +1302,7 @@ export class SupabaseFootballRepository implements FootballRepository {
                     Object.assign(p, { id: internalId });
                     // Only sideload for newly created players
                     if (p.photo && newPlayers.some(np => np.sourceId === p.sourceId)) {
-                        graphicsService.registerFromUrl(internalId, 'player', p.photo).catch((e: Error) =>
-                            logger.warn({ error: e.message }, `Soft-fail on sideload for player ${internalId}`)
-                        );
+                        graphicsService.sideload(internalId, 'player', p.photo);
                     }
                 }
             }
@@ -1378,9 +1351,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
         // Sideload player photo into graphics registry
         if (data.photo && upserted) {
-            graphicsService.registerFromUrl(upserted.id, 'player', data.photo).catch((e: Error) =>
-                logger.warn({ error: e.message }, `Soft-fail on sideload for player ${upserted.id}`)
-            );
+            graphicsService.sideload(upserted.id, 'player', data.photo);
         }
 
         const result: PlayerResult = {
@@ -1470,9 +1441,7 @@ export class SupabaseFootballRepository implements FootballRepository {
 
             // Sideload player photo
             if (member.photo && player.id) {
-                graphicsService.registerFromUrl(player.id, 'player', member.photo).catch((e: Error) =>
-                    logger.warn({ error: e.message }, `Soft-fail on squad photo sideload for player ${player.id}`)
-                );
+                graphicsService.sideload(player.id, 'player', member.photo);
             }
         }
 
