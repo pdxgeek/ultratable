@@ -1,12 +1,18 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import axios from 'axios';
 import { storageProvider } from '../providers/supabase-storage.provider';
 import crypto from 'node:crypto';
 import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'GraphicsService' });
+
+export interface SideloadCandidate {
+    entityId: string;
+    entityType: string;
+    url: string | null | undefined;
+}
 
 const NOW_MS = sql`date_trunc('milliseconds', now())`;
 
@@ -85,6 +91,39 @@ export class GraphicsService {
         } catch (error: unknown) {
             logger.error({ entityType, entityId, url, error: (error as Error).message }, `Failed to register graphic for ${entityType} ${entityId}`);
             return null;
+        }
+    }
+
+    /**
+     * Fire-and-forget graphic registration with uniform soft-fail logging.
+     * Use this from import paths where a graphic failure must never block the
+     * surrounding sync. For the rare caller that needs the awaited URL, call
+     * registerFromUrl directly.
+     */
+    sideload(entityId: string, entityType: string, url: string): void {
+        this.registerFromUrl(entityId, entityType, url).catch((e: Error) =>
+            logger.warn({ error: e.message, entityType, entityId }, `Soft-fail on sideload for ${entityType} ${entityId}`)
+        );
+    }
+
+    /**
+     * Batch variant of sideload: filters out candidates with no URL or that
+     * already have a graphic row, then fires sideload for the rest. Keeps the
+     * dedup logic in one place so callers don't have to roll their own.
+     */
+    async sideloadMissing(candidates: SideloadCandidate[]): Promise<void> {
+        const usable = candidates.filter((c): c is SideloadCandidate & { url: string } => Boolean(c.url));
+        if (usable.length === 0) return;
+
+        const existing = await db
+            .select({ entityId: schema.graphics.entityId, entityType: schema.graphics.entityType })
+            .from(schema.graphics)
+            .where(inArray(schema.graphics.entityId, usable.map(c => c.entityId)));
+        const existingKey = new Set(existing.map(g => `${g.entityType}:${g.entityId}`));
+
+        for (const c of usable) {
+            if (existingKey.has(`${c.entityType}:${c.entityId}`)) continue;
+            this.sideload(c.entityId, c.entityType, c.url);
         }
     }
 
