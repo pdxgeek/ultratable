@@ -17,7 +17,8 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "private": true,
+  "license": "UNLICENSED",
   "type": "commonjs",
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
