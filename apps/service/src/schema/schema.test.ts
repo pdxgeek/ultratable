@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
 import { repository } from '../repositories/supabase.repository';
-import { db } from '../db';
 import * as schema from '../db/schema';
 
 import './football'; // Ensure football schema is registered
@@ -27,12 +26,17 @@ vi.mock('../repositories/supabase.repository', () => ({
     repository: {
         football: {
             getLeagues: vi.fn(),
+            getLeagueById: vi.fn(),
             getFixtures: vi.fn(),
             getFixturesBySeasonId: vi.fn(),
             getTeamsBySeasonId: vi.fn(),
+            getVenuesByIds: vi.fn(),
+            getVenuesBySeasonId: vi.fn(),
             syncFixtures: vi.fn(),
             getInternalSeasons: vi.fn(),
             getAllInternalSeasons: vi.fn(),
+            countTeamsInSeason: vi.fn(),
+            countFixturesInSeason: vi.fn(),
         }
     }
 }));
@@ -143,27 +147,15 @@ describe('GraphQL Schema', () => {
             { id: 'season-1', year: 2024, leagueId: 'league-1', updatedAt: new Date().toISOString() }
         ];
 
-
-        // Refined mock to handle sequential calls
-        const m = vi.fn();
-        m.mockReturnValue({
-            from: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }]),
-                innerJoin: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ team: { id: 'team-1', name: 'Arsenal', venueId: 'venue-1' } }])
-                })
-            })
-        });
-
-        // Also need to handle the count(*) call for teamCount
-        m.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'league-1', sourceId: 39 }]) }) }); // league lookup
-        m.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ val: 20 }]) }) }); // teamCount
-        m.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: { id: 'team-1', name: 'Arsenal', venueId: 'venue-1' } }]) }) }) }); // teams field
-        m.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'venue-1', name: 'Emirates Stadium' }]) }) }); // venue field (nested)
-
-        vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
-
+        vi.mocked(repository.football.getLeagueById).mockResolvedValue({ id: 'league-1', sourceId: 39 } as unknown as typeof schema.leagues.$inferSelect);
         vi.mocked(repository.football.getInternalSeasons).mockResolvedValue(mockSeasons as unknown as typeof schema.seasons.$inferSelect[]);
+        vi.mocked(repository.football.countTeamsInSeason).mockResolvedValue(20);
+        vi.mocked(repository.football.getTeamsBySeasonId).mockResolvedValue(
+            [{ id: 'team-1', name: 'Arsenal', venueId: 'venue-1' }] as unknown as typeof schema.teams.$inferSelect[]
+        );
+        vi.mocked(repository.football.getVenuesByIds).mockResolvedValue(
+            [{ id: 'venue-1', name: 'Emirates Stadium' }] as unknown as typeof schema.venues.$inferSelect[]
+        );
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -254,19 +246,13 @@ describe('GraphQL Schema', () => {
 
     describe('venues query', () => {
         const setupVenueMocks = () => {
-            // selectDistinct for venues — no league/season lookup needed,
-            // the resolver now queries directly by seasonId
             const mockVenues = [
-                { venue: { id: 'v1', name: 'Emirates', city: 'London', updatedAt: '2026-03-01T00:00:00Z' } },
-                { venue: { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' } },
+                { id: 'v1', name: 'Emirates', city: 'London', updatedAt: '2026-03-01T00:00:00Z' },
+                { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' },
             ];
-            (db as unknown as Record<string, unknown>).selectDistinct = vi.fn().mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue(mockVenues)
-                    })
-                })
-            });
+            vi.mocked(repository.football.getVenuesBySeasonId).mockResolvedValue(
+                mockVenues as unknown as typeof schema.venues.$inferSelect[]
+            );
             return mockVenues;
         };
 

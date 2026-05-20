@@ -1,7 +1,7 @@
-import { ConfigRepository, FootballRepository, IRepository, SyncResult } from './interfaces';
+import { ConfigRepository, FootballRepository, IRepository, SyncResult, WorkersRepository } from './interfaces';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql, and, gt, inArray, notInArray, lte } from 'drizzle-orm';
+import { count, desc, eq, sql, and, gt, inArray, notInArray, lte } from 'drizzle-orm';
 import { IFootballProvider, IngestedFixture } from '../integrations/types';
 import { JobReporter } from '../workers/runner';
 import { ApiFootballProvider } from '../integrations/api-football';
@@ -1161,11 +1161,114 @@ export class SupabaseFootballRepository implements FootballRepository {
         return upserted;
     }
 
-    // Graphics
-    async getGraphics(entityType: string, entityId: string): Promise<Array<typeof schema.graphics.$inferSelect>> {
+    // Read-only by-ID lookups (used by resolvers and DataLoaders)
+
+    async getLeagueById(leagueId: string): Promise<typeof schema.leagues.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
+        return row ?? null;
+    }
+
+    async getLeaguesByIds(leagueIds: readonly string[]): Promise<Array<typeof schema.leagues.$inferSelect>> {
+        if (!db || leagueIds.length === 0) return [];
+        return db.select().from(schema.leagues).where(inArray(schema.leagues.id, [...leagueIds]));
+    }
+
+    async getSeasonsByIds(seasonIds: readonly string[]): Promise<Array<typeof schema.seasons.$inferSelect>> {
+        if (!db || seasonIds.length === 0) return [];
+        return db.select().from(schema.seasons).where(inArray(schema.seasons.id, [...seasonIds]));
+    }
+
+    async getSeasonIdsWithTeamLinks(seasonIds: readonly string[]): Promise<string[]> {
+        if (!db || seasonIds.length === 0) return [];
+        const rows = await db.select({ seasonId: schema.seasonsToTeams.seasonId })
+            .from(schema.seasonsToTeams)
+            .where(inArray(schema.seasonsToTeams.seasonId, [...seasonIds]));
+        return Array.from(new Set(rows.map((r) => r.seasonId)));
+    }
+
+    async getAllTeams(): Promise<Array<typeof schema.teams.$inferSelect>> {
         if (!db) return [];
-        return db.select().from(schema.graphics)
-            .where(sql`${schema.graphics.entityType} = ${entityType} AND ${schema.graphics.entityId} = ${entityId}`);
+        return db.select().from(schema.teams);
+    }
+
+    async getTeamById(teamId: string): Promise<typeof schema.teams.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId));
+        return row ?? null;
+    }
+
+    async getTeamsByIds(teamIds: readonly string[]): Promise<Array<typeof schema.teams.$inferSelect>> {
+        if (!db || teamIds.length === 0) return [];
+        return db.select().from(schema.teams).where(inArray(schema.teams.id, [...teamIds]));
+    }
+
+    async countTeamsInSeason(seasonId: string): Promise<number> {
+        if (!db) return 0;
+        const [res] = await db.select({ val: count() })
+            .from(schema.seasonsToTeams)
+            .where(eq(schema.seasonsToTeams.seasonId, seasonId));
+        return Number(res?.val ?? 0);
+    }
+
+    async getVenueById(venueId: string): Promise<typeof schema.venues.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.venues).where(eq(schema.venues.id, venueId));
+        return row ?? null;
+    }
+
+    async getVenuesByIds(venueIds: readonly string[]): Promise<Array<typeof schema.venues.$inferSelect>> {
+        if (!db || venueIds.length === 0) return [];
+        return db.select().from(schema.venues).where(inArray(schema.venues.id, [...venueIds]));
+    }
+
+    async getVenuesBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.venues.$inferSelect>> {
+        if (!db) return [];
+        const conditions = [eq(schema.fixtures.seasonId, seasonId)];
+        if (since) conditions.push(gt(schema.venues.updatedAt, since));
+
+        const res = await db.selectDistinct({ venue: schema.venues })
+            .from(schema.venues)
+            .innerJoin(schema.fixtures, eq(schema.fixtures.venueId, schema.venues.id))
+            .where(and(...conditions));
+        return res.map((r) => r.venue);
+    }
+
+    async getFixtureById(fixtureId: string): Promise<typeof schema.fixtures.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.id, fixtureId));
+        return row ?? null;
+    }
+
+    async countFixturesInSeason(seasonId: string): Promise<number> {
+        if (!db) return 0;
+        const [res] = await db.select({ val: count() })
+            .from(schema.fixtures)
+            .where(eq(schema.fixtures.seasonId, seasonId));
+        return Number(res?.val ?? 0);
+    }
+
+    async updateLeagueConfig(leagueId: string, metadata: Record<string, unknown>): Promise<typeof schema.leagues.$inferSelect> {
+        if (!db) return null as unknown as typeof schema.leagues.$inferSelect;
+        const [updated] = await db.update(schema.leagues)
+            .set({ metadata, updatedAt: new Date() })
+            .where(eq(schema.leagues.id, leagueId))
+            .returning();
+        return updated;
+    }
+
+    async getPlayerById(playerId: string): Promise<typeof schema.players.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.players).where(eq(schema.players.id, playerId));
+        return row ?? null;
+    }
+
+    // Graphics
+    async getGraphics(entityType: string, entityId?: string): Promise<Array<typeof schema.graphics.$inferSelect>> {
+        if (!db) return [];
+        const conditions = [eq(schema.graphics.entityType, entityType)];
+        if (entityId) conditions.push(eq(schema.graphics.entityId, entityId));
+        return db.select().from(schema.graphics).where(and(...conditions));
     }
 
     async saveGraphic(graphic: Record<string, unknown>): Promise<typeof schema.graphics.$inferSelect> {
@@ -1492,7 +1595,49 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 }
 
+export class SupabaseWorkersRepository implements WorkersRepository {
+    async listJobs(): Promise<Array<typeof schema.jobs.$inferSelect>> {
+        if (!db) return [];
+        return db.select().from(schema.jobs).orderBy(schema.jobs.name);
+    }
+
+    async getJobByName(name: string): Promise<typeof schema.jobs.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.jobs).where(eq(schema.jobs.name, name));
+        return row ?? null;
+    }
+
+    async listJobExecutions(jobId: string | null, limit: number): Promise<Array<typeof schema.jobExecutions.$inferSelect>> {
+        if (!db) return [];
+        const base = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
+        if (jobId) {
+            return db.select().from(schema.jobExecutions)
+                .where(eq(schema.jobExecutions.jobId, jobId))
+                .orderBy(desc(schema.jobExecutions.startedAt))
+                .limit(limit);
+        }
+        return base.limit(limit);
+    }
+
+    async getLatestJobExecution(jobId: string): Promise<typeof schema.jobExecutions.$inferSelect | null> {
+        if (!db) return null;
+        const [row] = await db.select().from(schema.jobExecutions)
+            .where(eq(schema.jobExecutions.jobId, jobId))
+            .orderBy(desc(schema.jobExecutions.startedAt))
+            .limit(1);
+        return row ?? null;
+    }
+
+    async listSystemLogs(limit: number): Promise<Array<typeof schema.systemLogs.$inferSelect>> {
+        if (!db) return [];
+        return db.select().from(schema.systemLogs)
+            .orderBy(desc(schema.systemLogs.createdAt))
+            .limit(limit);
+    }
+}
+
 export const repository: IRepository = {
     config: new SupabaseConfigRepository(),
     football: new SupabaseFootballRepository(),
+    workers: new SupabaseWorkersRepository(),
 };

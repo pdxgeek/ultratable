@@ -1,7 +1,5 @@
 import { builder, requireAdmin } from './builder';
-import { db } from '../db';
 import * as schema from '../db/schema';
-import { desc, eq } from 'drizzle-orm';
 import { JobRunner } from '../workers/runner';
 import { repository } from '../repositories/supabase.repository';
 import { GraphQLError } from 'graphql';
@@ -57,7 +55,7 @@ builder.queryField('jobs', (t) =>
         type: [JobRef],
         resolve: async (_root, _args, ctx) => {
             requireAdmin(ctx);
-            return db.select().from(schema.jobs).orderBy(schema.jobs.name);
+            return repository.workers.listJobs();
         },
     })
 );
@@ -72,16 +70,7 @@ builder.queryField('jobExecutions', (t) =>
         },
         resolve: async (_, { jobId, limit }, ctx) => {
             requireAdmin(ctx);
-            const cappedLimit = clampLimit(limit, 50);
-            const query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
-            if (jobId) {
-                const res = await db.select().from(schema.jobExecutions)
-                    .where(eq(schema.jobExecutions.jobId, jobId))
-                    .orderBy(desc(schema.jobExecutions.startedAt))
-                    .limit(cappedLimit);
-                return res;
-            }
-            return query.limit(cappedLimit);
+            return repository.workers.listJobExecutions(jobId ?? null, clampLimit(limit, 50));
         },
     })
 );
@@ -95,7 +84,7 @@ builder.queryField('systemLogs', (t) =>
         },
         resolve: async (_, { limit }, ctx) => {
             requireAdmin(ctx);
-            return db.select().from(schema.systemLogs).orderBy(desc(schema.systemLogs.createdAt)).limit(clampLimit(limit, 100));
+            return repository.workers.listSystemLogs(clampLimit(limit, 100));
         },
     })
 );
@@ -129,14 +118,14 @@ builder.mutationField('runJob', (t) =>
             });
 
             // Return the latest execution for THIS job specifically
-            const [job] = await db.select().from(schema.jobs).where(eq(schema.jobs.name, name));
+            const job = await repository.workers.getJobByName(name);
             if (!job) {
                 throw new GraphQLError(`Job "${name}" not found after execution`);
             }
-            const [execution] = await db.select().from(schema.jobExecutions)
-                .where(eq(schema.jobExecutions.jobId, job.id))
-                .orderBy(desc(schema.jobExecutions.startedAt))
-                .limit(1);
+            const execution = await repository.workers.getLatestJobExecution(job.id);
+            if (!execution) {
+                throw new GraphQLError(`Job "${name}" produced no execution record`);
+            }
             return execution;
         },
     })
