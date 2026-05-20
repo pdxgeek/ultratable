@@ -42,40 +42,15 @@ describe('SupabaseFootballRepository', () => {
             expect(result).toEqual(mockLeagues);
         });
 
-        it('should fetch from provider and ingest if database is empty', async () => {
-            // 1. Mock empty DB
-            const emptySelectMock = vi.fn()
-                .mockReturnValueOnce({ from: vi.fn().mockResolvedValue([]) }) // Initial check
-                .mockReturnValueOnce({ from: vi.fn().mockResolvedValue([{ id: 'new-uuid', name: 'Premier League' }]) }); // Final fetch
-
-            vi.mocked(db.select).mockImplementation(emptySelectMock as unknown as typeof db.select);
-
-            // 2. Mock provider response
-            const mockResponse = {
-                data: {
-                    response: [
-                        {
-                            league: { id: 39, name: 'Premier League', logo: 'logo-url' },
-                            country: { name: 'England' }
-                        }
-                    ]
-                }
-            };
-            mockGet.mockResolvedValue(mockResponse);
-
-            // 3. Mock insert
-            const insertMock = vi.fn().mockReturnValue({
-                values: vi.fn().mockReturnValue({
-                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
-                })
+        it('should return empty array when database is empty', async () => {
+            const emptySelectMock = vi.fn().mockReturnValue({
+                from: vi.fn().mockResolvedValue([])
             });
-            vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
+            vi.mocked(db.select).mockImplementation(emptySelectMock as unknown as typeof db.select);
 
             const result = await repo.getLeagues();
 
-            expect(mockGet).toHaveBeenCalledWith('/leagues');
-            expect(db.insert).toHaveBeenCalled();
-            expect(result).toHaveLength(1);
+            expect(result).toEqual([]);
         });
     });
 

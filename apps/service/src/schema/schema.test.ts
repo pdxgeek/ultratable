@@ -101,7 +101,7 @@ describe('GraphQL Schema', () => {
 
         const result = await response.json();
         expect(result.data.fixtures).toHaveLength(1);
-        expect(repository.football.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date));
+        expect(repository.football.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date), undefined);
     });
 
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
