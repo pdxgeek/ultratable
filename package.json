@@ -7,6 +7,7 @@
     "apps/*"
   ],
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "dev": "npm run start:all",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -26,5 +27,9 @@
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
     "typescript": "~5.9.3"
+  },
+  "volta": {
+    "node": "24.15.0",
+    "npm": "11.14.1"
   }
 }

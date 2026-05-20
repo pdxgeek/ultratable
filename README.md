@@ -10,47 +10,71 @@ UltraTable is a real-time fantasy sports platform. It consists of multiple appli
 
 ## Local Development
 
-We use Docker Compose to provide a seamless local development environment that closely mirrors our production Kubernetes deployment.
-
 ### Prerequisites
-- [Docker & Docker Compose](https://docs.docker.com/get-docker/)
-- Node.js (for local CLI tooling, though the service runs in Docker)
 
-### Starting the Service
+- **[Volta](https://volta.sh/)** — `curl https://get.volta.sh | bash`. The root `package.json`'s `volta` field pins Node + npm; Volta auto-installs the right versions the moment you `cd` into the repo. No manual `nvm`/`fnm`/`brew install node` needed.
+- **Docker** — only if you want the setup script to provision a local Postgres for you. Skip if you're using Supabase or a system Postgres.
 
-The Fastify GraphQL service relies on external integrations like Supabase and API-Football. Ensure your `.env` file is populated at `apps/service/.env` before starting.
+> Without Volta you can still install Node manually, but the pinned versions in `package.json` (`volta.node`, `volta.npm`) are the source of truth — match them or you may hit lockfile / engine drift.
+
+### One-command setup
+
+From a fresh clone:
 
 ```bash
-# Start the service in the background
-docker compose up -d
+npm run setup
 ```
 
-This will:
-1. Build the `service` Docker image.
-2. Inject your `apps/service/.env` secrets.
-3. Start the service, binding it to `localhost:8080`.
+This interactive script:
 
-### Accessing the API
+1. Checks that Node, npm, and (optionally) Docker are installed.
+2. Asks how you want to run Postgres:
+   - **`docker`** — spins up `postgres:16-alpine` via `docker compose up -d postgres`.
+   - **`supabase`** — collects your Supabase project URL, anon key, service role key, and connection string.
+   - **`system`** — you bring your own `DATABASE_URL`.
+3. Asks for your API-Football key (optional — the service starts without it, but sport-data endpoints will 401 until you add one).
+4. Generates a `BETTER_AUTH_SECRET` automatically.
+5. Writes [`apps/service/.env`](apps/service/.env.example) and the root [`.env`](.env.example).
+6. Offers to run `npm install` and `npm run db:push --prefix apps/service` (Drizzle migrations).
 
-Once the container is running, you can access the GraphQL Yoga playground to test queries and mutations:
+Re-run it any time to change credentials — existing values become the prompt defaults, so press Enter to keep them. Each run timestamps the prior `apps/service/.env` to `apps/service/.env.backup.<ISO timestamp>` so nothing is lost.
 
-- **GraphQL Endpoint:** `http://localhost:8080/graphql`
-- **Health Check (Kubernetes Probes):** `http://localhost:8080/health`
+> **Supabase = Postgres.** The Supabase URL/keys aren't an add-on — they're how you connect to a Supabase-hosted Postgres + storage. Pick `supabase` *or* `docker`/`system`, not both.
 
-### Viewing Logs
-
-To view the stdout logs (powered by Fastify Pino):
+### Starting all services
 
 ```bash
+npm run dev
+```
+
+Wraps `concurrently` to start all three dev servers, killing any stale processes on the relevant ports first. **Never** start them individually with `pkill`/`kill -9` — use `Ctrl+C` on the `dev` process so child processes shut down cleanly.
+
+| Service | URL |
+|---------|-----|
+| GraphQL / Yoga playground | http://localhost:8080/graphql |
+| Health check | http://localhost:8080/healthz |
+| Admin UI | http://localhost:5174 |
+| Web UI | http://localhost:5175 |
+
+### Useful commands
+
+```bash
+npm run health:check                  # ping all three ports
+npm run db:push --prefix apps/service # apply migrations
+npm run db:reset --prefix apps/service # wipe + reseed
+npm run lint --workspaces             # lint all packages
+npm run test                          # vitest across all workspaces
+docker compose up -d postgres         # bring just Postgres up
+docker compose down                   # stop everything
+```
+
+### Production-like local run via Docker
+
+The `docker-compose.yml` also builds the service image so you can run it the way Fly.io does:
+
+```bash
+docker compose up --build -d service  # uses apps/service/.env
 docker compose logs -f service
-```
-
-### Stopping the Applications
-
-To tear down the environment:
-
-```bash
-docker compose down
 ```
 
 ## Deployment
@@ -91,23 +115,6 @@ Set in each Vercel project's settings.
 | Variable | Project | Description |
 |----------|---------|-------------|
 | `VITE_API_URL` | web, admin | `https://api.ultratable.io` (absolute URL for production builds) |
-
-### Docker Compose (Local)
-
-The service runs via Docker Compose locally. Config is in [`docker-compose.yml`](docker-compose.yml):
-
-```bash
-# Build and start
-docker compose up --build -d service
-
-# View logs
-docker compose logs -f service
-
-# Check health
-docker inspect --format='{{.State.Health.Status}}' ultratable-service-1
-```
-
-The healthcheck hits `GET /healthz` every 30 seconds.
 
 ### Google OAuth Setup
 
