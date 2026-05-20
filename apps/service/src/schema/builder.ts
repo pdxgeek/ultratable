@@ -4,6 +4,7 @@ import { DateTimeResolver, JSONResolver } from 'graphql-scalars';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
 import { GraphQLError } from 'graphql';
+import type { Loaders } from '../loaders';
 
 export interface Context {
     req: FastifyRequest;
@@ -12,6 +13,7 @@ export interface Context {
         id: string;
         roles: string[];
     };
+    loaders: Loaders;
 }
 
 export const builder = new SchemaBuilder<{

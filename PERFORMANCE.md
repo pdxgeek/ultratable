@@ -6,9 +6,10 @@ Known performance issues, mitigations, and future optimization opportunities.
 
 ## 1. GraphQL N+1 Queries in Fixture & Team Resolvers
 
-**Status:** ⚠️ Documented — mitigated on hot path, not yet structurally fixed  
-**Severity:** Medium (latent — only triggers on custom/admin queries)  
-**Filed:** 2026-03-03
+**Status:** ✅ Resolved — DataLoader batching landed 2026-05-20  
+**Severity:** Medium (latent — only triggered on custom/admin queries)  
+**Filed:** 2026-03-03  
+**Implementation:** `apps/service/src/loaders/index.ts`; resolvers in `apps/service/src/schema/football.ts` (`Team.venue`, `Fixture.{homeTeam,awayTeam,venue,season,leagueSourceId}`) now call `ctx.loaders.*.load(id)`.
 
 ### Problem
 

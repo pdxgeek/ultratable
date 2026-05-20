@@ -2,6 +2,7 @@
 import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './schema/builder';
+import { createLoaders } from './loaders';
 import { globalLogger } from './services/log.service';
 import { resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { eq } from 'drizzle-orm';
@@ -140,7 +141,7 @@ const yoga = createYoga<{
 
         if (!session?.user?.id) {
             globalLogger.debug({ path: req.url }, 'Auth: no session — guest context');
-            return { req, user: undefined };
+            return { req, user: undefined, loaders: createLoaders() };
         }
 
         // Resolve domain user via cached authLinks bridge lookup
@@ -152,7 +153,7 @@ const yoga = createYoga<{
 
         globalLogger.debug({ userId: user.id, roles: user.roles, path: req.url }, 'Auth: context resolved');
 
-        return { req, user };
+        return { req, user, loaders: createLoaders() };
     },
     // We use fastify's built-in error handling
     logging: globalLogger
