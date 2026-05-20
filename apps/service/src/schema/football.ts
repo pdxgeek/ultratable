@@ -1,10 +1,8 @@
 import { builder, requireAdmin } from './builder';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { JobRunner } from '../workers/runner';
 import { cacheService } from '../services/cache.service';
-import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, gt, count, sql } from 'drizzle-orm';
 import { graphicsService } from '../services/graphics.service';
 
 // Define object refs first
@@ -27,7 +25,7 @@ const RosterEntryRef = builder.objectRef<RosterEntryShape>('RosterEntry');
 /**
  * Fallback ranking-criteria order used when a season has no `metadata.rankingCriteria`
  * (e.g. seasons imported before importSeason started persisting it).
- * Mirrors the EFL hierarchy and must stay in sync with DEFAULT_RANKING_CRITERIA in supabase.repository.ts.
+ * Mirrors the EFL hierarchy and must stay in sync with DEFAULT_RANKING_CRITERIA in postgres.repository.ts.
  */
 const FALLBACK_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
 
@@ -87,12 +85,7 @@ builder.objectType(LeagueRef, {
                 const seasonIds = allSeasons.map((s) => s.id);
                 if (seasonIds.length === 0) return [];
 
-                // Check which seasons have teams linked
-                const linked = await db.select({ seasonId: schema.seasonsToTeams.seasonId })
-                    .from(schema.seasonsToTeams)
-                    .where(sql`${schema.seasonsToTeams.seasonId} IN (${sql.join(seasonIds.map((id: string) => sql`${id}`), sql`, `)})`);
-
-                const linkedIds = new Set(linked.map((r) => r.seasonId));
+                const linkedIds = new Set(await repository.football.getSeasonIdsWithTeamLinks(seasonIds));
                 return allSeasons.filter((s) => linkedIds.has(s.id));
             },
         }),
@@ -174,28 +167,16 @@ builder.objectType(SeasonRef, {
         }),
         fixtureCount: t.int({
             description: 'Live count of fixtures in this season (computed from the database).',
-            resolve: async (parent) => {
-                const [res] = await db.select({ val: count() }).from(schema.fixtures).where(eq(schema.fixtures.seasonId, parent.id));
-                return Number(res?.val || 0);
-            }
+            resolve: (parent) => repository.football.countFixturesInSeason(parent.id),
         }),
         teamCount: t.int({
             description: 'Live count of teams participating in this season (from seasons_to_teams junction).',
-            resolve: async (parent) => {
-                const [res] = await db.select({ val: count() }).from(schema.seasonsToTeams).where(eq(schema.seasonsToTeams.seasonId, parent.id));
-                return Number(res?.val || 0);
-            }
+            resolve: (parent) => repository.football.countTeamsInSeason(parent.id),
         }),
         teams: t.field({
             description: 'All teams linked to this season via the seasons-to-teams junction table.',
             type: [TeamRef],
-            resolve: async (parent) => {
-                const res = await db.select({ team: schema.teams })
-                    .from(schema.teams)
-                    .innerJoin(schema.seasonsToTeams, eq(schema.teams.id, schema.seasonsToTeams.teamId))
-                    .where(eq(schema.seasonsToTeams.seasonId, parent.id));
-                return res.map((r) => r.team);
-            }
+            resolve: (parent) => repository.football.getTeamsBySeasonId(parent.id),
         }),
         rankingCriteria: t.field({
             description: 'Ordered list of RankingFormula objects defining how the standings table is sorted for this season.',
@@ -418,7 +399,7 @@ builder.queryField('seasons', (t) =>
             if (!leagueId) {
                 return repository.football.getAllInternalSeasons();
             }
-            const [league] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
+            const league = await repository.football.getLeagueById(leagueId);
             if (!league) return [];
             return repository.football.getInternalSeasons(league.sourceId);
         },
@@ -478,8 +459,7 @@ builder.queryField('fixture', (t) =>
             id: t.arg.string({ required: true, description: 'UUID of the fixture to retrieve. Returns the full fixture record including nested match events and lineups when requested.' }),
         },
         resolve: async (_, { id }) => {
-            const [fixture] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.id, id));
-            return fixture;
+            return repository.football.getFixtureById(id);
         },
     })
 );
@@ -492,19 +472,8 @@ builder.queryField('venues', (t) =>
             seasonId: t.arg.string({ required: true, description: 'UUID of the season. Only venues linked to fixtures within this season are returned.' }),
             since: t.arg({ type: 'DateTime', required: false, description: 'ISO-8601 timestamp for delta sync. When provided, only venues updated after this timestamp are returned.' }),
         },
-        resolve: async (_, { seasonId, since }) => {
-            const conditions = [eq(schema.fixtures.seasonId, seasonId)];
-            if (since) {
-                conditions.push(gt(schema.venues.updatedAt, since));
-            }
-
-            const result = await db.selectDistinct({ venue: schema.venues })
-                .from(schema.venues)
-                .innerJoin(schema.fixtures, eq(schema.fixtures.venueId, schema.venues.id))
-                .where(and(...conditions));
-
-            return result.map((r) => r.venue);
-        },
+        resolve: (_, { seasonId, since }) =>
+            repository.football.getVenuesBySeasonId(seasonId, since || undefined),
     })
 );
 
@@ -520,7 +489,7 @@ builder.queryField('teams', (t) =>
             if (seasonId) {
                 return repository.football.getTeamsBySeasonId(seasonId, since || undefined);
             }
-            return db.select().from(schema.teams);
+            return repository.football.getAllTeams();
         },
     })
 );
@@ -578,7 +547,7 @@ builder.queryField('player', (t) =>
         resolve: async (_, { id, sourceId, season }) => {
             let resolvedSourceId = sourceId;
             if (id && !resolvedSourceId) {
-                const [player] = await db.select().from(schema.players).where(eq(schema.players.id, id));
+                const player = await repository.football.getPlayerById(id);
                 if (!player) return null;
                 resolvedSourceId = player.sourceId;
             }
@@ -606,10 +575,7 @@ builder.mutationField('saveLeagueConfig', (t) =>
             } catch {
                 throw new Error("Invalid JSON configuration");
             }
-            const [updated] = await db.update(schema.leagues)
-                .set({ metadata, updatedAt: new Date() })
-                .where(eq(schema.leagues.id, id))
-                .returning();
+            const updated = await repository.football.updateLeagueConfig(id, metadata);
             cacheService.invalidate('leagues');
             return updated;
         }
@@ -638,10 +604,7 @@ builder.mutationField('saveSeasonConfig', (t) =>
                 metadata.rankingCriteria = rankingCriteria;
             }
 
-            const [updated] = await db.update(schema.seasons)
-                .set({ metadata, updatedAt: new Date() })
-                .where(eq(schema.seasons.id, id))
-                .returning();
+            const updated = await repository.football.updateSeasonConfig(id, metadata);
             cacheService.invalidate('seasons');
             return updated;
         }
@@ -673,7 +636,7 @@ builder.mutationField('importSquad', (t) =>
         resolve: async (_, { teamId, seasonId }, ctx) => {
             requireAdmin(ctx);
             // Look up the team's sourceId for the provider call
-            const [team] = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId));
+            const team = await repository.football.getTeamById(teamId);
             if (!team) throw new Error(`Team not found: ${teamId}`);
             await repository.football.importSquad(teamId, team.sourceId, seasonId);
             // Return the full roster with player joins

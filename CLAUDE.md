@@ -68,7 +68,7 @@ UltraTable is a real-time fantasy sports platform structured as a monorepo with 
 
 - **Entry**: `apps/service/src/index.ts` — registers Fastify plugins, mounts Yoga at `/graphql`, auth at `/api/auth/*`, health at `/healthz`
 - **Schema**: `apps/service/src/schema/` — Pothos builder splits schema into modules (`football.ts`, `catalog.ts`, `graphics.ts`, `config.ts`, `workers.ts`)
-- **Repository**: `apps/service/src/repositories/supabase.repository.ts` — single data access point for all Postgres queries via Drizzle
+- **Repository**: `apps/service/src/repositories/postgres.repository.ts` — single data access point for all Postgres queries via Drizzle
 - **Services**: `apps/service/src/services/` — auth, LRU cache, Pino logging, graphics
 - **Integrations**: `apps/service/src/integrations/api-football/` (live) and `mock/` (testing)
 - **DB Schema**: `apps/service/src/db/schema.ts` — all Drizzle table definitions; migrations in `apps/service/drizzle/`

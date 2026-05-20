@@ -65,7 +65,7 @@ UltraTable uses a **Dual-ID System**. Never assume an ID from an API is our prim
 
 **Rules:**
 1. **ALWAYS use the `utcTimestamp()` helper** in `schema.ts` for every timestamp column. NEVER use bare `timestamp()`. The helper enforces `withTimezone: true, mode: 'date', precision: 3`.
-2. **ALWAYS use `NOW_MS`** (defined in `supabase.repository.ts`) instead of `sql\`now()\`` for server-side timestamps. It wraps `date_trunc('milliseconds', now())` to match column precision.
+2. **ALWAYS use `NOW_MS`** (defined in `postgres.repository.ts`) instead of `sql\`now()\`` for server-side timestamps. It wraps `date_trunc('milliseconds', now())` to match column precision.
 3. **NEVER mix precisions.** Postgres `now()` returns microseconds (6 digits). JavaScript `Date` and the GraphQL `DateTime` scalar both use milliseconds (3 digits). If you store microseconds but compare with milliseconds, you get phantom results on every delta query.
 4. **Supabase runs in UTC.** All timestamps are stored and compared in UTC. No timezone conversion is needed in application code.
 

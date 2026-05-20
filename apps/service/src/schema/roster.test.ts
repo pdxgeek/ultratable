@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
-import { repository } from '../repositories/supabase.repository';
-import { db } from '../db';
-import * as schema from '../db/schema';
+import { repository } from '../repositories/postgres.repository';
 
 import './football'; // Ensure football schema is registered
 
@@ -23,7 +21,7 @@ vi.mock('../workers/runner', () => ({
 }));
 
 // Mock the repository
-vi.mock('../repositories/supabase.repository', () => ({
+vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
             getTeamRoster: vi.fn(),
@@ -36,6 +34,7 @@ vi.mock('../repositories/supabase.repository', () => ({
             syncFixtures: vi.fn(),
             getInternalSeasons: vi.fn(),
             getAllInternalSeasons: vi.fn(),
+            getTeamById: vi.fn(),
         }
     }
 }));
@@ -216,14 +215,7 @@ describe('Team Roster', () => {
             context: () => ({ user: { id: 'admin-1', roles: ['admin'] } }),
         });
 
-        // Mock the db.select for the team lookup
-        const mockSelect = vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([mockTeam])
-            })
-        });
-        vi.mocked(db.select).mockImplementation(mockSelect);
-
+        vi.mocked(repository.football.getTeamById).mockResolvedValue(mockTeam);
         vi.mocked(repository.football.importSquad).mockResolvedValue([]);
         vi.mocked(repository.football.getTeamRoster).mockResolvedValue([mockRosterEntry]);
 

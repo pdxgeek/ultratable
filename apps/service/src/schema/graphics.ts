@@ -1,7 +1,6 @@
 import { builder, requireAdmin } from './builder';
-import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, SQL } from 'drizzle-orm';
+import { repository } from '../repositories/postgres.repository';
 import { graphicsService } from '../services/graphics.service';
 import { storageProvider } from '../providers/supabase-storage.provider';
 
@@ -35,11 +34,7 @@ builder.queryFields((t) => ({
         },
         resolve: async (_root, args, ctx) => {
             requireAdmin(ctx);
-            const conditions: SQL<unknown>[] = [eq(schema.graphics.entityType, args.entityType)];
-            if (args.entityId) {
-                conditions.push(eq(schema.graphics.entityId, args.entityId));
-            }
-            return db.select().from(schema.graphics).where(and(...conditions));
+            return repository.football.getGraphics(args.entityType, args.entityId ?? undefined);
         }
     })
 }));

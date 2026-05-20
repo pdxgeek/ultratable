@@ -48,7 +48,7 @@ vi.mock('../workers/runner', () => ({
     },
 }));
 
-vi.mock('../repositories/supabase.repository', () => ({
+vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
             getLeagues: vi.fn().mockResolvedValue([]),

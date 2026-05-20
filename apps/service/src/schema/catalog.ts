@@ -1,5 +1,5 @@
 import { builder, requireAdmin } from './builder';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { cacheService } from '../services/cache.service';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';

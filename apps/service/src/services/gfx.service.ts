@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'node:crypto';
 import { supabase } from '../db';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { globalLogger } from '../services/log.service';
 
 const logger = globalLogger.child({ module: 'GfxService' });
