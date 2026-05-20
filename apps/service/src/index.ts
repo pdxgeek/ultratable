@@ -5,7 +5,16 @@ import { builder } from './schema/builder';
 import { globalLogger } from './services/log.service';
 import { resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { eq } from 'drizzle-orm';
-import { GraphQLError, type ASTNode, type ValidationContext, type ASTVisitor } from 'graphql';
+import { GraphQLError, type ASTNode, type ValidationContext, type ASTVisitor, type ExecutionArgs, type ExecutionResult } from 'graphql';
+import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
+import type { Context } from './schema/builder';
+
+type ExecuteFn = (args: ExecutionArgs) => PromiseLike<ExecutionResult> | ExecutionResult;
+type OnExecutePayload = {
+    args: ExecutionArgs;
+    setExecuteFn: (fn: ExecuteFn) => void;
+    executeFn: ExecuteFn;
+};
 
 // Import schema definitions
 import { auth } from './api/auth';
@@ -25,6 +34,20 @@ import * as schema from './db/schema';
  * Maximum nesting depth: 10 levels (e.g. league > seasons > teams > venue is 4).
  */
 const MAX_QUERY_DEPTH = 10;
+
+/**
+ * Query-cost ceiling enforced via graphql-query-complexity. A depth-10 query
+ * can still fan out to millions of nodes via wide selection sets, so depth alone
+ * is not enough — every field costs 1 by default and the total is capped here.
+ */
+const MAX_QUERY_COMPLEXITY = 1000;
+
+/**
+ * Per-request execution timeout. Anonymous traffic gets the stricter ceiling so
+ * a slow resolver cannot pin a connection indefinitely from the public surface.
+ */
+const REQUEST_TIMEOUT_MS_AUTH = 15_000;
+const REQUEST_TIMEOUT_MS_GUEST = 5_000;
 
 function measureDepth(node: ASTNode, depth: number): number {
     if ('selectionSet' in node && node.selectionSet) {
@@ -57,6 +80,51 @@ const yoga = createYoga<{
         {
             onValidate({ addValidationRule }: { addValidationRule: (rule: (ctx: ValidationContext) => ASTVisitor) => void }) {
                 addValidationRule(depthLimitRule);
+            },
+            onExecute({ args, setExecuteFn, executeFn }: OnExecutePayload) {
+                // 1) Reject queries whose total field cost exceeds the ceiling.
+                //    Variables are not available during validate(), so we run the
+                //    estimator here, right before execution, with the resolved
+                //    variableValues so dynamic pagination args are counted.
+                let complexity: number;
+                try {
+                    complexity = getComplexity({
+                        schema: args.schema,
+                        query: args.document,
+                        variables: args.variableValues ?? undefined,
+                        operationName: args.operationName ?? undefined,
+                        estimators: [simpleEstimator({ defaultComplexity: 1 })],
+                    });
+                } catch (err) {
+                    // Estimator failure should not mask the underlying request
+                    // (e.g. introspection edge cases). Log and skip the gate.
+                    globalLogger.warn({ err }, 'Query complexity analysis failed');
+                    return;
+                }
+                if (complexity > MAX_QUERY_COMPLEXITY) {
+                    throw new GraphQLError(
+                        `Query complexity ${complexity} exceeds maximum allowed complexity of ${MAX_QUERY_COMPLEXITY}`
+                    );
+                }
+
+                // 2) Enforce a per-request timeout. Authenticated callers get a
+                //    longer ceiling than anonymous traffic.
+                const ctx = args.contextValue as Context | undefined;
+                const timeoutMs = ctx?.user ? REQUEST_TIMEOUT_MS_AUTH : REQUEST_TIMEOUT_MS_GUEST;
+                setExecuteFn(async (executeArgs) => {
+                    let timer: NodeJS.Timeout | undefined;
+                    const timeout = new Promise<never>((_, reject) => {
+                        timer = setTimeout(
+                            () => reject(new GraphQLError(`Request exceeded ${timeoutMs}ms timeout`)),
+                            timeoutMs
+                        );
+                    });
+                    try {
+                        return await Promise.race([executeFn(executeArgs), timeout]);
+                    } finally {
+                        if (timer) clearTimeout(timer);
+                    }
+                });
             }
         }
     ],

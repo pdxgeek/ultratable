@@ -55,7 +55,8 @@ export class GraphicsService {
             // 1. Download image
             const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
             const buffer = Buffer.from(response.data);
-            const mimeType = response.headers['content-type'] || 'image/png';
+            const contentTypeHeader = response.headers['content-type'];
+            const mimeType: string = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'image/png';
 
             // 2. Hash for deduplication
             const contentId = crypto.createHash('sha256').update(buffer).digest('hex');
