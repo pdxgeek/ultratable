@@ -1,410 +1,17 @@
-import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { gqlFetch } from '../lib/api';
 
 import { CatalogBrowser } from './CatalogBrowser';
 import { SeasonImporter } from './SeasonImporter';
 import { LeagueConfig } from './LeagueConfig';
+import { useLeaguesManagement } from './useLeaguesManagement';
 import type { Job, Execution } from './WorkersView';
 
-export interface Country {
-  id: string;
-  name: string;
-  code?: string;
-  flag?: string;
-}
-
-export interface CatalogLeague {
-  id: string;
-  sourceId: number;
-  name: string;
-  type: string;
-  logo?: string;
-  country: string;
-  seasons?: Season[];
-}
-
-export interface ManagedLeague {
-  id: string;
-  sourceId: number;
-  name: string;
-  country?: string | null;
-  logo?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface Season {
-  id: string;
-  year: number;
-  configJson?: string;
-  fixtureCount?: number;
-  teamCount?: number;
-  current?: boolean;
-}
+export type { Country, CatalogLeague, ManagedLeague, Season } from './leagues.types';
 
 const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], executions?: Execution[] }) => {
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [catalogLeagues, setCatalogLeagues] = useState<CatalogLeague[]>([]);
-  const [managedLeagues, setManagedLeagues] = useState<ManagedLeague[]>([]);
+  const state = useLeaguesManagement();
 
-  // Box 2 (Importer) State
-  const [selectedCatalogLeagueId, setSelectedCatalogLeagueId] = useState<string>('');
-  const [catalogLeagueMetadata, setCatalogLeagueMetadata] = useState<CatalogLeague | null>(null);
-  const [seasonsForCatalogLeague, setSeasonsForCatalogLeague] = useState<Season[]>([]);
-
-  // Box 3 (Config) State
-  const [selectedConfigLeagueId, setSelectedConfigLeagueId] = useState<string>('');
-  const [configSeasons, setConfigSeasons] = useState<Season[]>([]);
-  const [selectedConfigSeasonId, setSelectedConfigSeasonId] = useState<string>('');
-
-  const [configTab, setConfigTab] = useState<'league' | 'season'>('season');
-  const [promoInput, setPromoInput] = useState<string>('');
-  const [playoffInput, setPlayoffInput] = useState<string>('');
-  const [relInput, setRelInput] = useState<string>('');
-  const [deductions, setDeductions] = useState<string>('');
-  const [configTeams, setConfigTeams] = useState<Record<string, unknown>[]>([]);
-  const [helperTeamId, setHelperTeamId] = useState<string>('');
-  const [helperPoints, setHelperPoints] = useState<number>(0);
-  const [helperReason, setHelperReason] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const fetchData = async () => {
-    try {
-      const data = await gqlFetch<{
-        catalogCountries: Country[];
-        leagues: ManagedLeague[];
-      }>(`query { catalogCountries { id name code flag } leagues { id name sourceId country } }`);
-      setCountries(data.catalogCountries || []);
-      setManagedLeagues(data.leagues || []);
-    } catch (e) {
-      console.error('LeaguesManagementView: fetchData error:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCatalogLeagues = async (countryId: string) => {
-    if (!countryId) return;
-    setActionLoading(`country-${countryId}`);
-    try {
-      // Read what we have locally first; only pull from upstream if there's no cached row for this country.
-      const cached = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
-        `query($id: String!) { catalogLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
-        { id: countryId }
-      );
-      if (cached.catalogLeagues?.length) {
-        setCatalogLeagues(cached.catalogLeagues);
-        return;
-      }
-      const synced = await gqlFetch<{ syncCountryLeagues: CatalogLeague[] }>(
-        `mutation($id: String!) { syncCountryLeagues(countryId: $id) { id name type logo sourceId seasons { year current } } }`,
-        { id: countryId }
-      );
-      setCatalogLeagues(synced.syncCountryLeagues || []);
-    } catch (e) {
-      console.error('LeaguesManagementView: fetchCatalogLeagues error:', e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-
-
-  const fetchInternalSeasons = async (leagueId: string, setTask: (seasons: Season[]) => void) => {
-    try {
-      const data = await gqlFetch<{ seasons: Season[] }>(
-        `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount } }`,
-        { id: leagueId }
-      );
-      setTask(data.seasons || []);
-    } catch (e) {
-      console.error('LeaguesManagementView: fetchInternalSeasons error:', e);
-    }
-  };
-
-  const fetchCatalogMetadataBySourceId = async (sourceId: number) => {
-    try {
-      const data = await gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
-        `query($sourceId: Int!) { catalogLeagues(sourceId: $sourceId) { id seasons { year current } } }`,
-        { sourceId }
-      );
-      if (data.catalogLeagues?.[0]) {
-        setCatalogLeagueMetadata(data.catalogLeagues[0]);
-      }
-    } catch (e) {
-      console.error('LeaguesManagementView: fetchCatalogMetadataBySourceId error:', e);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, []);
-
-  const selectedCountryName = countries.find(c => c.id === selectedCountry)?.name;
-  const filteredManagedLeagues = selectedCountryName
-    ? managedLeagues.filter(l => l.country === selectedCountryName)
-    : [];
-
-  useEffect(() => {
-    setCatalogLeagues([]); // Clear stale leagues immediately on country change.
-    if (selectedCountry) fetchCatalogLeagues(selectedCountry);
-    // Clear Box 2 league selection when country changes — the old league may not belong to the new country.
-    setSelectedCatalogLeagueId('');
-  }, [selectedCountry]);
-
-  // Box 2 Effect
-  useEffect(() => {
-    if (selectedCatalogLeagueId) {
-      fetchInternalSeasons(selectedCatalogLeagueId, setSeasonsForCatalogLeague);
-
-      const league = managedLeagues.find(l => l.id === selectedCatalogLeagueId);
-      if (league?.sourceId) {
-        fetchCatalogMetadataBySourceId(league.sourceId);
-      }
-    } else {
-      setSeasonsForCatalogLeague([]);
-      setCatalogLeagueMetadata(null);
-    }
-  }, [selectedCatalogLeagueId, managedLeagues]); // Added managedLeagues to dependency array
-
-  // Box 3 Effect
-  useEffect(() => {
-    if (selectedConfigLeagueId) {
-      fetchInternalSeasons(selectedConfigLeagueId, setConfigSeasons);
-    } else {
-      setConfigSeasons([]);
-      setSelectedConfigSeasonId('');
-    }
-  }, [selectedConfigLeagueId]);
-
-  useEffect(() => {
-    const season = configSeasons.find(s => s.id === selectedConfigSeasonId);
-    const league = managedLeagues.find(l => l.id === selectedConfigLeagueId);
-
-    if (configTab === 'league' && league) {
-      const config = (league.metadata as Record<string, string[]>) || {};
-      setPromoInput((config.promotion || []).join(', '));
-      setPlayoffInput((config.playoffs || []).join(', '));
-      setRelInput((config.relegation || []).join(', '));
-      setDeductions('');
-    } else if (configTab === 'season' && season) {
-      const config = JSON.parse(season.configJson || '{}');
-      setPromoInput((config.promotion || []).join(', '));
-      setPlayoffInput((config.playoffs || []).join(', '));
-      setRelInput((config.relegation || []).join(', '));
-      setDeductions(JSON.stringify(config.deductions || [], null, 2));
-
-      // Fetch teams for the helper dropdown
-      if (league) {
-        const seasonObj = configSeasons.find(s => s.id === selectedConfigSeasonId);
-        if (seasonObj) {
-          gqlFetch<{ teams: Record<string, unknown>[] }>(
-            `query($seasonId: String) { teams(seasonId: $seasonId) { id name } }`,
-            { seasonId: seasonObj.id }
-          ).then(data => {
-            setConfigTeams(data.teams || []);
-            setHelperTeamId('');
-            setHelperPoints(0);
-            setHelperReason('');
-          }).catch(err => console.error(err));
-        }
-      }
-    } else {
-      setPromoInput('');
-      setPlayoffInput('');
-      setRelInput('');
-      setDeductions('');
-      setConfigTeams([]);
-    }
-  }, [selectedConfigSeasonId, configSeasons, selectedConfigLeagueId, managedLeagues, configTab]);
-
-  const initializeCatalog = async () => {
-    setActionLoading('init-catalog');
-    try {
-      await gqlFetch<{ syncCatalog: { success: boolean; processedCount: number } }>(
-        `mutation { syncCatalog { success processedCount } }`
-      );
-      await fetchData();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to initialize catalog: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const activateLeague = async (catalogId: string) => {
-    setActionLoading(catalogId);
-    try {
-      await gqlFetch(
-        `mutation($id: String!) { promoteLeague(catalogId: $id) { id name } }`,
-        { id: catalogId }
-      );
-      await fetchData();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to activate league: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const refreshCatalogSeasons = async (managedLeagueId: string) => {
-    setActionLoading(`${managedLeagueId}-refresh`);
-    try {
-      const league = managedLeagues.find(l => l.id === managedLeagueId);
-      if (!league?.sourceId) return;
-
-      const catalogId = catalogLeagueMetadata?.id;
-      if (!catalogId) {
-        alert('No associated catalog league found.');
-        return;
-      }
-
-      await gqlFetch(
-        `mutation($id: String!) { refreshCatalogSeasons(catalogId: $id) { id seasons { year current } } }`,
-        { id: catalogId }
-      );
-
-      await fetchCatalogMetadataBySourceId(league.sourceId);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to refresh catalog seasons: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const importSeason = async (leagueId: string, year: number) => {
-    const key = `${leagueId}-${year}`;
-    setActionLoading(key);
-    try {
-      await gqlFetch(
-        `mutation($id: String!, $year: Int!) { importSeason(leagueId: $id, year: $year) { id year } }`,
-        { id: leagueId, year }
-      );
-      // Refresh local seasons for both boxes if they happen to be showing this league
-      if (selectedCatalogLeagueId === leagueId) {
-        fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
-      }
-      if (selectedConfigLeagueId === leagueId) {
-        fetchInternalSeasons(leagueId, setConfigSeasons);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to import season: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const syncSeasonData = async (leagueId: string, year: number) => {
-    const key = `sync-${leagueId}-${year}`;
-    setActionLoading(key);
-    try {
-      const league = managedLeagues.find(l => l.id === leagueId);
-      if (!league?.sourceId) {
-        alert('Source ID not found for league.');
-        return;
-      }
-
-      await gqlFetch(
-        `mutation($id: Int!, $year: Int!) { syncFixtures(leagueSourceId: $id, seasonYear: $year) { id } }`,
-        { id: league.sourceId, year }
-      );
-
-      // Refresh to update counts
-      await fetchInternalSeasons(leagueId, setConfigSeasons);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Sync failed: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const removeSeason = async (leagueId: string, seasonId: string, year: number) => {
-    if (!window.confirm(`Are you sure you want to remove the ${year} season? This will delete all associated fixtures and standings data.`)) return;
-    const key = `${leagueId}-${year}`;
-    setActionLoading(key);
-    try {
-      await gqlFetch(
-        `mutation($id: String!) { removeSeason(seasonId: $id) }`,
-        { id: seasonId }
-      );
-      // Refresh local seasons for both boxes
-      if (selectedCatalogLeagueId === leagueId) {
-        fetchInternalSeasons(leagueId, setSeasonsForCatalogLeague);
-      }
-      if (selectedConfigLeagueId === leagueId) {
-        fetchInternalSeasons(leagueId, setConfigSeasons);
-        if (selectedConfigSeasonId === seasonId) {
-          setSelectedConfigSeasonId('');
-        }
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to remove season: ${msg}`);
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const saveConfig = async () => {
-    if (configTab === 'season' && !selectedConfigSeasonId) return;
-    if (configTab === 'league' && !selectedConfigLeagueId) return;
-    setActionLoading('save-config');
-    try {
-      const parseList = (str: string) => str.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-      const configObj: Record<string, unknown> = {};
-
-      const promo = parseList(promoInput);
-      if (promo.length > 0) configObj.promotion = promo;
-
-      const playoffs = parseList(playoffInput);
-      if (playoffs.length > 0) configObj.playoffs = playoffs;
-
-      const rel = parseList(relInput);
-      if (rel.length > 0) configObj.relegation = rel;
-
-      if (configTab === 'season') {
-        let parsedDeductions = [];
-        try {
-          parsedDeductions = JSON.parse(deductions || '[]');
-        } catch {
-          alert('Invalid JSON for deductions');
-          return;
-        }
-        if (parsedDeductions.length > 0) configObj.deductions = parsedDeductions;
-
-        await gqlFetch(
-          `mutation($id: String!, $json: String!) { saveSeasonConfig(id: $id, configJson: $json) { id } }`,
-          { id: selectedConfigSeasonId, json: JSON.stringify(configObj) }
-        );
-      } else {
-        await gqlFetch(
-          `mutation($id: String!, $json: String!) { saveLeagueConfig(id: $id, configJson: $json) { id } }`,
-          { id: selectedConfigLeagueId, json: JSON.stringify(configObj) }
-        );
-        await fetchData(); // refresh leagues
-      }
-
-      fetchInternalSeasons(selectedConfigLeagueId, setConfigSeasons);
-      alert('Configuration saved successfully.');
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  if (loading) return (
+  if (state.loading) return (
     <div className="py-32 text-center bg-slate-900/10 border border-dashed border-slate-800/40 rounded-3xl">
       <Loader2 className="w-8 h-8 text-sky-500 animate-spin mx-auto mb-6" />
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Waking Registry...</p>
@@ -413,62 +20,59 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-24">
-      {/* Box 1: Catalog Browser */}
       <CatalogBrowser
-        countries={countries}
-        selectedCountry={selectedCountry}
-        setSelectedCountry={setSelectedCountry}
-        catalogLeagues={catalogLeagues}
-        managedLeagues={managedLeagues}
-        activateLeague={activateLeague}
-        actionLoading={actionLoading}
-        initializeCatalog={initializeCatalog}
+        countries={state.countries}
+        selectedCountry={state.selectedCountry}
+        setSelectedCountry={state.setSelectedCountry}
+        catalogLeagues={state.catalogLeagues}
+        managedLeagues={state.managedLeagues}
+        activateLeague={state.activateLeague}
+        actionLoading={state.actionLoading}
+        initializeCatalog={state.initializeCatalog}
       />
 
-      {/* Box 2: Catalog Seasons */}
       <SeasonImporter
-        managedLeagues={filteredManagedLeagues}
-        hasCountrySelected={!!selectedCountry}
-        selectedCatalogLeagueId={selectedCatalogLeagueId}
-        setSelectedCatalogLeagueId={setSelectedCatalogLeagueId}
-        catalogLeagueMetadata={catalogLeagueMetadata}
-        seasonsForCatalogLeague={seasonsForCatalogLeague}
-        importSeason={importSeason}
-        removeSeason={removeSeason}
-        refreshCatalogSeasons={refreshCatalogSeasons}
-        actionLoading={actionLoading}
+        managedLeagues={state.filteredManagedLeagues}
+        hasCountrySelected={!!state.selectedCountry}
+        selectedCatalogLeagueId={state.selectedCatalogLeagueId}
+        setSelectedCatalogLeagueId={state.setSelectedCatalogLeagueId}
+        catalogLeagueMetadata={state.catalogLeagueMetadata}
+        seasonsForCatalogLeague={state.seasonsForCatalogLeague}
+        importSeason={state.importSeason}
+        removeSeason={state.removeSeason}
+        refreshCatalogSeasons={state.refreshCatalogSeasons}
+        actionLoading={state.actionLoading}
       />
 
-      {/* Box 3: Season Configuration */}
       <LeagueConfig
-        managedLeagues={managedLeagues}
-        selectedConfigLeagueId={selectedConfigLeagueId}
-        setSelectedConfigLeagueId={setSelectedConfigLeagueId}
-        setConfigTab={setConfigTab}
-        configTab={configTab}
-        configSeasons={configSeasons}
-        selectedConfigSeasonId={selectedConfigSeasonId}
-        setSelectedConfigSeasonId={setSelectedConfigSeasonId}
-        syncSeasonData={syncSeasonData}
-        actionLoading={actionLoading}
+        managedLeagues={state.managedLeagues}
+        selectedConfigLeagueId={state.selectedConfigLeagueId}
+        setSelectedConfigLeagueId={state.setSelectedConfigLeagueId}
+        setConfigTab={state.setConfigTab}
+        configTab={state.configTab}
+        configSeasons={state.configSeasons}
+        selectedConfigSeasonId={state.selectedConfigSeasonId}
+        setSelectedConfigSeasonId={state.setSelectedConfigSeasonId}
+        syncSeasonData={state.syncSeasonData}
+        actionLoading={state.actionLoading}
         executions={executions}
         jobs={jobs}
-        promoInput={promoInput}
-        setPromoInput={setPromoInput}
-        playoffInput={playoffInput}
-        setPlayoffInput={setPlayoffInput}
-        relInput={relInput}
-        setRelInput={setRelInput}
-        deductions={deductions}
-        setDeductions={setDeductions}
-        helperTeamId={helperTeamId}
-        setHelperTeamId={setHelperTeamId}
-        configTeams={configTeams}
-        helperPoints={helperPoints}
-        setHelperPoints={setHelperPoints}
-        helperReason={helperReason}
-        setHelperReason={setHelperReason}
-        saveConfig={saveConfig}
+        promoInput={state.promoInput}
+        setPromoInput={state.setPromoInput}
+        playoffInput={state.playoffInput}
+        setPlayoffInput={state.setPlayoffInput}
+        relInput={state.relInput}
+        setRelInput={state.setRelInput}
+        deductions={state.deductions}
+        setDeductions={state.setDeductions}
+        helperTeamId={state.helperTeamId}
+        setHelperTeamId={state.setHelperTeamId}
+        configTeams={state.configTeams}
+        helperPoints={state.helperPoints}
+        setHelperPoints={state.setHelperPoints}
+        helperReason={state.helperReason}
+        setHelperReason={state.setHelperReason}
+        saveConfig={state.saveConfig}
       />
     </div>
   );
