@@ -1,0 +1,54 @@
+Copyright (c) 2024-2026 Dave Lerner
+All rights reserved.
+
+This source code is made publicly visible for portfolio review,
+educational reading, code-review, and personal local evaluation purposes.
+
+LIMITED GRANT — PERSONAL LOCAL EVALUATION
+
+You are permitted to clone this repository and run the software on a
+single device that you personally own or control, solely to evaluate
+the author's work (for example, as part of a hiring decision, code
+review, or portfolio assessment).
+
+This grant is conditional on ALL of the following:
+
+  - The software must bind only to the loopback interface
+    (localhost / 127.0.0.1 / ::1) and must not be made accessible to
+    any other person or device, by any means, including but not limited
+    to the public internet, a local area network, a virtual private
+    network, a reverse proxy, or a tunnel such as ngrok or Cloudflare
+    Tunnel;
+  - You may make only those configuration changes (environment
+    variables, port numbers, local database credentials) strictly
+    necessary to run the software locally as described above;
+  - You may not use the software, or any data or output derived from
+    it, in any production, commercial, or revenue-generating capacity;
+  - This grant terminates automatically and immediately if you violate
+    any of these conditions.
+
+ALL OTHER USES ARE PROHIBITED, including but not limited to:
+
+  - Hosting, deploying, or otherwise exposing this software to any third
+    party, on any network-accessible server, container, or environment,
+    whether for free or for compensation;
+  - Modifying, adapting, translating, or creating derivative works
+    beyond the minimal configuration changes permitted above;
+  - Redistributing the source code outside of GitHub's built-in
+    repository viewing and forking functionality;
+  - Incorporating this software, or any substantial portion of it, into
+    any other product, service, or codebase, whether commercial or
+    non-commercial.
+
+The author retains all rights under copyright, patent, trademark, and any
+other applicable intellectual property law. GitHub users may view and
+fork this repository through GitHub's interface as required by GitHub's
+Terms of Service; that grant is limited to that use only.
+
+For commercial licensing inquiries, contact: pdxgeek@gmail.com
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

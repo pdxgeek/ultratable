@@ -1,5 +1,7 @@
 # UltraTable
 
+> **Source-visible, not open-source.** This codebase is published for portfolio review. You may clone and run it locally on your own machine (loopback only) to evaluate it — see [LICENSE](LICENSE) for the full terms. Hosting, public deployment, modification beyond local config, and redistribution are not permitted. For commercial licensing, contact pdxgeek@gmail.com.
+
 UltraTable is a real-time fantasy sports platform. It consists of multiple applications managed in a monorepo setup.
 
 ## Project Structure
