@@ -131,19 +131,12 @@ builder.objectType(TeamRef, {
             }
         }),
         sourceId: t.exposeInt('sourceId', { description: 'External identifier assigned by API-Football for this team. Stored for upstream cross-referencing; internal queries use the UUID id field.' }),
-        // N+1 WARNING: This resolver fires per-team. Not triggered by the web app's
-        // SYNC_DATA_QUERY (scalar fields only), but custom queries requesting nested
-        // team.venue will trigger O(N) individual DB queries. Consider a dataloader if
-        // this becomes a hotspot.
         venue: t.field({
-            description: 'Home venue for this team, if assigned. Note: N+1 individual DB query per team.',
+            description: 'Home venue for this team, if assigned. Batched per-request via DataLoader.',
             type: VenueRef,
             nullable: true,
-            resolve: async (parent) => {
-                if (!parent.venueId) return null;
-                const [v] = await db.select().from(schema.venues).where(eq(schema.venues.id, parent.venueId));
-                return v;
-            }
+            resolve: (parent, _args, ctx) =>
+                parent.venueId ? ctx.loaders.venueLoader.load(parent.venueId) : null,
         }),
         metadata: t.field({
             description: 'Upstream provider metadata including sourceName and sourceId.',
@@ -227,9 +220,9 @@ builder.objectType(FixtureRef, {
         seasonId: t.exposeString('seasonId', { description: 'UUID of the season this fixture belongs to. Joins back to the Season type to resolve league, year, and configuration.' }),
         season: t.int({
             description: 'Calendar year of the parent season (resolved from the Season record). Convenience field.',
-            resolve: async (parent) => {
+            resolve: async (parent, _args, ctx) => {
                 if (!parent.seasonId) return 0;
-                const [s] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, parent.seasonId));
+                const s = await ctx.loaders.seasonLoader.load(parent.seasonId);
                 return s?.year ?? 0;
             }
         }),
@@ -237,11 +230,11 @@ builder.objectType(FixtureRef, {
             description: 'External API-Football league ID, resolved by walking fixture → season → league. Useful for the web app to group fixtures by provider league without an extra round-trip.',
 
             nullable: true,
-            resolve: async (parent) => {
+            resolve: async (parent, _args, ctx) => {
                 if (!parent.seasonId) return null;
-                const [s] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, parent.seasonId));
+                const s = await ctx.loaders.seasonLoader.load(parent.seasonId);
                 if (!s) return null;
-                const [l] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, s.leagueId));
+                const l = await ctx.loaders.leagueLoader.load(s.leagueId);
                 return l?.sourceId ?? null;
             }
         }),
@@ -262,36 +255,22 @@ builder.objectType(FixtureRef, {
             resolve: (parent) => parent.awayGoals,
         }),
         updatedAt: t.expose('updatedAt', { type: 'DateTime', description: 'ISO-8601 timestamp of the last update. Used for delta sync watermarking.' }),
-        // N+1 WARNING: homeTeam, awayTeam, venue, and season resolvers each fire
-        // individual DB queries per fixture. The web app's SYNC_DATA_QUERY only
-        // requests scalar fields, so these never fire on the hot path. Custom
-        // queries requesting nested objects on 380+ fixtures will be slow.
-        // Consider a dataloader pattern if this becomes a performance issue.
         homeTeam: t.field({
-            description: 'Resolved home Team object with name, logo, metadata. N+1 per fixture — not requested by the web sync query.',
+            description: 'Resolved home Team object with name, logo, metadata. Batched per-request via DataLoader.',
             type: TeamRef,
-            resolve: async (parent) => {
-                const [t] = await db.select().from(schema.teams).where(eq(schema.teams.id, parent.homeTeamId));
-                return t;
-            }
+            resolve: (parent, _args, ctx) => ctx.loaders.teamLoader.load(parent.homeTeamId),
         }),
         awayTeam: t.field({
-            description: 'Resolved away Team object with name, logo, metadata. N+1 per fixture — not requested by the web sync query.',
+            description: 'Resolved away Team object with name, logo, metadata. Batched per-request via DataLoader.',
             type: TeamRef,
-            resolve: async (parent) => {
-                const [t] = await db.select().from(schema.teams).where(eq(schema.teams.id, parent.awayTeamId));
-                return t;
-            }
+            resolve: (parent, _args, ctx) => ctx.loaders.teamLoader.load(parent.awayTeamId),
         }),
         venue: t.field({
-            description: 'Resolved Venue object for where this match is played. Null if venueId is null. N+1 per fixture.',
+            description: 'Resolved Venue object for where this match is played. Null if venueId is null. Batched per-request via DataLoader.',
             type: VenueRef,
             nullable: true,
-            resolve: async (parent) => {
-                if (!parent.venueId) return null;
-                const [v] = await db.select().from(schema.venues).where(eq(schema.venues.id, parent.venueId));
-                return v;
-            }
+            resolve: (parent, _args, ctx) =>
+                parent.venueId ? ctx.loaders.venueLoader.load(parent.venueId) : null,
         }),
         metadata: t.field({
             description: 'Upstream provider metadata including sourceName and sourceId for this fixture.',

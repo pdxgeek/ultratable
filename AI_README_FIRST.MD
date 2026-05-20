@@ -140,6 +140,7 @@ You must strictly adhere to the following coding standards when working on this 
 - **SOLID & DRY**: Follow SOLID design principles. Do not repeat code. Write functional code wherever possible.
 - **Maintainability**: Use exceptional naming conventions. Avoid creating giant code blocks or monolith files. Break complex logic into smaller, testable modules.
 - **Performance**: Always be concerned about performance and memory overhead. Explicitly call out any discovered optimization opportunities to the repository owner.
+- **Batch nested GraphQL resolvers with DataLoader**: Any resolver that fetches a single row by ID from a parent's foreign key (e.g., `Fixture.homeTeam`, `Team.venue`) MUST go through a per-request DataLoader in [`apps/service/src/loaders/index.ts`](apps/service/src/loaders/index.ts), not a direct `db.select().where(eq(id, parent.fooId))`. The latter silently produces an N+1 the moment a query asks for that field across a list. When adding a new entity that gets resolved this way, extend the loader factory with a new `xLoader` and call `ctx.loaders.xLoader.load(parent.xId)` from the resolver — loader instances are created fresh per request, so there is no cross-request cache risk.
 
 ---
 
