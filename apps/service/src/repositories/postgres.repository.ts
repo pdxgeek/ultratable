@@ -47,7 +47,7 @@ interface FixtureLookups {
     venueMap: Map<number, string>;
 }
 
-export class SupabaseConfigRepository implements ConfigRepository {
+export class PostgresConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
         // In production, the filesystem is ephemeral (Docker/Fly.io) — .env changes would be lost on redeploy.
         if (process.env.NODE_ENV === 'production') {
@@ -122,9 +122,9 @@ export class SupabaseConfigRepository implements ConfigRepository {
     }
 }
 
-const logger = globalLogger.child({ module: 'SupabaseFootballRepository' });
+const logger = globalLogger.child({ module: 'PostgresFootballRepository' });
 
-export class SupabaseFootballRepository implements FootballRepository {
+export class PostgresFootballRepository implements FootballRepository {
     private provider: IFootballProvider;
 
     constructor(providerOverride?: IFootballProvider) {
@@ -1595,7 +1595,7 @@ export class SupabaseFootballRepository implements FootballRepository {
     }
 }
 
-export class SupabaseWorkersRepository implements WorkersRepository {
+export class PostgresWorkersRepository implements WorkersRepository {
     async listJobs(): Promise<Array<typeof schema.jobs.$inferSelect>> {
         if (!db) return [];
         return db.select().from(schema.jobs).orderBy(schema.jobs.name);
@@ -1637,7 +1637,7 @@ export class SupabaseWorkersRepository implements WorkersRepository {
 }
 
 export const repository: IRepository = {
-    config: new SupabaseConfigRepository(),
-    football: new SupabaseFootballRepository(),
-    workers: new SupabaseWorkersRepository(),
+    config: new PostgresConfigRepository(),
+    football: new PostgresFootballRepository(),
+    workers: new PostgresWorkersRepository(),
 };

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 
 vi.mock('../db', () => ({
     db: {
@@ -19,7 +19,7 @@ vi.mock('../services/graphics.service', () => ({
     graphicsService: { resolveUrl: vi.fn().mockResolvedValue(null) },
 }));
 
-vi.mock('../repositories/supabase.repository', () => ({
+vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
             updateSeasonConfig: vi.fn().mockResolvedValue({ id: 'season-id', year: 2025, leagueId: 'league-id' }),

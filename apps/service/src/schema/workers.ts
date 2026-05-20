@@ -1,7 +1,7 @@
 import { builder, requireAdmin } from './builder';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { GraphQLError } from 'graphql';
 
 /** Upper bound on every paginated query, regardless of the per-field default. */

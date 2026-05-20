@@ -5,7 +5,7 @@
  * and updates past-due "out of state" fixtures before serving cached data.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SupabaseFootballRepository } from './supabase.repository';
+import { PostgresFootballRepository } from './postgres.repository';
 import { cacheService } from '../services/cache.service';
 import type { IFootballProvider, IngestedFixture } from '../integrations/types';
 
@@ -168,7 +168,7 @@ function setupSeasonLookup(seasonOverrides: Record<string, unknown> = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 describe('getFixtures — Live Polling', () => {
-    let repo: SupabaseFootballRepository;
+    let repo: PostgresFootballRepository;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -185,7 +185,7 @@ describe('getFixtures — Live Polling', () => {
                 venues: []
             })
         });
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         // Call sequence:
         // 1. Season lookup (select + innerJoin)
@@ -259,7 +259,7 @@ describe('getFixtures — Live Polling', () => {
                 venues: []
             })
         });
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         // Pre-populate cache with stale data
         cacheService.set('fixtures:40:2025', [PAST_DUE_FIXTURE], 300_000);
@@ -311,7 +311,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('skips polling when another request claimed the lock', async () => {
         const provider = createMockProvider();
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -345,7 +345,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('serves cached data when no past-due fixtures exist', async () => {
         const provider = createMockProvider();
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         // Pre-populate cache with valid data (all played)
         cacheService.set('fixtures:40:2025', [PLAYED_FIXTURE], 300_000);
@@ -380,7 +380,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('skips polling entirely when season is completed', async () => {
         const provider = createMockProvider();
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -415,7 +415,7 @@ describe('getFixtures — Live Polling', () => {
         const provider = createMockProvider({
             getFixturesByIds: vi.fn().mockRejectedValue(new Error('API rate limit exceeded'))
         });
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -454,7 +454,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('marks season complete when no past-due, no future, and no non-terminal fixtures remain', async () => {
         const provider = createMockProvider();
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -509,7 +509,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('does NOT mark season complete when non-terminal fixtures still exist (false positive bug)', async () => {
         const provider = createMockProvider();
-        repo = new SupabaseFootballRepository(provider);
+        repo = new PostgresFootballRepository(provider);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {

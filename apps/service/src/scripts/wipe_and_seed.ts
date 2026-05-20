@@ -1,6 +1,6 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { storageProvider } from '../providers/supabase-storage.provider';
 import { eq } from 'drizzle-orm';
 

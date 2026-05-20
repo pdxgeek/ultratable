@@ -1,5 +1,5 @@
 import { builder, requireAdmin } from './builder';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { JobRunner } from '../workers/runner';
 import { cacheService } from '../services/cache.service';
 import * as schema from '../db/schema';
@@ -25,7 +25,7 @@ const RosterEntryRef = builder.objectRef<RosterEntryShape>('RosterEntry');
 /**
  * Fallback ranking-criteria order used when a season has no `metadata.rankingCriteria`
  * (e.g. seasons imported before importSeason started persisting it).
- * Mirrors the EFL hierarchy and must stay in sync with DEFAULT_RANKING_CRITERIA in supabase.repository.ts.
+ * Mirrors the EFL hierarchy and must stay in sync with DEFAULT_RANKING_CRITERIA in postgres.repository.ts.
  */
 const FALLBACK_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
 

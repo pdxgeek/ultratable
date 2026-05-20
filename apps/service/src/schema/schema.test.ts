@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import * as schema from '../db/schema';
 
 import './football'; // Ensure football schema is registered
@@ -22,7 +22,7 @@ vi.mock('../workers/runner', () => ({
 }));
 
 // Mock the repository
-vi.mock('../repositories/supabase.repository', () => ({
+vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
             getLeagues: vi.fn(),

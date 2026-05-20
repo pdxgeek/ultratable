@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SupabaseFootballRepository } from './supabase.repository';
+import { PostgresFootballRepository } from './postgres.repository';
 import { db } from '../db';
 import { cacheService } from '../services/cache.service';
 
@@ -19,11 +19,11 @@ vi.mock('../db', () => ({
     }
 }));
 
-describe('SupabaseFootballRepository', () => {
-    let repo: SupabaseFootballRepository;
+describe('PostgresFootballRepository', () => {
+    let repo: PostgresFootballRepository;
 
     beforeEach(() => {
-        repo = new SupabaseFootballRepository();
+        repo = new PostgresFootballRepository();
         vi.clearAllMocks();
         cacheService.clear();
         process.env.API_FOOTBALL_KEY = 'test-key';

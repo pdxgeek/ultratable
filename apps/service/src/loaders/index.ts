@@ -1,5 +1,5 @@
 import DataLoader from 'dataloader';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import * as schema from '../db/schema';
 
 type Team = typeof schema.teams.$inferSelect;

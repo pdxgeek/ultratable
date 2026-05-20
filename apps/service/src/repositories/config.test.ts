@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SupabaseConfigRepository } from './supabase.repository';
+import { PostgresConfigRepository } from './postgres.repository';
 import fs from 'node:fs/promises';
 vi.mock('node:fs/promises');
 
-describe('SupabaseConfigRepository', () => {
-    let repo: SupabaseConfigRepository;
+describe('PostgresConfigRepository', () => {
+    let repo: PostgresConfigRepository;
 
     beforeEach(() => {
-        repo = new SupabaseConfigRepository();
+        repo = new PostgresConfigRepository();
         vi.clearAllMocks();
         // Clear environment variables for consistency
         delete process.env.DATABASE_URL;

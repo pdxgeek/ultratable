@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GfxService } from './gfx.service';
 import { supabase } from '../db';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import axios from 'axios';
 
 vi.mock('axios');
@@ -15,7 +15,7 @@ vi.mock('../db', () => ({
         }
     }
 }));
-vi.mock('../repositories/supabase.repository', () => ({
+vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
             saveGraphic: vi.fn()
