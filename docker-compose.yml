@@ -1,4 +1,28 @@
 services:
+  # ──────────────────────────────────────────────────────────────
+  # Postgres — used when DB_MODE=docker (set by scripts/setup.mjs).
+  # Started in isolation during setup with:
+  #   docker compose up -d postgres
+  # Persists data in the named volume `ultratable_pg_data`.
+  # ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ultratable_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   service:
     build:
       context: .
@@ -19,3 +43,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  ultratable_pg_data:
