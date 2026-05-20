@@ -38,15 +38,15 @@ export class ApiFootballProvider implements IFootballProvider {
         return resp.data.response.map((item: RawLeagueItem) => Normalizer.normalizeLeague(item, this.name));
     }
 
-    async getSeasons(leagueId: number): Promise<IngestedSeason[]> {
-        const resp = await this.client.get('/leagues', { params: { id: leagueId } });
+    async getSeasons(leagueSourceId: number): Promise<IngestedSeason[]> {
+        const resp = await this.client.get('/leagues', { params: { id: leagueSourceId } });
         const leagueData = resp.data.response[0];
         if (!leagueData) return [];
         return leagueData.seasons.map((s: RawSeasonItem) => Normalizer.normalizeSeason(leagueData, s, this.name));
     }
 
-    async getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }> {
-        const resp = await this.client.get('/teams', { params: { league: leagueId, season } });
+    async getTeams(leagueSourceId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }> {
+        const resp = await this.client.get('/teams', { params: { league: leagueSourceId, season } });
         const response = resp.data.response;
 
         const teams = response.map((item: RawTeamItem) => Normalizer.normalizeTeam(item, this.name));
@@ -55,9 +55,9 @@ export class ApiFootballProvider implements IFootballProvider {
         return { teams, venues };
     }
 
-    async getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
-        this.logger.debug({ leagueId, season }, 'API: fetching fixtures');
-        const resp = await this.client.get('/fixtures', { params: { league: leagueId, season } });
+    async getFixtures(leagueSourceId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }> {
+        this.logger.debug({ leagueSourceId, season }, 'API: fetching fixtures');
+        const resp = await this.client.get('/fixtures', { params: { league: leagueSourceId, season } });
         const response = resp.data.response;
 
         const fixtures = response.map((item: RawFixtureItem) => Normalizer.normalizeFixture(item, this.name));
@@ -65,7 +65,7 @@ export class ApiFootballProvider implements IFootballProvider {
             .filter((item: RawFixtureItem) => item.fixture.venue?.id)
             .map((item: RawFixtureItem) => Normalizer.normalizeVenue(item.fixture.venue as RawVenueItem, this.name));
 
-        this.logger.debug({ leagueId, season, fixtureCount: fixtures.length, venueCount: venues.length }, 'API: fixtures fetched');
+        this.logger.debug({ leagueSourceId, season, fixtureCount: fixtures.length, venueCount: venues.length }, 'API: fixtures fetched');
         return { fixtures, venues };
     }
 

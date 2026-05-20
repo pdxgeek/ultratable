@@ -103,13 +103,16 @@ export interface IngestedSquadPlayer {
     photo: string | null;
 }
 
+// Dual-ID contract (AI_README_FIRST.MD §1): every ID here is an external
+// provider ID. `leagueSourceId`, `teamSourceId`, `fixtureId` (the upstream
+// numeric ID) — never an internal UUID. Do not reintroduce a bare `leagueId`.
 export interface IFootballProvider {
     name: string;
     getCountries(): Promise<IngestedCountry[]>;
     getLeagues(country?: string): Promise<IngestedLeague[]>;
-    getSeasons(leagueId: number): Promise<IngestedSeason[]>;
-    getTeams(leagueId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }>;
-    getFixtures(leagueId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
+    getSeasons(leagueSourceId: number): Promise<IngestedSeason[]>;
+    getTeams(leagueSourceId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }>;
+    getFixtures(leagueSourceId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
     getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
     getMatchEvents(fixtureId: number): Promise<IngestedEvent[]>;
     getLineups(fixtureId: number): Promise<IngestedLineup[]>;
