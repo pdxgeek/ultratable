@@ -2,7 +2,7 @@ import { builder, requireAdmin } from './builder';
 import * as schema from '../db/schema';
 import { repository } from '../repositories/postgres.repository';
 import { graphicsService } from '../services/graphics.service';
-import { storageProvider } from '../providers/supabase-storage.provider';
+import { storageProvider } from '../providers/storage';
 
 const GraphicType = builder.objectRef<typeof schema.graphics.$inferSelect>('Graphic');
 

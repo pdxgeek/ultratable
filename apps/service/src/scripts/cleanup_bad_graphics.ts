@@ -1,7 +1,7 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq } from 'drizzle-orm';
-import { storageProvider } from '../providers/supabase-storage.provider';
+import { storageProvider } from '../providers/storage';
 
 async function run() {
     console.log('Cleaning up invalid player graphic rows...');

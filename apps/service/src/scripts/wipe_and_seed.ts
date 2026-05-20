@@ -1,7 +1,7 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { repository } from '../repositories/postgres.repository';
-import { storageProvider } from '../providers/supabase-storage.provider';
+import { storageProvider } from '../providers/storage';
 import { eq } from 'drizzle-orm';
 
 async function clearStorage() {

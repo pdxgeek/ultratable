@@ -2,7 +2,7 @@ import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import axios from 'axios';
-import { storageProvider } from '../providers/supabase-storage.provider';
+import { storageProvider } from '../providers/storage';
 import crypto from 'node:crypto';
 import { globalLogger } from './log.service';
 

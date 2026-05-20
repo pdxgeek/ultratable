@@ -67,5 +67,3 @@ export class SupabaseStorageProvider implements StorageProvider {
         }
     }
 }
-
-export const storageProvider = new SupabaseStorageProvider();

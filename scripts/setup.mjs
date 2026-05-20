@@ -147,7 +147,10 @@ PORT=${vars.PORT}
 LOG_LEVEL=${vars.LOG_LEVEL}
 
 # ── Database ────────────────────────────────────────────────
-# DB_MODE=${vars.DB_MODE}  (informational — not read by the service)
+# DB_MODE selects the runtime mode (supabase | docker | system). Read by
+# apps/service/src/config/runtime-mode.ts to decide which storage backend
+# to use and whether to construct the Supabase SDK client.
+DB_MODE=${vars.DB_MODE}
 DATABASE_URL=${vars.DATABASE_URL}
 
 # ── Supabase (storage / SDK) ─────────────────────────────────
@@ -211,7 +214,9 @@ async function main() {
         `service connects to plain Postgres and the Supabase storage features are off.`
     );
 
-    const inferredMode = existing.SUPABASE_URL
+    const inferredMode = existing.DB_MODE
+        ? existing.DB_MODE
+        : existing.SUPABASE_URL
         ? 'supabase'
         : existing.DATABASE_URL?.includes('localhost')
         ? 'docker'
