@@ -1,7 +1,7 @@
 import React from 'react';
 import { Globe, History, CheckCircle2, Loader2, Play } from 'lucide-react';
 
-import type { CatalogLeague, Season, ManagedLeague } from './LeaguesManagementView';
+import type { CatalogLeague, Season, ManagedLeague } from './leagues.types';
 
 interface SeasonImporterProps {
     managedLeagues: ManagedLeague[];
