@@ -189,8 +189,10 @@ async function main() {
     const node = process.version;
     const npm = which('npm');
     const docker = which('docker');
+    const volta = which('volta');
     stdout.write(`  Node:   ${c.green(node)}\n`);
     stdout.write(`  npm:    ${npm ? c.green(npm) : c.red('not found')}\n`);
+    stdout.write(`  Volta:  ${volta ? c.green(volta) : c.yellow('not found — install from https://volta.sh to auto-match the pinned Node/npm in package.json')}\n`);
     stdout.write(`  Docker: ${docker ? c.green(docker) : c.yellow('not found (only needed for db-mode=docker)')}\n`);
     if (!npm) {
         stdout.write(c.red('\nnpm is required. Install Node.js (we recommend Volta) and re-run.\n'));

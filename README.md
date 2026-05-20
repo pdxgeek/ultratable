@@ -12,9 +12,10 @@ UltraTable is a real-time fantasy sports platform. It consists of multiple appli
 
 ### Prerequisites
 
-- **Node.js 20+** — we recommend [Volta](https://volta.sh/) to pin the version. `package.json` is the source of truth.
-- **npm** (bundled with Node).
+- **[Volta](https://volta.sh/)** — `curl https://get.volta.sh | bash`. The root `package.json`'s `volta` field pins Node + npm; Volta auto-installs the right versions the moment you `cd` into the repo. No manual `nvm`/`fnm`/`brew install node` needed.
 - **Docker** — only if you want the setup script to provision a local Postgres for you. Skip if you're using Supabase or a system Postgres.
+
+> Without Volta you can still install Node manually, but the pinned versions in `package.json` (`volta.node`, `volta.npm`) are the source of truth — match them or you may hit lockfile / engine drift.
 
 ### One-command setup
 
