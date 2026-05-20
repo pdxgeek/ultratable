@@ -6,6 +6,11 @@ import { JobRunner } from '../workers/runner';
 import { repository } from '../repositories/supabase.repository';
 import { GraphQLError } from 'graphql';
 
+/** Upper bound on every paginated query, regardless of the per-field default. */
+const MAX_PAGE_SIZE = 100;
+const clampLimit = (requested: number | null | undefined, fallback: number) =>
+    Math.min(Math.max(1, requested ?? fallback), MAX_PAGE_SIZE);
+
 const JobRef = builder.objectRef<typeof schema.jobs.$inferSelect>('Job');
 const JobExecutionRef = builder.objectRef<typeof schema.jobExecutions.$inferSelect>('JobExecution');
 
@@ -63,19 +68,20 @@ builder.queryField('jobExecutions', (t) =>
         type: [JobExecutionRef],
         args: {
             jobId: t.arg.string({ required: false, description: 'Optional UUID of a specific job. When provided, only returns executions belonging to that job. Omit to see executions across all jobs.' }),
-            limit: t.arg.int({ required: false, description: 'Maximum number of executions to return. Defaults to 50.' }),
+            limit: t.arg.int({ required: false, description: `Maximum number of executions to return. Defaults to 50. Clamped to [1, ${MAX_PAGE_SIZE}].` }),
         },
         resolve: async (_, { jobId, limit }, ctx) => {
             requireAdmin(ctx);
+            const cappedLimit = clampLimit(limit, 50);
             const query = db.select().from(schema.jobExecutions).orderBy(desc(schema.jobExecutions.startedAt));
             if (jobId) {
                 const res = await db.select().from(schema.jobExecutions)
                     .where(eq(schema.jobExecutions.jobId, jobId))
                     .orderBy(desc(schema.jobExecutions.startedAt))
-                    .limit(limit || 50);
+                    .limit(cappedLimit);
                 return res;
             }
-            return query.limit(limit || 50);
+            return query.limit(cappedLimit);
         },
     })
 );
@@ -85,11 +91,11 @@ builder.queryField('systemLogs', (t) =>
         description: 'Admin only. Returns recent system log entries, newest first.',
         type: [SystemLog],
         args: {
-            limit: t.arg.int({ required: false, description: 'Maximum number of log entries to return. Defaults to 100.' }),
+            limit: t.arg.int({ required: false, description: `Maximum number of log entries to return. Defaults to 100. Clamped to [1, ${MAX_PAGE_SIZE}].` }),
         },
         resolve: async (_, { limit }, ctx) => {
             requireAdmin(ctx);
-            return db.select().from(schema.systemLogs).orderBy(desc(schema.systemLogs.createdAt)).limit(limit || 100);
+            return db.select().from(schema.systemLogs).orderBy(desc(schema.systemLogs.createdAt)).limit(clampLimit(limit, 100));
         },
     })
 );

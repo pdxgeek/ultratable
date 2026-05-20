@@ -21,7 +21,8 @@ export class GfxService {
             // 1. Download image
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             const buffer = Buffer.from(response.data);
-            const contentType = response.headers['content-type'] || 'image/png';
+            const contentTypeHeader = response.headers['content-type'];
+            const contentType: string = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'image/png';
 
             // 2. Calculate Hash
             const hash = crypto.createHash('sha256').update(buffer).digest('hex');
