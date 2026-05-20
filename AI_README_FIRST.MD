@@ -18,6 +18,11 @@
 > - **Stop all**: Kill the `start:all` process (Ctrl+C) — this will stop all three services cleanly.
 > - **Never use `pkill` or `kill -9`** to stop individual services — it leaves orphan child processes and dangling sockets. Always stop/restart via the `start:all` script.
 >
+> **FIRST-RUN / ENV FILES**
+> - The repo is bootstrapped by `npm run setup` (see [`scripts/setup.mjs`](scripts/setup.mjs)). It writes [`apps/service/.env`](apps/service/.env.example) and the root [`.env`](.env.example). Re-running uses existing values as defaults and backs up the previous `.env` to `.env.backup`.
+> - Three Postgres modes: `docker` (local container in [`docker-compose.yml`](docker-compose.yml)), `supabase` (hosted), or `system` (BYO `DATABASE_URL`). **Supabase URL/keys ARE the Postgres connection** for the Supabase mode — never treat them as an unrelated add-on.
+> - When you see missing env vars at runtime, do NOT hand-edit `.env` files unless the user explicitly asks. Tell the user to run `npm run setup` instead — that script is the single source of truth for generated env files.
+>
 > **ID GENERATION RULES**
 > - **EVERY ID IS A NATIVE POSTGRES UUID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**. 
 > - **NANOIDS WERE USED IN THE LEGACY SYSTEM BUT HAVE BEEN REPLACED BY `uuid().defaultRandom()` IN DRIZZLE ORM**.
