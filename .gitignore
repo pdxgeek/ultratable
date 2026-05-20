@@ -28,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local state (settings, worktrees)
+.claude/
