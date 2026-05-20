@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read This First
 
-Before touching the ID system, data layer, or schema: read `AI_README_FIRST.MD`. It contains critical architectural contracts that must be followed.
+This file covers **what to run and where things live**. The architectural contracts and agent operating rules live in [AI_README_FIRST.MD](AI_README_FIRST.MD) — read that before touching the ID system, data layer, schema, or GraphQL resolvers. Specifically:
+
+- **§1 ID Philosophy** — dual-ID system, naming convention, timestamp/timezone rules, hybrid SQL+JSONB column policy
+- **§3–4 Cache Isolation & Lifecycle** — raw API cache vs. domain cache keying
+- **§5 Architecture & Design Principles** — library-over-bespoke, DataLoader requirement for nested resolvers, performance and SOLID/DRY guidance
+- **§6 AI Agent Operational Rules** — no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
 
 ## First-Run Setup
 
@@ -72,36 +77,12 @@ UltraTable is a real-time fantasy sports platform structured as a monorepo with 
 
 Better Auth manages sessions (email/password + Google OAuth). Two-tier user model: `auth_user` (Better Auth) linked to domain `user` (with roles) via `auth_links`. Dev-only `/api/auth/dev-login` endpoint exists for testing roles locally.
 
-## Critical Contracts
+## Verifying Changes
 
-### Dual-ID System
-Every entity has two IDs — never conflate them:
+Zero lint warnings is mandatory. After any change, run:
 
-| Name pattern | Type | Meaning |
-|---|---|---|
-| `leagueId`, `teamId`, `seasonId` | `String` (UUID) | Internal Postgres primary key |
-| `leagueSourceId`, `teamSourceId` | `Int` | External API-Football provider ID |
+```bash
+npm run lint --workspaces
+```
 
-GraphQL args for external IDs must use the `sourceId` suffix. All GraphQL fields/args must have a `description` property stating which ID type they accept.
-
-### Timestamps
-- Every timestamp column must use the `utcTimestamp()` helper in `schema.ts` (enforces `timestamptz(3)`)
-- Never use bare `timestamp()` or `sql\`now()\`` — use `NOW_MS` from `supabase.repository.ts`
-- Postgres `now()` is microseconds; JS `Date` and GraphQL `DateTime` are milliseconds — mixing causes phantom delta sync bugs
-
-### Hybrid Schema (SQL + JSONB)
-Only put data in explicit columns if the DB engine needs it (foreign keys, unique constraints, filter/sort targets). Everything else goes in `metadata: jsonb('metadata')`. Do not add columns for display-only or optional fields.
-
-### Cache Isolation
-Raw API cache (`apiGet`) is keyed by `[endpoint]_[remoteId]_[season]` (external IDs).  
-Domain cache is keyed by internal UUIDs. They never share keys — this ensures a deleted+recreated entity gets a clean cache slate automatically.
-
-## TypeScript Standards
-
-- **No `any`** — ever. Use `unknown` with type guards, or Drizzle's `$inferSelect`/`$inferInsert` for DB types.
-- Zero lint warnings is mandatory. After changes: `npm run lint --workspaces`
-- Keep components small and focused. No "God Components" or 1000+ line files.
-
-## Utility Scripts
-
-Write one-off scripts to `/tmp/` (not the workspace root or `apps/`). Include a header comment: what it does, why it was generated, creation datetime. Delete them when done.
+For everything else — architectural contracts (ID system, timestamps, hybrid schema, cache isolation, DataLoader rule) and operational rules (no `any`, small components, `/tmp/` for one-off scripts) — see [AI_README_FIRST.MD](AI_README_FIRST.MD).
