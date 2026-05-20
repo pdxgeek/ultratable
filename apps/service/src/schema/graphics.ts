@@ -1,6 +1,6 @@
 import { builder, requireAdmin } from './builder';
 import * as schema from '../db/schema';
-import { repository } from '../repositories/supabase.repository';
+import { repository } from '../repositories/postgres.repository';
 import { graphicsService } from '../services/graphics.service';
 import { storageProvider } from '../providers/supabase-storage.provider';
 

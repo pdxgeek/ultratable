@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { repository } from './supabase.repository';
+import { repository } from './postgres.repository';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq } from 'drizzle-orm';
 
-describe('SupabaseFootballRepository - Formula & Graphics', () => {
+describe('PostgresFootballRepository - Formula & Graphics', () => {
     const testFormula = {
         id: 'test-pts',
         name: 'Test Points',
