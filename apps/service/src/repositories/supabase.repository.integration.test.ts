@@ -71,14 +71,14 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
             const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
             if (league.length === 0) return;
 
-            const leagueId = league[0].sourceId;
+            const leagueSourceId = league[0].sourceId;
             const season = anySeason[0].year;
 
-            const fixtures = await repository.football.getFixtures(leagueId, season);
+            const fixtures = await repository.football.getFixtures(leagueSourceId, season);
             if (fixtures.length === 0) return; // Skip if no data
 
             const midPoint = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
-            const recent = await repository.football.getFixtures(leagueId, season, midPoint);
+            const recent = await repository.football.getFixtures(leagueSourceId, season, midPoint);
 
             recent.forEach(f => {
                 expect(new Date(f.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());
@@ -93,19 +93,19 @@ describe('SupabaseFootballRepository - Formula & Graphics', () => {
             const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
             if (league.length === 0) return;
 
-            const leagueId = league[0].sourceId;
+            const leagueSourceId = league[0].sourceId;
             const season = anySeason[0].year;
 
             let teams;
             try {
-                teams = await repository.football.getTeams(leagueId, season);
+                teams = await repository.football.getTeams(leagueSourceId, season);
             } catch (e) {
                 return; // Skip if league/season not found
             }
             if (!teams || teams.length === 0) return;
 
             const midPoint = new Date(Date.now() - 1000 * 60 * 60);
-            const recent = await repository.football.getTeams(leagueId, season, midPoint);
+            const recent = await repository.football.getTeams(leagueSourceId, season, midPoint);
 
             recent.forEach(t => {
                 expect(new Date(t.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());

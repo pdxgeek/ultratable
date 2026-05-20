@@ -22,15 +22,18 @@ export interface SyncResult<T = Record<string, unknown>> {
     };
 }
 
+// Dual-ID contract (AI_README_FIRST.MD §1): parameters that carry an external
+// provider ID MUST end in `SourceId`. `leagueId` is reserved for the internal
+// Postgres UUID. Do not reintroduce a bare `leagueId: number` here.
 export interface FootballRepository {
     getLeagues(): Promise<Array<typeof schema.leagues.$inferSelect>>;
     getInternalSeasons(leagueSourceId: number, internalLeagueId?: string): Promise<Array<typeof schema.seasons.$inferSelect>>;
     getAllInternalSeasons(): Promise<Array<typeof schema.seasons.$inferSelect>>;
-    getTeams(leagueId: number, season: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>>;
+    getTeams(leagueSourceId: number, season: number, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>>;
     getTeamsBySeasonId(seasonId: string, since?: Date): Promise<Array<typeof schema.teams.$inferSelect>>;
-    syncSeasons(leagueId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>>;
-    syncFixtures(leagueId: number, season: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>>;
-    getFixtures(leagueId: number, season: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
+    syncSeasons(leagueSourceId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>>;
+    syncFixtures(leagueSourceId: number, season: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>>;
+    getFixtures(leagueSourceId: number, season: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>>;
     getFixturesBySeasonId(seasonId: string, since?: Date, forceRefresh?: boolean): Promise<Array<typeof schema.fixtures.$inferSelect>>;
 
     // Catalog Management

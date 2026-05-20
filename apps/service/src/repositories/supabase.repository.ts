@@ -446,13 +446,13 @@ export class SupabaseFootballRepository implements FootballRepository {
             });
     }
 
-    async syncSeasons(leagueId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>> {
+    async syncSeasons(leagueSourceId: number): Promise<SyncResult<typeof schema.seasons.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
 
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueId));
-        if (!localLeague) throw new Error(`League with sourceId ${leagueId} not found locally.`);
+        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
+        if (!localLeague) throw new Error(`League with sourceId ${leagueSourceId} not found locally.`);
 
-        const ingested = await this.provider.getSeasons(leagueId);
+        const ingested = await this.provider.getSeasons(leagueSourceId);
 
         const seasonsToInsert = ingested.map((s) => ({
             leagueId: localLeague.id,
