@@ -23,6 +23,34 @@ services:
       retries: 10
       start_period: 5s
 
+  # ──────────────────────────────────────────────────────────────
+  # MinIO — S3-compatible blob storage used when DB_MODE=docker.
+  # Started in isolation during setup with:
+  #   docker compose up -d minio
+  # Persists data in the named volume `ultratable_minio_data`.
+  # API on :9000, web console on :9001 (root / root12345).
+  # The application creates and configures the `graphics` bucket
+  # automatically — no bucket-init container required.
+  # ──────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: root12345
+    volumes:
+      - ultratable_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   service:
     build:
       context: .
@@ -46,3 +74,4 @@ services:
 
 volumes:
   ultratable_pg_data:
+  ultratable_minio_data:
