@@ -5,6 +5,7 @@ import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
 import { LeagueRef, SeasonRef } from './football';
 import { GraphQLError } from 'graphql';
+import { SeasonConfigSchema } from './seasonConfig';
 
 const CatalogCountryRef = builder.objectRef<typeof schema.catalogCountries.$inferSelect>('CatalogCountry');
 const CatalogLeagueRef = builder.objectRef<typeof schema.catalogLeagues.$inferSelect>('CatalogLeague');
@@ -171,13 +172,25 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { seasonId, configJson }, ctx) => {
             requireAdmin(ctx);
-            let config: Record<string, unknown>;
+            let raw: unknown;
             try {
-                config = JSON.parse(configJson);
+                raw = JSON.parse(configJson);
             } catch {
                 throw new GraphQLError(`Invalid JSON in configJson: ${configJson.slice(0, 100)}`);
             }
-            const result = await repository.football.updateSeasonConfig(seasonId, config);
+            const parsed = SeasonConfigSchema.safeParse(raw);
+            if (!parsed.success) {
+                throw new GraphQLError('Invalid season config', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                        validationErrors: parsed.error.issues.map((i) => ({
+                            path: i.path.join('.'),
+                            message: i.message,
+                        })),
+                    },
+                });
+            }
+            const result = await repository.football.updateSeasonConfig(seasonId, parsed.data);
             cacheService.invalidate('seasons');
             return result;
         },
