@@ -147,15 +147,29 @@ PORT=${vars.PORT}
 LOG_LEVEL=${vars.LOG_LEVEL}
 
 # ── Database ────────────────────────────────────────────────
-# DB_MODE=${vars.DB_MODE}  (informational — not read by the service)
+# DB_MODE selects the runtime mode (supabase | docker | system). Read by
+# apps/service/src/config/runtime-mode.ts to decide which storage backend
+# to use and whether to construct the Supabase SDK client.
+DB_MODE=${vars.DB_MODE}
 DATABASE_URL=${vars.DATABASE_URL}
 
 # ── Supabase (storage / SDK) ─────────────────────────────────
-# Leave blank when running against local Postgres. Graphics upload
-# features will fail at call time without these.
+# Only consulted when DB_MODE=supabase. Leave blank otherwise.
 SUPABASE_URL=${vars.SUPABASE_URL}
 SUPABASE_ANON_KEY=${vars.SUPABASE_ANON_KEY}
 SUPABASE_SERVICE_ROLE_KEY=${vars.SUPABASE_SERVICE_ROLE_KEY}
+
+# ── S3 / MinIO (blob storage) ────────────────────────────────
+# Used when DB_MODE=docker (local MinIO via docker-compose). Any
+# S3-compatible endpoint works — point S3_ENDPOINT at AWS S3, R2,
+# Backblaze B2, etc. and the same provider talks to it. Leave
+# blank for DB_MODE=system to disable graphics uploads.
+S3_ENDPOINT=${vars.S3_ENDPOINT}
+S3_REGION=${vars.S3_REGION}
+S3_ACCESS_KEY=${vars.S3_ACCESS_KEY}
+S3_SECRET_KEY=${vars.S3_SECRET_KEY}
+S3_BUCKET=${vars.S3_BUCKET}
+S3_PUBLIC_URL=${vars.S3_PUBLIC_URL}
 
 # ── Football Data Provider ───────────────────────────────────
 # Sign up at https://www.api-football.com/. Required to load any
@@ -211,7 +225,9 @@ async function main() {
         `service connects to plain Postgres and the Supabase storage features are off.`
     );
 
-    const inferredMode = existing.SUPABASE_URL
+    const inferredMode = existing.DB_MODE
+        ? existing.DB_MODE
+        : existing.SUPABASE_URL
         ? 'supabase'
         : existing.DATABASE_URL?.includes('localhost')
         ? 'docker'
@@ -235,6 +251,12 @@ async function main() {
         SUPABASE_URL: '',
         SUPABASE_ANON_KEY: '',
         SUPABASE_SERVICE_ROLE_KEY: '',
+        S3_ENDPOINT: existing.S3_ENDPOINT || '',
+        S3_REGION: existing.S3_REGION || '',
+        S3_ACCESS_KEY: existing.S3_ACCESS_KEY || '',
+        S3_SECRET_KEY: existing.S3_SECRET_KEY || '',
+        S3_BUCKET: existing.S3_BUCKET || '',
+        S3_PUBLIC_URL: existing.S3_PUBLIC_URL || '',
         API_FOOTBALL_KEY: '',
         BETTER_AUTH_SECRET: existing.BETTER_AUTH_SECRET || randomBytes(32).toString('hex'),
         BETTER_AUTH_URL: existing.BETTER_AUTH_URL || 'http://localhost:5174',
@@ -260,6 +282,14 @@ async function main() {
         vars.DATABASE_URL = await ask('DATABASE_URL', {
             def: existing.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/postgres',
         });
+        // Default S3 vars target the MinIO container in docker-compose.yml.
+        // Operator can edit .env to point at a different S3-compatible endpoint.
+        vars.S3_ENDPOINT = existing.S3_ENDPOINT || 'http://localhost:9000';
+        vars.S3_REGION = existing.S3_REGION || 'us-east-1';
+        vars.S3_ACCESS_KEY = existing.S3_ACCESS_KEY || 'root';
+        vars.S3_SECRET_KEY = existing.S3_SECRET_KEY || 'root12345';
+        vars.S3_BUCKET = existing.S3_BUCKET || 'graphics';
+        vars.S3_PUBLIC_URL = existing.S3_PUBLIC_URL || 'http://localhost:9000';
         // Supabase keys intentionally left blank.
     } else {
         vars.DATABASE_URL = await ask('DATABASE_URL', { def: existing.DATABASE_URL, secret: true });
@@ -318,6 +348,20 @@ async function main() {
                 stdout.write(c.red('  docker compose up failed — fix the error above and re-run.\n'));
             } else {
                 stdout.write(c.green('  ✓ Postgres container is up on localhost:5432\n'));
+            }
+        }
+
+        header('MinIO container');
+        paragraph(
+            `MinIO is the local S3-compatible blob store used for graphics in DB_MODE=docker.\n` +
+            `S3 API on :9000, web console on :9001 (root / root12345).\n` +
+            `The service auto-creates the bucket and sets a public-read policy on first call.`
+        );
+        if (await confirm('Start the local MinIO container now (docker compose up -d minio)?', true)) {
+            if (!run('docker', ['compose', 'up', '-d', 'minio'])) {
+                stdout.write(c.red('  docker compose up failed — fix the error above and re-run.\n'));
+            } else {
+                stdout.write(c.green('  ✓ MinIO container is up on localhost:9000 (console on :9001)\n'));
             }
         }
     }

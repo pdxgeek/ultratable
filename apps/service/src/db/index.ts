@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as schema from './schema';
 import * as dotenv from 'dotenv';
 import path from 'path';
+import { isSupabaseMode } from '../config/runtime-mode';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const dbUrl = process.env.DATABASE_URL;
@@ -25,8 +26,8 @@ export const db = pgClient
     ? drizzle(pgClient, { schema })
     : (null as unknown as ReturnType<typeof drizzle>);
 
-// Supabase "Full Stack" Client
-export const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+// Supabase "Full Stack" Client — only constructed in supabase runtime mode.
+export const supabase = (isSupabaseMode() && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
         auth: { persistSession: false }
     })

@@ -12,7 +12,7 @@ vi.mock('../db', () => ({
     }
 }));
 
-vi.mock('../providers/supabase-storage.provider', () => ({
+vi.mock('../providers/storage', () => ({
     storageProvider: {
         upload: vi.fn(),
         getPublicUrl: vi.fn(),
@@ -29,7 +29,7 @@ describe('GraphicsService', () => {
     describe('registerFromUrl', () => {
         it('downloads, hashes, uploads, and maps a graphic', async () => {
             const axios = (await import('axios')).default;
-            const { storageProvider } = await import('../providers/supabase-storage.provider');
+            const { storageProvider } = await import('../providers/storage');
             const { db } = await import('../db');
             const { graphicsService } = await import('./graphics.service');
 
@@ -79,7 +79,7 @@ describe('GraphicsService', () => {
     describe('resolveUrl', () => {
         it('returns public URL when graphic mapping exists', async () => {
             const { db } = await import('../db');
-            const { storageProvider } = await import('../providers/supabase-storage.provider');
+            const { storageProvider } = await import('../providers/storage');
             const { graphicsService } = await import('./graphics.service');
 
             const selectMock = vi.fn().mockReturnValue({

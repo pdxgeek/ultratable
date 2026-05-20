@@ -93,7 +93,7 @@ vi.mock('../services/graphics.service', () => ({
     },
 }));
 
-vi.mock('../providers/supabase-storage.provider', () => ({
+vi.mock('../providers/storage', () => ({
     storageProvider: {
         getPublicUrl: vi.fn().mockReturnValue('https://mock.storage/path'),
     },
