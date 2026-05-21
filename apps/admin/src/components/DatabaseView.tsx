@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { AlertCircle, Database, Globe } from 'lucide-react';
 
 import { gqlFetch } from '../lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 interface ConfigStatus {
@@ -11,6 +15,9 @@ interface ConfigStatus {
     supabaseUrlMasked: string | null;
     supabaseAnonKeyMasked: string | null;
 }
+
+const fieldClass =
+    'h-12 bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-600 focus-visible:ring-0 font-mono';
 
 const DatabaseView = ({
     config,
@@ -73,7 +80,7 @@ const DatabaseView = ({
     return (
         <div className="max-w-4xl space-y-16 pb-24">
             {/* Database Setup */}
-            <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+            <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
                 <div className="flex items-center gap-5 mb-10">
                     <div
                         className={cn(
@@ -116,12 +123,16 @@ const DatabaseView = ({
 
                 <form onSubmit={onConfigureDb} className="space-y-6">
                     <div className="space-y-3">
-                        <label className="text-xs font-semibold text-slate-400">
+                        <Label
+                            htmlFor="db-url"
+                            className="text-xs font-semibold text-slate-400"
+                        >
                             Connection Endpoint
-                        </label>
-                        <input
+                        </Label>
+                        <Input
+                            id="db-url"
                             type="text"
-                            className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:border-sky-500/50 focus:outline-none transition-all font-mono"
+                            className={fieldClass}
                             placeholder="postgresql://user:pass@host:port/dbname"
                             value={dbUrl}
                             onChange={(e) => setDbUrl(e.target.value)}
@@ -129,13 +140,13 @@ const DatabaseView = ({
                         />
                     </div>
                     <div className="flex items-center gap-6">
-                        <button
+                        <Button
                             type="submit"
                             disabled={dbStatus === 'loading'}
-                            className="bg-white text-black px-8 py-2.5 rounded-lg font-semibold text-sm hover:bg-slate-200 transition-all"
+                            className="h-10 bg-white text-black hover:bg-slate-200 px-8 font-semibold text-sm"
                         >
                             {dbStatus === 'loading' ? 'Verifying...' : 'Commit Changes'}
-                        </button>
+                        </Button>
                         {dbStatus === 'success' && (
                             <p className="text-emerald-400 text-xs font-medium">
                                 Write successful. Restarting engine.
@@ -148,10 +159,10 @@ const DatabaseView = ({
                         )}
                     </div>
                 </form>
-            </section>
+            </Card>
 
             {/* Supabase SDK */}
-            <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+            <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
                 <div className="flex items-center gap-5 mb-10">
                     <div className="p-4 bg-emerald-500/10 rounded-xl text-emerald-500 shadow-sm">
                         <Globe className="w-6 h-6" />
@@ -188,12 +199,16 @@ const DatabaseView = ({
                 <form onSubmit={onConfigureSupabase} className="space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-3">
-                            <label className="text-xs font-semibold text-slate-400">
+                            <Label
+                                htmlFor="sup-url"
+                                className="text-xs font-semibold text-slate-400"
+                            >
                                 Project Endpoint
-                            </label>
-                            <input
+                            </Label>
+                            <Input
+                                id="sup-url"
                                 type="text"
-                                className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-700 focus:border-emerald-500/50 focus:outline-none transition-all font-mono"
+                                className={fieldClass}
                                 placeholder="https://project.supabase.co"
                                 value={sUrl}
                                 onChange={(e) => setSUrl(e.target.value)}
@@ -201,12 +216,16 @@ const DatabaseView = ({
                             />
                         </div>
                         <div className="space-y-3">
-                            <label className="text-xs font-semibold text-slate-400">
+                            <Label
+                                htmlFor="sup-key"
+                                className="text-xs font-semibold text-slate-400"
+                            >
                                 Anon Key / Service Key
-                            </label>
-                            <input
+                            </Label>
+                            <Input
+                                id="sup-key"
                                 type="password"
-                                className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-700 focus:border-emerald-500/50 focus:outline-none transition-all font-mono"
+                                className={fieldClass}
                                 placeholder="eyJhbG..."
                                 value={sKey}
                                 onChange={(e) => setSKey(e.target.value)}
@@ -215,13 +234,13 @@ const DatabaseView = ({
                         </div>
                     </div>
                     <div className="flex items-center gap-6">
-                        <button
+                        <Button
                             type="submit"
                             disabled={sStatus === 'loading'}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm shadow-emerald-600/10"
+                            className="h-10 bg-emerald-600 hover:bg-emerald-500 text-white px-8 font-semibold text-sm shadow-sm shadow-emerald-600/10"
                         >
                             {sStatus === 'loading' ? 'Encrypting...' : 'Sync Credentials'}
-                        </button>
+                        </Button>
                         {sStatus === 'success' && (
                             <p className="text-emerald-400 text-xs font-medium">
                                 SDK initialized successfully.
@@ -232,7 +251,7 @@ const DatabaseView = ({
                         )}
                     </div>
                 </form>
-            </section>
+            </Card>
 
             <div className="bg-slate-900/20 border border-slate-800/40 p-8 rounded-2xl flex gap-6 items-start">
                 <AlertCircle className="w-5 h-5 text-slate-500 mt-1" />

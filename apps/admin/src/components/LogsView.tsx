@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { AlertCircle, History, Loader2, RefreshCw } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 export interface LogEntry {
@@ -17,8 +19,11 @@ interface LogsViewProps {
     onRefresh: () => Promise<void>;
 }
 
+const LEVELS = ['all', 'error', 'warn', 'info'] as const;
+type Level = (typeof LEVELS)[number];
+
 export const LogsView: React.FC<LogsViewProps> = ({ logs, onRefresh }) => {
-    const [filter, setFilter] = useState<'all' | 'error' | 'warn' | 'info'>('all');
+    const [filter, setFilter] = useState<Level>('all');
     const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
     const filteredLogs = logs.filter((log) => filter === 'all' || log.level === filter);
@@ -37,29 +42,29 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onRefresh }) => {
                         Monitor data ingestion and infrastructure health.
                     </p>
                 </div>
-                <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl border border-slate-800/50 relative z-10">
-                    {(['all', 'error', 'warn', 'info'] as const).map((lvl) => (
-                        <button
-                            key={lvl}
-                            onClick={() => setFilter(lvl)}
-                            className={cn(
-                                'px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-                                filter === lvl
-                                    ? 'bg-slate-800 text-white shadow-sm'
-                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50',
-                            )}
-                        >
-                            {lvl}
-                        </button>
-                    ))}
-                    <div className="w-px h-4 bg-slate-800 mx-2" />
-                    <button
+                <div className="flex items-center gap-2 relative z-10">
+                    <Tabs value={filter} onValueChange={(v) => setFilter(v as Level)}>
+                        <TabsList className="bg-slate-900/50 border border-slate-800/50 h-auto p-1 rounded-xl">
+                            {LEVELS.map((lvl) => (
+                                <TabsTrigger
+                                    key={lvl}
+                                    value={lvl}
+                                    className="h-7 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300 data-active:bg-slate-800 data-active:text-white"
+                                >
+                                    {lvl}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={onRefresh}
-                        className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+                        className="text-slate-500 hover:text-white hover:bg-slate-800"
                         title="Refresh Logs"
                     >
                         <RefreshCw className="w-4 h-4" />
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -73,11 +78,12 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onRefresh }) => {
                     ) : (
                         <div className="divide-y divide-slate-800/40">
                             {filteredLogs.map((log) => (
-                                <div
+                                <button
                                     key={log.id}
+                                    type="button"
                                     onClick={() => setSelectedLog(log)}
                                     className={cn(
-                                        'p-4 cursor-pointer hover:bg-slate-800/20 transition-all font-mono text-xs flex gap-4',
+                                        'w-full p-4 text-left cursor-pointer hover:bg-slate-800/20 transition-all font-mono text-xs flex gap-4',
                                         selectedLog?.id === log.id && 'bg-slate-800/40',
                                     )}
                                 >
@@ -105,7 +111,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onRefresh }) => {
                                             {log.module}
                                         </p>
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     )}

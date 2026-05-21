@@ -1,7 +1,14 @@
 import type { Graphic } from './types';
 
 import React from 'react';
-import { Image as ImageIcon, X } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
+
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Props {
     graphic: Graphic;
@@ -9,26 +16,14 @@ interface Props {
 }
 
 export const GraphicDetailModal: React.FC<Props> = ({ graphic, onClose }) => (
-    <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200"
-        onClick={onClose}
-    >
-        <div
-            className="bg-[#0d1117] border border-slate-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
-        >
-            <div className="flex items-center justify-between p-4 border-b border-slate-800/60 bg-slate-900/50">
-                <h3 className="text-lg font-semibold text-white capitalize flex items-center gap-2">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-3xl sm:max-w-3xl bg-[#0d1117] border border-slate-800 ring-0 rounded-2xl p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-slate-800/60 bg-slate-900/50 gap-2">
+                <DialogTitle className="text-lg font-semibold text-white capitalize flex items-center gap-2">
                     <ImageIcon className="w-5 h-5 text-sky-400" />
                     {graphic.entityType} Graphic Details
-                </h3>
-                <button
-                    onClick={onClose}
-                    className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-md hover:bg-slate-800 bg-slate-900"
-                >
-                    <X className="w-5 h-5" />
-                </button>
-            </div>
+                </DialogTitle>
+            </DialogHeader>
             <div className="p-6 overflow-y-auto flex flex-col md:flex-row gap-8">
                 <div className="w-full md:w-1/2 aspect-square bg-slate-900/50 rounded-2xl p-6 flex items-center justify-center relative overflow-hidden border border-slate-800/60 shadow-inner">
                     <div className="absolute inset-0 bg-grid-slate-800/[0.2] bg-[size:12px_12px]" />
@@ -136,6 +131,6 @@ export const GraphicDetailModal: React.FC<Props> = ({ graphic, onClose }) => (
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </DialogContent>
+    </Dialog>
 );

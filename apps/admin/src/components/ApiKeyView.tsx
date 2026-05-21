@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, Key } from 'lucide-react';
 
 import { gqlFetch } from '../lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface ApiKeyViewProps {
     onUpdate: () => void;
@@ -42,7 +46,7 @@ const ApiKeyView = ({ onUpdate, currentKeyMasked }: ApiKeyViewProps) => {
 
     return (
         <div className="max-w-3xl space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+            <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
                 <h3 className="text-lg font-semibold text-white mb-2">API-Football Credentials</h3>
                 <p className="text-sm text-slate-400 mb-8 leading-relaxed font-normal">
                     Provide your API-Football authentication key from{' '}
@@ -84,13 +88,17 @@ const ApiKeyView = ({ onUpdate, currentKeyMasked }: ApiKeyViewProps) => {
 
                 <form onSubmit={onConfigure} className="space-y-8">
                     <div className="space-y-3">
-                        <label className="text-xs font-semibold text-slate-400 flex items-center gap-2">
+                        <Label
+                            htmlFor="api-key"
+                            className="text-xs font-semibold text-slate-400"
+                        >
                             <Key className="w-3.5 h-3.5" />
                             API-Football Key
-                        </label>
-                        <input
+                        </Label>
+                        <Input
+                            id="api-key"
                             type="password"
-                            className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/10 transition-all font-mono"
+                            className="h-12 bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-600 focus-visible:ring-0 font-mono"
                             placeholder="e.g. 29da7bc40b13..."
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
@@ -99,13 +107,13 @@ const ApiKeyView = ({ onUpdate, currentKeyMasked }: ApiKeyViewProps) => {
                     </div>
 
                     <div className="flex items-center gap-6 pt-2">
-                        <button
+                        <Button
                             type="submit"
                             disabled={status === 'loading'}
-                            className="bg-sky-500 hover:bg-sky-400 text-white px-8 py-2.5 rounded-lg font-semibold text-sm disabled:opacity-50 transition-all shadow-sm shadow-sky-500/10"
+                            className="h-10 bg-sky-500 hover:bg-sky-400 text-white px-8 font-semibold text-sm disabled:opacity-50 shadow-sm shadow-sky-500/10"
                         >
                             {status === 'loading' ? 'Saving...' : 'Update Integration'}
-                        </button>
+                        </Button>
 
                         {status === 'success' && (
                             <span className="text-emerald-400 text-xs font-medium flex items-center gap-2">
@@ -122,7 +130,7 @@ const ApiKeyView = ({ onUpdate, currentKeyMasked }: ApiKeyViewProps) => {
                         )}
                     </div>
                 </form>
-            </div>
+            </Card>
         </div>
     );
 };

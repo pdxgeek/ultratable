@@ -1,15 +1,12 @@
 import type { Graphic, GraphicType } from './types';
 
 import React from 'react';
-import { clsx } from 'clsx';
 import { Image as ImageIcon, Loader2, Search } from 'lucide-react';
-import { twMerge } from 'tailwind-merge';
+
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { GRAPHIC_TYPES } from './types';
-
-function cn(...inputs: (string | undefined | null | false)[]) {
-    return twMerge(clsx(inputs));
-}
 
 interface Props {
     graphics: Graphic[];
@@ -33,40 +30,35 @@ export const GraphicsGallery: React.FC<Props> = ({
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 bg-[#0d1117] border border-slate-800/60 p-2 rounded-xl">
-                    <button
-                        className={cn(
-                            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
-                            typeFilter === 'all'
-                                ? 'bg-sky-500/20 text-sky-400'
-                                : 'text-slate-400 hover:text-slate-200',
-                        )}
-                        onClick={() => setTypeFilter('all')}
-                    >
-                        All Types
-                    </button>
-                    {GRAPHIC_TYPES.map((t) => (
-                        <button
-                            key={t}
-                            className={cn(
-                                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all capitalize',
-                                typeFilter === t
-                                    ? 'bg-sky-500/20 text-sky-400'
-                                    : 'text-slate-400 hover:text-slate-200',
-                            )}
-                            onClick={() => setTypeFilter(t)}
+                <Tabs
+                    value={typeFilter}
+                    onValueChange={(v) => setTypeFilter(v as GraphicType | 'all')}
+                >
+                    <TabsList className="bg-[#0d1117] border border-slate-800/60 p-2 h-auto rounded-xl">
+                        <TabsTrigger
+                            value="all"
+                            className="h-7 px-4 text-sm font-medium text-slate-400 hover:text-slate-200 data-active:bg-sky-500/20 data-active:text-sky-400"
                         >
-                            {t}s
-                        </button>
-                    ))}
-                </div>
+                            All Types
+                        </TabsTrigger>
+                        {GRAPHIC_TYPES.map((t) => (
+                            <TabsTrigger
+                                key={t}
+                                value={t}
+                                className="h-7 px-4 text-sm font-medium capitalize text-slate-400 hover:text-slate-200 data-active:bg-sky-500/20 data-active:text-sky-400"
+                            >
+                                {t}s
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
 
                 <div className="relative">
-                    <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
+                    <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+                    <Input
                         type="text"
                         placeholder="Search by ID..."
-                        className="bg-slate-900/50 border border-slate-700/50 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all w-full md:w-64"
+                        className="h-10 pl-10 bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-600 focus-visible:border-sky-500/50 focus-visible:ring-0 w-full md:w-64"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />

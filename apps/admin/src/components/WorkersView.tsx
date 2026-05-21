@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Activity, CheckCircle2, Globe, History, Loader2, Play, Settings } from 'lucide-react';
 
 import { gqlFetch } from '../lib/api';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export interface Job {
@@ -65,7 +66,6 @@ const WorkersView = ({
 
     return (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            {/* Jobs Header */}
             <div className="flex justify-between items-center bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
                 <div className="relative z-10">
@@ -81,7 +81,6 @@ const WorkersView = ({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                {/* Active Jobs List */}
                 <div className="lg:col-span-2 space-y-6">
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2">
                         Active Jobs
@@ -120,24 +119,24 @@ const WorkersView = ({
                                         </div>
                                     </div>
                                 </div>
-                                <button
+                                <Button
+                                    size="icon-lg"
                                     onClick={() => runJob(job.name)}
                                     disabled={runningJob === job.name}
-                                    className="p-2.5 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white rounded-xl transition-all disabled:opacity-30 group/btn relative"
+                                    className="size-10 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white rounded-xl disabled:opacity-30"
                                     title="Run Now"
                                 >
                                     {runningJob === job.name ? (
                                         <Loader2 className="w-5 h-5 animate-spin" />
                                     ) : (
-                                        <Play className="w-5 h-5 fill-current transition-transform group-hover/btn:scale-110" />
+                                        <Play className="w-5 h-5 fill-current transition-transform hover:scale-110" />
                                     )}
-                                </button>
+                                </Button>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Execution History */}
                 <div className="space-y-6">
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center justify-between">
                         Recent History

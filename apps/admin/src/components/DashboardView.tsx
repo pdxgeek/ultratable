@@ -1,5 +1,8 @@
 import { Activity, Database, Globe, Key, Trophy } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+
 import StatCard from './StatCard';
 
 interface ConfigStatus {
@@ -39,7 +42,7 @@ const DashboardView = ({ config }: { config: ConfigStatus | null }) => (
         <section>
             <h3 className="text-lg font-medium text-white mb-6">System Health</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+                <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="p-3 bg-sky-500/10 rounded-xl text-sky-500">
                             <Trophy className="w-5 h-5" />
@@ -56,12 +59,12 @@ const DashboardView = ({ config }: { config: ConfigStatus | null }) => (
                         will track points deductions, fixture adjustments, and team availability
                         automatically.
                     </p>
-                    <button className="bg-white text-black px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors shadow-sm">
+                    <Button className="h-10 bg-white text-black hover:bg-slate-200 px-6 font-semibold text-sm shadow-sm w-fit">
                         Initialize Data Sync
-                    </button>
-                </div>
+                    </Button>
+                </Card>
 
-                <div className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+                <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
                             <Activity className="w-5 h-5" />
@@ -89,7 +92,7 @@ const DashboardView = ({ config }: { config: ConfigStatus | null }) => (
                             in standby mode awaiting the first worker trigger.
                         </p>
                     </div>
-                </div>
+                </Card>
             </div>
         </section>
     </div>

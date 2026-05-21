@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { API_BASE } from '../lib/api';
 import { authClient } from '../lib/auth-client';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 interface DevAuthSession {
     user: {
@@ -85,99 +87,63 @@ export function DevLoginTools() {
         }
     };
 
-    if (!import.meta.env.DEV) return null; // Safety check
+    if (!import.meta.env.DEV) return null;
 
     return (
-        <div
-            style={{
-                position: 'fixed',
-                bottom: '20px',
-                right: '20px',
-                background: '#1a1a1a',
-                border: '1px solid #333',
-                borderRadius: '8px',
-                padding: '16px',
-                width: '320px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                zIndex: 9999,
-                color: '#fff',
-                fontFamily: 'monospace',
-                maxHeight: '400px',
-                overflowY: 'auto',
-            }}
-        >
-            <h3
-                style={{
-                    margin: '0 0 12px 0',
-                    fontSize: '14px',
-                    borderBottom: '1px solid #333',
-                    paddingBottom: '8px',
-                }}
-            >
+        <Card className="fixed bottom-5 right-5 z-[9999] w-80 max-h-[400px] overflow-y-auto bg-[#1a1a1a] border border-[#333] ring-0 rounded-lg p-4 text-white font-mono shadow-lg">
+            <h3 className="m-0 mb-3 text-sm border-b border-[#333] pb-2">
                 🛠️ Dev Auth Tools
             </h3>
 
-            <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
+            <div className="mb-4 flex flex-wrap gap-2">
+                <Button
+                    size="xs"
                     onClick={() => handleLogin('admin')}
                     disabled={loading}
-                    style={btnStyle('#ff4757')}
+                    className="flex-1 h-6 bg-[#ff4757] hover:bg-[#ff4757]/90 text-white text-xs font-bold"
                 >
                     Admin
-                </button>
-                <button
+                </Button>
+                <Button
+                    size="xs"
                     onClick={() => handleLogin('user')}
                     disabled={loading}
-                    style={btnStyle('#2ed573')}
+                    className="flex-1 h-6 bg-[#2ed573] hover:bg-[#2ed573]/90 text-white text-xs font-bold"
                 >
                     User
-                </button>
-                <button
+                </Button>
+                <Button
+                    size="xs"
                     onClick={() => handleLogin('guest')}
                     disabled={loading}
-                    style={btnStyle('#1e90ff')}
+                    className="flex-1 h-6 bg-[#1e90ff] hover:bg-[#1e90ff]/90 text-white text-xs font-bold"
                 >
                     Guest
-                </button>
+                </Button>
                 {session && (
-                    <button onClick={handleLogout} disabled={loading} style={btnStyle('#747d8c')}>
+                    <Button
+                        size="xs"
+                        onClick={handleLogout}
+                        disabled={loading}
+                        className="flex-1 h-6 bg-[#747d8c] hover:bg-[#747d8c]/90 text-white text-xs font-bold"
+                    >
                         Logout
-                    </button>
+                    </Button>
                 )}
             </div>
 
             {error && (
-                <div
-                    style={{
-                        color: '#ff4757',
-                        padding: '8px',
-                        background: 'rgba(255,71,87,0.1)',
-                        borderRadius: '4px',
-                        marginBottom: '12px',
-                        fontSize: '12px',
-                    }}
-                >
+                <div className="text-[#ff4757] p-2 bg-[#ff4757]/10 rounded mb-3 text-xs">
                     {error}
                 </div>
             )}
 
-            <div style={{ fontSize: '12px' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#a4b0be' }}>
-                    Active Session:
-                </div>
+            <div className="text-xs">
+                <div className="font-bold mb-1 text-[#a4b0be]">Active Session:</div>
                 {loading ? (
-                    <div style={{ color: '#ffa502' }}>Loading...</div>
+                    <div className="text-[#ffa502]">Loading...</div>
                 ) : session?.user ? (
-                    <pre
-                        style={{
-                            background: '#000',
-                            padding: '8px',
-                            borderRadius: '4px',
-                            margin: 0,
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-all',
-                        }}
-                    >
+                    <pre className="bg-black p-2 rounded m-0 whitespace-pre-wrap break-all">
                         {JSON.stringify(
                             {
                                 id: session.user.id,
@@ -189,21 +155,9 @@ export function DevLoginTools() {
                         )}
                     </pre>
                 ) : (
-                    <div style={{ color: '#ff6b81' }}>Unauthenticated (No Cookie)</div>
+                    <div className="text-[#ff6b81]">Unauthenticated (No Cookie)</div>
                 )}
             </div>
-        </div>
+        </Card>
     );
 }
-
-const btnStyle = (bg: string) => ({
-    background: bg,
-    border: 'none',
-    color: '#fff',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    flex: '1 1 auto',
-});
