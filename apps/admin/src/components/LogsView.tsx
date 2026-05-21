@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, History, Loader2, RefreshCw } from 'lucide-react';
 
-import { cn } from '../utils';
+import { cn } from '@/lib/utils';
 
 export interface LogEntry {
     id: string;

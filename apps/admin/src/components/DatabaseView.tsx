@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AlertCircle, Database, Globe } from 'lucide-react';
 
 import { gqlFetch } from '../lib/api';
-import { cn } from '../utils';
+import { cn } from '@/lib/utils';
 
 interface ConfigStatus {
     isDatabaseConnected: boolean;
