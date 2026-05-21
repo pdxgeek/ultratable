@@ -32,11 +32,24 @@ type SortKey =
     | 'form';
 type SortDirection = 'asc' | 'desc';
 
+const zoneBorderClass = (zone: string): string => {
+    if (zone === 'promo') return 'border-l-2 border-accent-blue';
+    if (zone === 'playoff') return 'border-l-2 border-accent-yellow';
+    if (zone === 'rel') return 'border-l-2 border-accent-red';
+    return '';
+};
+
 function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
     return fixtures
         .filter((f) => f.homeTeamId === teamId || f.awayTeamId === teamId)
         .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 }
+
+const thBase =
+    'text-left px-4 py-3 text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
+const thClickable = `${thBase} cursor-pointer select-none transition-colors hover:text-text-primary`;
+const tdBase = 'px-4 py-3.5 border-b border-border text-[0.9rem]';
+const colStat = 'w-[50px] text-center';
 
 const StandingsTable: React.FC<StandingsTableProps> = ({
     standings,
@@ -99,11 +112,14 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
 
     const SortIcon = ({ column }: { column: SortKey }) => {
         if (sortConfig.key !== column)
-            return <span className="sort-icon sort-icon--inactive">⇅</span>;
-        return <span className="sort-icon">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+            return <span className="text-[0.7rem] ml-0.5 opacity-30">⇅</span>;
+        return (
+            <span className="text-[0.7rem] ml-0.5 text-accent-blue">
+                {sortConfig.direction === 'asc' ? '↑' : '↓'}
+            </span>
+        );
     };
 
-    // Calculate unique deductions across all teams to assign asterisk legends
     const deductionMap = useMemo(() => {
         const dMap = new Map<
             string,
@@ -130,100 +146,92 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
     }, [sortedStandings]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* All / Home / Away filter */}
-            <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="flex flex-col gap-4">
+            <div className="flex gap-2">
                 {(['all', 'home', 'away'] as const).map((f) => (
                     <button
                         key={f}
                         onClick={() => onFilterChange?.(f)}
-                        style={{
-                            padding: '6px 16px',
-                            borderRadius: '20px',
-                            border: '1px solid var(--border-color)',
-                            background: filter === f ? 'var(--accent-blue)' : 'var(--bg-secondary)',
-                            color: filter === f ? 'white' : 'var(--text-primary)',
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            textTransform: 'capitalize',
-                            transition: 'all 0.2s',
-                        }}
+                        className={`px-4 py-1.5 rounded-[20px] border border-border text-[0.85rem] font-semibold cursor-pointer capitalize transition-all ${
+                            filter === f
+                                ? 'bg-accent-blue text-white'
+                                : 'bg-bg-secondary text-text-primary'
+                        }`}
                     >
                         {f}
                     </button>
                 ))}
             </div>
 
-            <div className="glass-card" style={{ overflow: 'visible' }}>
-                <table className="standings-table">
+            <div className="bg-glass-bg backdrop-blur-md border border-glass-border rounded-lg shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-visible">
+                <table className="w-full border-separate border-spacing-0">
                     <thead>
                         <tr>
                             <th
-                                className="col-pos clickable"
+                                className={`${thClickable} w-10 text-center`}
                                 title="Position"
                                 onClick={() => handleSort('position')}
                             >
                                 # <SortIcon column="position" />
                             </th>
                             <th
-                                className="col-team clickable"
+                                className={thClickable}
                                 title="Team Name"
                                 onClick={() => handleSort('team')}
                             >
                                 Team <SortIcon column="team" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Played"
                                 onClick={() => handleSort('played')}
                             >
                                 P <SortIcon column="played" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Won"
                                 onClick={() => handleSort('won')}
                             >
                                 W <SortIcon column="won" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Drawn"
                                 onClick={() => handleSort('drawn')}
                             >
                                 D <SortIcon column="drawn" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Lost"
                                 onClick={() => handleSort('lost')}
                             >
                                 L <SortIcon column="lost" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Goals For"
                                 onClick={() => handleSort('goalsFor')}
                             >
                                 GF <SortIcon column="goalsFor" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Goals Against"
                                 onClick={() => handleSort('goalsAgainst')}
                             >
                                 GA <SortIcon column="goalsAgainst" />
                             </th>
                             <th
-                                className="col-stat clickable"
+                                className={`${thClickable} ${colStat}`}
                                 title="Goal Difference"
                                 onClick={() => handleSort('goalDifference')}
                             >
                                 GD <SortIcon column="goalDifference" />
                             </th>
                             <th
-                                className="col-pts clickable"
+                                className={`${thClickable} w-[60px] text-center font-bold`}
                                 title="Points"
                                 onClick={() => handleSort('points')}
                             >
@@ -231,14 +239,14 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                             </th>
                             {settings.showForm && (
                                 <th
-                                    className="col-form clickable"
+                                    className={`${thClickable} w-[140px]`}
                                     title="Last 5 Matches (oldest → newest)"
                                     onClick={() => handleSort('form')}
                                 >
                                     Form <SortIcon column="form" />
                                 </th>
                             )}
-                            <th className="col-next" title="Next Match">
+                            <th className={thBase} title="Next Match">
                                 Next
                             </th>
                         </tr>
@@ -276,28 +284,32 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                         : ''
                                 : '';
 
+                            const posBorder = zoneBorderClass(zoneClass);
+
                             return (
-                                <tr key={row.teamId} className={`standings-row ${zoneClass}`}>
-                                    <td className="col-pos">{row.position}</td>
-                                    <td className="col-team">
+                                <tr key={row.teamId} className="hover:bg-white/[0.03]">
+                                    <td className={`${tdBase} w-10 text-center ${posBorder}`}>
+                                        {row.position}
+                                    </td>
+                                    <td className={tdBase}>
                                         <TeamCell
                                             team={{ id: row.teamId, ...row.team }}
                                             showLogo={settings.showLogos}
                                         />
                                     </td>
-                                    <td className="col-stat">{row.played}</td>
-                                    <td className="col-stat">{row.won}</td>
-                                    <td className="col-stat">{row.drawn}</td>
-                                    <td className="col-stat">{row.lost}</td>
-                                    <td className="col-stat">{row.goalsFor}</td>
-                                    <td className="col-stat">{row.goalsAgainst}</td>
-                                    <td className="col-stat">
+                                    <td className={`${tdBase} ${colStat}`}>{row.played}</td>
+                                    <td className={`${tdBase} ${colStat}`}>{row.won}</td>
+                                    <td className={`${tdBase} ${colStat}`}>{row.drawn}</td>
+                                    <td className={`${tdBase} ${colStat}`}>{row.lost}</td>
+                                    <td className={`${tdBase} ${colStat}`}>{row.goalsFor}</td>
+                                    <td className={`${tdBase} ${colStat}`}>{row.goalsAgainst}</td>
+                                    <td className={`${tdBase} ${colStat}`}>
                                         <span
                                             className={
                                                 row.goalDifference > 0
-                                                    ? 'gd-positive'
+                                                    ? 'text-accent-green'
                                                     : row.goalDifference < 0
-                                                      ? 'gd-negative'
+                                                      ? 'text-accent-red'
                                                       : ''
                                             }
                                         >
@@ -305,10 +317,12 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             {row.goalDifference}
                                         </span>
                                     </td>
-                                    <td className="col-pts">
-                                        <span className="pts-value">{row.points}</span>
+                                    <td className={`${tdBase} w-[60px] text-center font-bold`}>
+                                        <span className="font-bold text-accent-blue">
+                                            {row.points}
+                                        </span>
                                         {row.deductions && row.deductions.length > 0 && (
-                                            <span className="pts-asterisk">
+                                            <span className="text-accent-red text-[0.85em] align-super ml-0.5">
                                                 {row.deductions
                                                     .map(
                                                         (d) =>
@@ -323,14 +337,8 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                         )}
                                     </td>
                                     {settings.showForm && (
-                                        <td className="col-form">
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '8px',
-                                                }}
-                                            >
+                                        <td className={`${tdBase} w-[140px]`}>
+                                            <div className="flex items-center gap-2">
                                                 <FixtureDropdown
                                                     type="past"
                                                     align="left"
@@ -346,14 +354,8 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             </div>
                                         </td>
                                     )}
-                                    <td className="col-next">
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                            }}
-                                        >
+                                    <td className={tdBase}>
+                                        <div className="flex items-center gap-2">
                                             <NextMatchBadge
                                                 fixture={row.nextFixture}
                                                 teamId={row.teamId}
@@ -374,12 +376,14 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                     </tbody>
                 </table>
                 {deductionMap.length > 0 && (
-                    <div className="standings-footnotes">
-                        <ul>
+                    <div className="mt-4 px-4 py-3 bg-black/20 rounded-md border border-dashed border-border text-[0.75rem] text-text-secondary text-left">
+                        <ul className="list-none flex flex-col gap-1">
                             {deductionMap.map((d, i) => (
                                 <li key={i}>
-                                    <span className="pts-asterisk">{d.asterisks}</span> {d.teamName}{' '}
-                                    had {Math.abs(d.points)} points deducted: {d.reason}
+                                    <span className="text-accent-red text-[0.85em] align-super ml-0.5">
+                                        {d.asterisks}
+                                    </span>{' '}
+                                    {d.teamName} had {Math.abs(d.points)} points deducted: {d.reason}
                                 </li>
                             ))}
                         </ul>

@@ -7,20 +7,11 @@ const LeagueSelector: React.FC = () => {
         useLeague();
 
     return (
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="flex gap-3 items-center">
             <select
                 value={activeSeason?.id || ''}
                 onChange={(e) => setActiveSeasonId(e.target.value)}
-                style={{
-                    padding: '8px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-accent)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                }}
+                className="px-4 py-2 rounded-md bg-bg-accent text-text-primary border border-border text-[0.9rem] font-semibold cursor-pointer"
             >
                 <option value="" disabled>
                     Select Season
@@ -40,9 +31,7 @@ const LeagueSelector: React.FC = () => {
             </select>
 
             {isSyncing && (
-                <span style={{ fontSize: '0.8rem', color: 'var(--accent-blue)', fontWeight: 500 }}>
-                    Syncing...
-                </span>
+                <span className="text-xs text-accent-blue font-medium">Syncing...</span>
             )}
         </div>
     );

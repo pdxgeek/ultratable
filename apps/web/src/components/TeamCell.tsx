@@ -11,20 +11,15 @@ interface TeamCellProps {
 
 const TeamCell: React.FC<TeamCellProps> = ({ team, showLogo = true }) => {
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="flex items-center gap-3">
             {showLogo && team.logo && (
                 <img
                     src={team.logo}
                     alt={team.name}
-                    style={{
-                        width: '24px',
-                        height: '24px',
-                        objectFit: 'contain',
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-                    }}
+                    className="w-6 h-6 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
                 />
             )}
-            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{team.name}</span>
+            <span className="font-semibold text-text-primary">{team.name}</span>
         </div>
     );
 };

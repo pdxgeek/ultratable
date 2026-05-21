@@ -46,34 +46,27 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
         scheduleHide();
     }, [scheduleHide]);
 
-    if (!fixture || !opponent)
-        return <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>;
+    if (!fixture || !opponent) return <span className="text-text-muted text-sm">-</span>;
 
     const date = new Date(fixture.scheduledAt);
     const isHome = fixture.homeTeamId === teamId;
 
     return (
         <div
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-            }}
+            className="flex items-center gap-2 text-sm cursor-pointer"
             onMouseEnter={(e) => handleMouseEnter(e.currentTarget)}
             onMouseLeave={handleMouseLeave}
         >
-            <span style={{ color: 'var(--text-muted)' }}>{isHome ? 'vs' : '@'}</span>
+            <span className="text-text-muted">{isHome ? 'vs' : '@'}</span>
             {opponent.logo && (
                 <img
                     src={opponent.logo}
                     alt={opponent.name}
-                    style={{ width: '16px', height: '16px', objectFit: 'contain' }}
+                    className="w-4 h-4 object-contain"
                 />
             )}
-            <span style={{ fontWeight: 500 }}>{opponent.shortName || opponent.name}</span>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            <span className="font-medium">{opponent.shortName || opponent.name}</span>
+            <span className="text-text-muted text-xs">
                 ({date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})
             </span>
         </div>

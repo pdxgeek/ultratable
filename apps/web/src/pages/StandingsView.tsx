@@ -15,33 +15,26 @@ const StandingsView: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div style={{ textAlign: 'center', padding: '100px 0' }}>
-                <p style={{ color: 'var(--text-secondary)' }}>Loading data...</p>
+            <div className="text-center py-24">
+                <p className="text-text-secondary">Loading data...</p>
             </div>
         );
     }
 
     if (!activeSeason) {
         return (
-            <div style={{ textAlign: 'center', padding: '100px 0' }}>
-                <p style={{ color: 'var(--text-secondary)' }}>Please select a league and season.</p>
+            <div className="text-center py-24">
+                <p className="text-text-secondary">Please select a league and season.</p>
             </div>
         );
     }
 
     return (
         <main>
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-end',
-                    margin: '24px 0 16px 0',
-                }}
-            >
-                <h2 style={{ fontSize: '1.25rem', margin: 0 }}>League Table</h2>
+            <div className="flex justify-between items-end mt-6 mb-4">
+                <h2 className="text-xl m-0">League Table</h2>
                 {lastUpdated && (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span className="text-xs text-text-muted">
                         Last synced: {new Date(lastUpdated).toLocaleTimeString()}
                     </span>
                 )}

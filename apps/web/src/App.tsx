@@ -9,9 +9,9 @@ import StandingsView from './pages/StandingsView';
 
 const App: React.FC = () => {
     return (
-        <div className="app-shell">
+        <div className="flex flex-col min-h-screen">
             <TopNav />
-            <main className="app-shell__content">
+            <main className="flex-1 max-w-[1200px] w-full mx-auto px-5 py-8">
                 <Routes>
                     <Route path="/" element={<StandingsView />} />
                     <Route path="/match/:id" element={<MatchPage />} />

@@ -6,7 +6,8 @@ import MatchHeader from '../components/match/MatchHeader';
 import TeamLineupColumn from '../components/match/TeamLineupColumn';
 import { useMatchData } from '../hooks/useMatchData';
 
-import './MatchPage.css';
+const backButtonClass =
+    'bg-transparent border-none text-text-secondary cursor-pointer flex items-center gap-2 py-2 mb-5 text-[0.9rem] transition-colors hover:text-text-primary';
 
 const MatchPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -19,11 +20,11 @@ const MatchPage: React.FC = () => {
 
     if (fetching) {
         return (
-            <div className="match-page-container">
-                <button className="back-button" onClick={() => navigate('/')}>
+            <div className="max-w-[1200px] mx-auto p-5">
+                <button className={backButtonClass} onClick={() => navigate('/')}>
                     ← Back
                 </button>
-                <div style={{ textAlign: 'center', padding: '60px' }}>
+                <div className="text-center py-16">
                     <p>Loading match details...</p>
                 </div>
             </div>
@@ -32,11 +33,11 @@ const MatchPage: React.FC = () => {
 
     if (error || !fixture) {
         return (
-            <div className="match-page-container">
-                <button className="back-button" onClick={() => navigate('/')}>
+            <div className="max-w-[1200px] mx-auto p-5">
+                <button className={backButtonClass} onClick={() => navigate('/')}>
                     ← Back
                 </button>
-                <div style={{ textAlign: 'center', padding: '60px', color: 'red' }}>
+                <div className="text-center py-16 text-accent-red">
                     <p>Error loading match. {error?.message}</p>
                 </div>
             </div>
@@ -44,14 +45,14 @@ const MatchPage: React.FC = () => {
     }
 
     return (
-        <div className="match-page-container">
-            <button className="back-button" onClick={() => navigate('/')}>
+        <div className="max-w-[1200px] mx-auto p-5">
+            <button className={backButtonClass} onClick={() => navigate('/')}>
                 ← Back to Standings
             </button>
 
             <MatchHeader fixture={fixture} />
 
-            <div className="match-content-grid">
+            <div className="grid grid-cols-[280px_1fr_280px] gap-[30px] max-md:grid-cols-1 max-md:gap-5">
                 <TeamLineupColumn
                     lineup={homeLineup}
                     season={fixture.season}
