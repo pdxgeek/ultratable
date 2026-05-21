@@ -2,6 +2,15 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useLeague } from '../context/LeagueContext';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from './ui/select';
 
 const LeagueSelector: React.FC = () => {
     const { availableLeagues, availableSeasons, activeSeason, setActiveSeasonId, isSyncing } =
@@ -10,30 +19,35 @@ const LeagueSelector: React.FC = () => {
 
     return (
         <div className="flex gap-3 items-center">
-            <select
-                value={activeSeason?.id || ''}
-                onChange={(e) => {
-                    setActiveSeasonId(e.target.value);
+            <Select
+                value={activeSeason?.id ?? ''}
+                onValueChange={(value) => {
+                    setActiveSeasonId(value);
                     navigate('/');
                 }}
-                className="px-4 py-2 rounded-md bg-bg-accent text-text-primary border border-border text-[0.9rem] font-semibold cursor-pointer"
             >
-                <option value="" disabled>
-                    Select Season
-                </option>
-                {availableLeagues.map((league) => (
-                    <optgroup key={league.id} label={league.name}>
-                        {availableSeasons
+                <SelectTrigger className="h-9 px-3 text-[0.9rem] font-semibold">
+                    <SelectValue placeholder="Select Season" />
+                </SelectTrigger>
+                <SelectContent>
+                    {availableLeagues.map((league) => {
+                        const seasons = availableSeasons
                             .filter((s) => s.leagueId === league.id)
-                            .sort((a, b) => b.year - a.year)
-                            .map((season) => (
-                                <option key={season.id} value={season.id}>
-                                    {league.name} {season.year}
-                                </option>
-                            ))}
-                    </optgroup>
-                ))}
-            </select>
+                            .sort((a, b) => b.year - a.year);
+                        if (seasons.length === 0) return null;
+                        return (
+                            <SelectGroup key={league.id}>
+                                <SelectLabel>{league.name}</SelectLabel>
+                                {seasons.map((season) => (
+                                    <SelectItem key={season.id} value={season.id}>
+                                        {league.name} {season.year}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        );
+                    })}
+                </SelectContent>
+            </Select>
 
             {isSyncing && (
                 <span className="text-xs text-accent-blue font-medium">Syncing...</span>

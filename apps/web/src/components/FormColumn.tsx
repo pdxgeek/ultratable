@@ -1,9 +1,9 @@
 import type { Fixture, Team } from '../db';
 
-import { useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
 
-import { usePopup } from '../context/PopupContext';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
+import MatchPopup from './MatchPopup';
 
 interface FormColumnProps {
     form: Array<{ result: 'W' | 'D' | 'L'; fixtureId: string }>;
@@ -24,59 +24,21 @@ const barColor: Record<'W' | 'D' | 'L', string> = {
 };
 
 const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => {
-    const { showPopup, scheduleHide, cancelHide, hidePopup } = usePopup();
-    const navigate = useNavigate();
-    const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fixtureMap = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures]);
-
-    const handleMouseEnter = useCallback(
-        (fixtureId: string, el: HTMLElement) => {
-            const rect = el.getBoundingClientRect();
-            cancelHide();
-            hoverTimeoutRef.current = setTimeout(() => {
-                const fixture = fixtureMap.get(fixtureId);
-                if (fixture) {
-                    showPopup({ fixture, teamsMap, anchorRect: rect });
-                }
-            }, 200);
-        },
-        [fixtureMap, showPopup, teamsMap, cancelHide],
-    );
-
-    const handleMouseLeave = useCallback(() => {
-        if (hoverTimeoutRef.current) {
-            clearTimeout(hoverTimeoutRef.current);
-        }
-        scheduleHide();
-    }, [scheduleHide]);
-
-    const handleClick = useCallback(
-        (fixtureId: string) => {
-            if (hoverTimeoutRef.current) {
-                clearTimeout(hoverTimeoutRef.current);
-            }
-            hidePopup();
-            navigate(`/match/${fixtureId}`);
-        },
-        [hidePopup, navigate],
-    );
 
     return (
         <div className="flex gap-1 items-center">
             {form.map((entry, idx) => {
                 const isLatest = idx === form.length - 1;
-                const label = entry.result === 'W' ? 'Win' : entry.result === 'D' ? 'Draw' : 'Loss';
-                return (
-                    <div
-                        key={idx}
-                        className="flex flex-col items-center gap-0.5 cursor-pointer"
-                        title={isLatest ? `${label} (latest)` : label}
-                        onMouseEnter={(e) => handleMouseEnter(entry.fixtureId, e.currentTarget)}
-                        onMouseLeave={handleMouseLeave}
-                        onClick={() => handleClick(entry.fixtureId)}
-                    >
+                const label =
+                    entry.result === 'W' ? 'Win' : entry.result === 'D' ? 'Draw' : 'Loss';
+                const fixture = fixtureMap.get(entry.fixtureId);
+
+                const dot = (
+                    <div className="flex flex-col items-center gap-0.5 cursor-pointer">
                         <div
                             className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${dotColor[entry.result]}`}
+                            title={isLatest ? `${label} (latest)` : label}
                         >
                             {entry.result}
                         </div>
@@ -84,6 +46,19 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                             className={`h-1 w-1 rounded-full ${isLatest ? barColor[entry.result] : 'bg-transparent'}`}
                         />
                     </div>
+                );
+
+                if (!fixture) {
+                    return <div key={idx}>{dot}</div>;
+                }
+
+                return (
+                    <HoverCard key={idx} openDelay={200} closeDelay={150}>
+                        <HoverCardTrigger asChild>{dot}</HoverCardTrigger>
+                        <HoverCardContent className="w-[340px] p-4">
+                            <MatchPopup fixture={fixture} teamsMap={teamsMap} />
+                        </HoverCardContent>
+                    </HoverCard>
                 );
             })}
             {form.length === 0 && <span className="text-text-muted">–</span>}

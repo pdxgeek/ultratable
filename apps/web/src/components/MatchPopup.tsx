@@ -4,45 +4,17 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 
-import { usePopup } from '../context/PopupContext';
 import { db } from '../db';
 
 interface MatchPopupProps {
     fixture: Fixture;
     teamsMap: Map<string, Team>;
-    anchorRect: DOMRect;
-}
-
-function getPopupPosition(anchorRect: DOMRect): React.CSSProperties {
-    const popupWidth = 340;
-    const popupHeight = 280;
-    const margin = 8;
-
-    let left = anchorRect.left + anchorRect.width / 2 - popupWidth / 2;
-    let top = anchorRect.top - popupHeight - margin;
-
-    if (left < margin) left = margin;
-    if (left + popupWidth > window.innerWidth - margin) {
-        left = window.innerWidth - popupWidth - margin;
-    }
-    if (top < margin) {
-        top = anchorRect.bottom + margin;
-    }
-
-    return {
-        position: 'fixed',
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${popupWidth}px`,
-        zIndex: 1000,
-    };
 }
 
 const badgeBase =
     'inline-block text-[0.65rem] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[10px]';
 
-export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopupProps) {
-    const { cancelHide, scheduleHide, hidePopup } = usePopup();
+export default function MatchPopup({ fixture, teamsMap }: MatchPopupProps) {
     const navigate = useNavigate();
     const [venueImgError, setVenueImgError] = useState(false);
 
@@ -54,7 +26,6 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
         return await db.venues.get(fixture.venueId);
     }, [fixture.venueId]);
 
-    const style = getPopupPosition(anchorRect);
     const isPlayed = fixture.status === 'played';
     const isUpcoming = fixture.status === 'scheduled';
 
@@ -71,14 +42,8 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
 
     return (
         <div
-            className="bg-bg-primary border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.6)] p-4 cursor-pointer pointer-events-auto [animation:popup-fade-in_0.15s_ease-out]"
-            style={style}
-            onMouseEnter={cancelHide}
-            onMouseLeave={scheduleHide}
-            onClick={() => {
-                hidePopup();
-                navigate(`/match/${fixture.id}`);
-            }}
+            className="cursor-pointer"
+            onClick={() => navigate(`/match/${fixture.id}`)}
         >
             {venue && (
                 <div className="mb-2">

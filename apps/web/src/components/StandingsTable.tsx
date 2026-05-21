@@ -348,7 +348,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             <div className="flex items-center gap-2">
                                                 <FixtureDropdown
                                                     type="past"
-                                                    align="left"
+                                                    align="start"
                                                     teamId={row.teamId}
                                                     teams={teamsMap}
                                                     fixtures={pastFixtures}
@@ -370,7 +370,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             />
                                             <FixtureDropdown
                                                 type="future"
-                                                align="right"
+                                                align="end"
                                                 teamId={row.teamId}
                                                 teams={teamsMap}
                                                 fixtures={futureFixtures}
