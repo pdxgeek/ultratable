@@ -1,0 +1,10 @@
+export type { SyncResult } from './shared';
+export type { ConfigRepository } from './config';
+export type { WorkersRepository } from './workers';
+export type { LeaguesRepository } from './leagues';
+export type { TeamsRepository } from './teams';
+export type { FixturesRepository } from './fixtures';
+export type { CatalogRepository } from './catalog';
+export type { PlayersRepository } from './players';
+export type { GraphicsRepository } from './graphics';
+export type { IRepository } from './repository';
