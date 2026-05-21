@@ -23,7 +23,15 @@ export interface ManagedLeague {
   name: string;
   country?: string | null;
   logo?: string;
+  configJson?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface RankingFormula {
+  id: string;
+  name: string;
+  description?: string | null;
+  logicType?: string;
 }
 
 export interface Season {
@@ -33,4 +41,5 @@ export interface Season {
   fixtureCount?: number;
   teamCount?: number;
   current?: boolean;
+  rankingCriteria?: RankingFormula[];
 }

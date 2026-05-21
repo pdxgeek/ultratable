@@ -1,11 +1,16 @@
 import { gqlFetch } from '../lib/api';
-import type { CatalogLeague, Country, ManagedLeague, Season } from './leagues.types';
+import type { CatalogLeague, Country, ManagedLeague, RankingFormula, Season } from './leagues.types';
 
 export const fetchCatalogAndManagedLeagues = () =>
   gqlFetch<{
     catalogCountries: Country[];
     leagues: ManagedLeague[];
-  }>(`query { catalogCountries { id name code flag } leagues { id name sourceId country } }`);
+  }>(`query { catalogCountries { id name code flag } leagues { id name sourceId country configJson } }`);
+
+export const fetchRankingFormulas = () =>
+  gqlFetch<{ rankingFormulas: RankingFormula[] }>(
+    `query { rankingFormulas { id name description logicType } }`
+  );
 
 export const fetchCachedCatalogLeagues = (countryId: string) =>
   gqlFetch<{ catalogLeagues: CatalogLeague[] }>(
@@ -21,7 +26,7 @@ export const syncCountryLeagues = (countryId: string) =>
 
 export const fetchSeasons = (leagueId: string) =>
   gqlFetch<{ seasons: Season[] }>(
-    `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount } }`,
+    `query($id: String!) { seasons(leagueId: $id) { id year configJson fixtureCount teamCount rankingCriteria { id name description logicType } } }`,
     { id: leagueId }
   );
 
@@ -72,10 +77,10 @@ export const removeSeasonById = (seasonId: string) =>
     { id: seasonId }
   );
 
-export const saveSeasonConfig = (seasonId: string, json: string) =>
+export const saveSeasonConfig = (seasonId: string, json: string, rankingCriteria?: string[]) =>
   gqlFetch(
-    `mutation($id: String!, $json: String!) { saveSeasonConfig(id: $id, configJson: $json) { id } }`,
-    { id: seasonId, json }
+    `mutation($id: String!, $json: String!, $rankingCriteria: [String!]) { saveSeasonConfig(id: $id, configJson: $json, rankingCriteria: $rankingCriteria) { id } }`,
+    { id: seasonId, json, rankingCriteria: rankingCriteria ?? null }
   );
 
 export const saveLeagueConfig = (leagueId: string, json: string) =>

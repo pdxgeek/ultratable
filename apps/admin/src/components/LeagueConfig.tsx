@@ -1,11 +1,12 @@
 import React from 'react';
 import { Database, Globe, AlertCircle, Settings } from 'lucide-react';
 
-import type { ConfigTab, ManagedLeague, Season } from './leagues.types';
+import type { ConfigTab, ManagedLeague, RankingFormula, Season } from './leagues.types';
 import type { Job, Execution } from './WorkersView';
 import { ConfigTabs } from './league-config/ConfigTabs';
-import { DeductionsEditor } from './league-config/DeductionsEditor';
 import { RankingFormulaInputs } from './league-config/RankingFormulaInputs';
+import { RankingPrioritySelector } from './league-config/RankingPrioritySelector';
+import { SeasonOverridesEditor } from './league-config/SeasonOverridesEditor';
 import { SeasonPicker } from './league-config/SeasonPicker';
 import { SyncProgressBar } from './league-config/SyncProgressBar';
 
@@ -28,8 +29,12 @@ interface LeagueConfigProps {
     setPlayoffInput: (val: string) => void;
     relInput: string;
     setRelInput: (val: string) => void;
-    deductions: string;
-    setDeductions: (val: string) => void;
+    seasonConfigJson: string;
+    setSeasonConfigJson: (val: string) => void;
+    leagueDefaultsJson: string;
+    rankingFormulas: RankingFormula[];
+    appliedCriteria: string[];
+    setAppliedCriteria: (ids: string[]) => void;
     helperTeamId: string;
     setHelperTeamId: (val: string) => void;
     configTeams: Record<string, unknown>[];
@@ -71,7 +76,10 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
     promoInput, setPromoInput,
     playoffInput, setPlayoffInput,
     relInput, setRelInput,
-    deductions, setDeductions,
+    seasonConfigJson, setSeasonConfigJson,
+    leagueDefaultsJson,
+    rankingFormulas,
+    appliedCriteria, setAppliedCriteria,
     helperTeamId, setHelperTeamId,
     configTeams,
     helperPoints, setHelperPoints,
@@ -80,6 +88,7 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
 }) => {
     const selectedLeagueName = managedLeagues.find(l => l.id === selectedConfigLeagueId)?.name;
     const activeExecution = findActiveExecution(configTab, managedLeagues, selectedConfigLeagueId, configSeasons, selectedConfigSeasonId, jobs, executions);
+    const seasonSelected = configTab === 'season' && !!selectedConfigSeasonId;
 
     return (
         <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box3 transition-all hover:border-slate-800">
@@ -120,33 +129,44 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                     )}
 
                     {configTab === 'league' && (
-                        <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800/40">
-                            <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700/50">
-                                <Globe className="w-5 h-5 text-amber-500" />
+                        <>
+                            <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800/40">
+                                <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700/50">
+                                    <Globe className="w-5 h-5 text-amber-500" />
+                                </div>
+                                <div>
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 mb-1.5">League Target</h4>
+                                    <div className="text-sm font-semibold text-white px-2 py-1">{selectedLeagueName}</div>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 mb-1.5">League Target</h4>
-                                <div className="text-sm font-semibold text-white px-2 py-1">{selectedLeagueName}</div>
-                            </div>
-                        </div>
+                            <RankingFormulaInputs
+                                promoInput={promoInput} setPromoInput={setPromoInput}
+                                playoffInput={playoffInput} setPlayoffInput={setPlayoffInput}
+                                relInput={relInput} setRelInput={setRelInput}
+                            />
+                        </>
                     )}
-
-                    <RankingFormulaInputs
-                        promoInput={promoInput} setPromoInput={setPromoInput}
-                        playoffInput={playoffInput} setPlayoffInput={setPlayoffInput}
-                        relInput={relInput} setRelInput={setRelInput}
-                    />
 
                     <SyncProgressBar activeExecution={activeExecution} />
 
-                    {configTab === 'season' && (
-                        <DeductionsEditor
-                            deductions={deductions} setDeductions={setDeductions}
-                            configTeams={configTeams}
-                            helperTeamId={helperTeamId} setHelperTeamId={setHelperTeamId}
-                            helperPoints={helperPoints} setHelperPoints={setHelperPoints}
-                            helperReason={helperReason} setHelperReason={setHelperReason}
-                        />
+                    {seasonSelected && (
+                        <>
+                            <RankingPrioritySelector
+                                available={rankingFormulas}
+                                appliedIds={appliedCriteria}
+                                setAppliedIds={setAppliedCriteria}
+                            />
+
+                            <SeasonOverridesEditor
+                                configJson={seasonConfigJson}
+                                setConfigJson={setSeasonConfigJson}
+                                leagueDefaultsJson={leagueDefaultsJson}
+                                configTeams={configTeams}
+                                helperTeamId={helperTeamId} setHelperTeamId={setHelperTeamId}
+                                helperPoints={helperPoints} setHelperPoints={setHelperPoints}
+                                helperReason={helperReason} setHelperReason={setHelperReason}
+                            />
+                        </>
                     )}
 
                     <div className="flex items-center justify-between border-t border-slate-800/40 pt-8">

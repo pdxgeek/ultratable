@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { CatalogLeague, ConfigTab, Country, ManagedLeague, Season } from './leagues.types';
+import type { CatalogLeague, ConfigTab, Country, ManagedLeague, RankingFormula, Season } from './leagues.types';
 import * as api from './leagues-api';
 
 const logError = (label: string, e: unknown) => console.error(`LeaguesManagementView: ${label} error:`, e);
@@ -12,6 +12,18 @@ const alertError = (label: string, e: unknown) => {
 
 const parseList = (str: string) =>
   str.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+
+const stripRankingCriteria = (obj: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(obj).filter(([k]) => k !== 'rankingCriteria'));
+
+const formatJson = (raw: string | undefined): string => {
+  if (!raw) return '{}';
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+};
 
 export function useLeaguesManagement() {
   const [countries, setCountries] = useState<Country[]>([]);
@@ -28,14 +40,25 @@ export function useLeaguesManagement() {
   const [selectedConfigSeasonId, setSelectedConfigSeasonId] = useState<string>('');
 
   const [configTab, setConfigTab] = useState<ConfigTab>('season');
+
+  // League Defaults tab inputs
   const [promoInput, setPromoInput] = useState<string>('');
   const [playoffInput, setPlayoffInput] = useState<string>('');
   const [relInput, setRelInput] = useState<string>('');
-  const [deductions, setDeductions] = useState<string>('');
+
+  // Season Overrides tab — full JSON blob buffer
+  const [seasonConfigJson, setSeasonConfigJson] = useState<string>('{}');
+
+  // Ranking & Priority
+  const [rankingFormulas, setRankingFormulas] = useState<RankingFormula[]>([]);
+  const [appliedCriteria, setAppliedCriteria] = useState<string[]>([]);
+
+  // Deductions helper (used by the Season Overrides editor)
   const [configTeams, setConfigTeams] = useState<Record<string, unknown>[]>([]);
   const [helperTeamId, setHelperTeamId] = useState<string>('');
   const [helperPoints, setHelperPoints] = useState<number>(0);
   const [helperReason, setHelperReason] = useState<string>('');
+
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -91,6 +114,12 @@ export function useLeaguesManagement() {
 
   useEffect(() => { refreshTopLevel(); }, []);
 
+  useEffect(() => {
+    api.fetchRankingFormulas()
+      .then(data => setRankingFormulas(data.rankingFormulas || []))
+      .catch(e => logError('fetchRankingFormulas', e));
+  }, []);
+
   const selectedCountryName = countries.find(c => c.id === selectedCountry)?.name;
   const filteredManagedLeagues = selectedCountryName
     ? managedLeagues.filter(l => l.country === selectedCountryName)
@@ -122,25 +151,35 @@ export function useLeaguesManagement() {
     }
   }, [selectedConfigLeagueId]);
 
+  const selectedLeague = managedLeagues.find(l => l.id === selectedConfigLeagueId);
+
+  const leagueDefaultsJson = (() => {
+    if (!selectedLeague) return '{}';
+    const raw = selectedLeague.configJson;
+    if (!raw) return '{}';
+    try {
+      return JSON.stringify(stripRankingCriteria(JSON.parse(raw)), null, 2);
+    } catch {
+      return formatJson(raw);
+    }
+  })();
+
   useEffect(() => {
     const season = configSeasons.find(s => s.id === selectedConfigSeasonId);
-    const league = managedLeagues.find(l => l.id === selectedConfigLeagueId);
+    const league = selectedLeague;
 
     if (configTab === 'league' && league) {
-      const config = (league.metadata as Record<string, string[]>) || {};
-      setPromoInput((config.promotion || []).join(', '));
-      setPlayoffInput((config.playoffs || []).join(', '));
-      setRelInput((config.relegation || []).join(', '));
-      setDeductions('');
+      const config = league.configJson ? JSON.parse(league.configJson) as Record<string, unknown> : {};
+      setPromoInput((config.promotion as number[] | undefined || []).join(', '));
+      setPlayoffInput((config.playoffs as number[] | undefined || []).join(', '));
+      setRelInput((config.relegation as number[] | undefined || []).join(', '));
       return;
     }
 
     if (configTab === 'season' && season) {
-      const config = JSON.parse(season.configJson || '{}');
-      setPromoInput((config.promotion || []).join(', '));
-      setPlayoffInput((config.playoffs || []).join(', '));
-      setRelInput((config.relegation || []).join(', '));
-      setDeductions(JSON.stringify(config.deductions || [], null, 2));
+      const config = JSON.parse(season.configJson || '{}') as Record<string, unknown>;
+      setSeasonConfigJson(JSON.stringify(stripRankingCriteria(config), null, 2));
+      setAppliedCriteria((season.rankingCriteria || []).map(f => f.id));
 
       if (league) {
         api.fetchTeamsForSeason(season.id).then(data => {
@@ -156,9 +195,10 @@ export function useLeaguesManagement() {
     setPromoInput('');
     setPlayoffInput('');
     setRelInput('');
-    setDeductions('');
+    setSeasonConfigJson('{}');
+    setAppliedCriteria([]);
     setConfigTeams([]);
-  }, [selectedConfigSeasonId, configSeasons, selectedConfigLeagueId, managedLeagues, configTab]);
+  }, [selectedConfigSeasonId, configSeasons, selectedConfigLeagueId, managedLeagues, configTab, selectedLeague]);
 
   const initializeCatalog = async () => {
     setActionLoading('init-catalog');
@@ -257,25 +297,33 @@ export function useLeaguesManagement() {
     if (configTab === 'league' && !selectedConfigLeagueId) return;
     setActionLoading('save-config');
     try {
-      const configObj: Record<string, unknown> = {};
-      const promo = parseList(promoInput);
-      const playoffs = parseList(playoffInput);
-      const rel = parseList(relInput);
-      if (promo.length > 0) configObj.promotion = promo;
-      if (playoffs.length > 0) configObj.playoffs = playoffs;
-      if (rel.length > 0) configObj.relegation = rel;
-
       if (configTab === 'season') {
-        let parsedDeductions = [];
+        let parsed: Record<string, unknown>;
         try {
-          parsedDeductions = JSON.parse(deductions || '[]');
+          parsed = JSON.parse(seasonConfigJson || '{}');
         } catch {
-          alert('Invalid JSON for deductions');
+          alert('Invalid JSON for season overrides.');
           return;
         }
-        if (parsedDeductions.length > 0) configObj.deductions = parsedDeductions;
-        await api.saveSeasonConfig(selectedConfigSeasonId, JSON.stringify(configObj));
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          alert('Season config must be a JSON object.');
+          return;
+        }
+        // rankingCriteria comes from the dual-list — strip any stray copy in the JSON to avoid drift.
+        const cleaned = stripRankingCriteria(parsed);
+        await api.saveSeasonConfig(
+          selectedConfigSeasonId,
+          JSON.stringify(cleaned),
+          appliedCriteria.length > 0 ? appliedCriteria : undefined,
+        );
       } else {
+        const configObj: Record<string, unknown> = {};
+        const promo = parseList(promoInput);
+        const playoffs = parseList(playoffInput);
+        const rel = parseList(relInput);
+        if (promo.length > 0) configObj.promotion = promo;
+        if (playoffs.length > 0) configObj.playoffs = playoffs;
+        if (rel.length > 0) configObj.relegation = rel;
         await api.saveLeagueConfig(selectedConfigLeagueId, JSON.stringify(configObj));
         await refreshTopLevel();
       }
@@ -315,8 +363,12 @@ export function useLeaguesManagement() {
     setPlayoffInput,
     relInput,
     setRelInput,
-    deductions,
-    setDeductions,
+    seasonConfigJson,
+    setSeasonConfigJson,
+    leagueDefaultsJson,
+    rankingFormulas,
+    appliedCriteria,
+    setAppliedCriteria,
     configTeams,
     helperTeamId,
     setHelperTeamId,
