@@ -238,7 +238,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                 <SortHeader label="GD" column="goalDifference" />
                             </th>
                             <th
-                                className={`${thClickable} w-[60px] text-center font-bold`}
+                                className={`${thClickable} w-[60px] text-left font-bold`}
                                 title="Points"
                                 onClick={() => handleSort('points')}
                             >
@@ -324,12 +324,12 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             {row.goalDifference}
                                         </span>
                                     </td>
-                                    <td className={`${tdBase} w-[60px] text-center font-bold`}>
+                                    <td className={`${tdBase} w-[60px] text-left font-bold`}>
                                         <span className="font-bold text-accent-blue">
                                             {row.points}
                                         </span>
                                         {row.deductions && row.deductions.length > 0 && (
-                                            <span className="text-accent-red text-[0.85em] align-super ml-0.5">
+                                            <span className="text-accent-red text-[0.65em] align-super ml-0.5">
                                                 {row.deductions
                                                     .map(
                                                         (d) =>
@@ -387,7 +387,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                         <ul className="list-none flex flex-col gap-1">
                             {deductionMap.map((d, i) => (
                                 <li key={i}>
-                                    <span className="text-accent-red text-[0.85em] align-super ml-0.5">
+                                    <span className="text-accent-red text-[0.65em] align-super ml-0.5">
                                         {d.asterisks}
                                     </span>{' '}
                                     {d.teamName} had {Math.abs(d.points)} points deducted: {d.reason}
