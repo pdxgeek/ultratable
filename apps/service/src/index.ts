@@ -28,6 +28,7 @@ import './schema/graphics';
 // Database instances for development login overrides
 import { db } from './db';
 import * as schema from './db/schema';
+import { seedRankingFormulas } from './services/seed-ranking-formulas';
 
 /**
  * GraphQL Depth Limit Validation Rule
@@ -378,6 +379,7 @@ const start = async () => {
         const port = Number(process.env.PORT) || 8080
         await server.listen({ host, port })
         globalLogger.info({ host, port }, `🚀 Server listening on http://${host}:${port}`)
+        await seedRankingFormulas();
     } catch (err) {
         server.log.error(err)
         process.exit(1)
