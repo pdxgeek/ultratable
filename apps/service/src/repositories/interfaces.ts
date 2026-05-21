@@ -93,15 +93,6 @@ export interface GraphicsRepository {
     saveGraphic(graphic: { entityType: string, entityId: string, variantName?: string, blobPath: string, mimeType?: string, metadata?: Record<string, unknown> }): Promise<typeof schema.graphics.$inferSelect>;
 }
 
-export interface FootballRepository {
-    leagues: LeaguesRepository;
-    teams: TeamsRepository;
-    fixtures: FixturesRepository;
-    catalog: CatalogRepository;
-    players: PlayersRepository;
-    graphics: GraphicsRepository;
-}
-
 export interface WorkersRepository {
     listJobs(): Promise<Array<typeof schema.jobs.$inferSelect>>;
     getJobByName(name: string): Promise<typeof schema.jobs.$inferSelect | null>;
@@ -110,8 +101,18 @@ export interface WorkersRepository {
     listSystemLogs(limit: number): Promise<Array<typeof schema.systemLogs.$inferSelect>>;
 }
 
+/**
+ * Storage-agnostic repository contract. The Postgres implementation lives in
+ * `./postgres/`, but consumers should never name a backend in their imports —
+ * import the active `repository` from the package index instead.
+ */
 export interface IRepository {
     config: ConfigRepository;
-    football: FootballRepository;
     workers: WorkersRepository;
+    leagues: LeaguesRepository;
+    teams: TeamsRepository;
+    fixtures: FixturesRepository;
+    catalog: CatalogRepository;
+    players: PlayersRepository;
+    graphics: GraphicsRepository;
 }

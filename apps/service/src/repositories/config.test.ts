@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostgresConfigRepository } from './postgres.repository';
+import { PostgresConfigRepository } from './postgres/config.repository';
 import fs from 'node:fs/promises';
 vi.mock('node:fs/promises');
 
