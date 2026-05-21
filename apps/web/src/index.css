@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 @theme {
     --color-bg-primary: #0f172a;
@@ -26,6 +27,58 @@
     --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/*
+ * shadcn/ui token bridge.
+ *
+ * shadcn primitives read `--background`, `--primary`, `--border`, etc. We
+ * point those at the existing palette tokens so vendored components inherit
+ * the hand-rolled theme. Because every shadcn var resolves through the
+ * palette tokens (and not literal colours), `.theme-light` only needs to
+ * override the underlying palette — the shadcn vars follow automatically.
+ */
+:root {
+    --background: var(--color-bg-primary);
+    --foreground: var(--color-text-primary);
+    --card: var(--color-bg-secondary);
+    --card-foreground: var(--color-text-primary);
+    --popover: var(--color-bg-accent);
+    --popover-foreground: var(--color-text-primary);
+    --primary: var(--color-accent-blue);
+    --primary-foreground: var(--color-bg-primary);
+    --secondary: var(--color-bg-accent);
+    --secondary-foreground: var(--color-text-primary);
+    --muted: var(--color-bg-accent);
+    --muted-foreground: var(--color-text-secondary);
+    --accent: var(--color-bg-accent);
+    --accent-foreground: var(--color-text-primary);
+    --destructive: var(--color-accent-red);
+    --destructive-foreground: #ffffff;
+    --input: var(--color-border);
+    --ring: var(--color-accent-blue);
+    --radius: 0.5rem;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+}
+
 .theme-light {
     --color-bg-primary: #f8fafc;
     --color-bg-secondary: rgba(241, 245, 249, 0.7);
@@ -38,6 +91,8 @@
     --color-border: rgba(0, 0, 0, 0.1);
     --color-glass-bg: rgba(255, 255, 255, 0.6);
     --color-glass-border: rgba(0, 0, 0, 0.05);
+
+    --primary-foreground: #ffffff;
 }
 
 @layer base {
