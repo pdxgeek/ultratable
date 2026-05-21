@@ -1,6 +1,7 @@
 import { Client as MinioClient } from 'minio';
-import { StorageProvider } from './storage.provider';
+
 import { globalLogger } from '../services/log.service';
+import { StorageProvider } from './storage.provider';
 
 const logger = globalLogger.child({ module: 'MinIOStorageProvider' });
 
@@ -25,7 +26,7 @@ function parseEndpoint(endpoint: string): { endPoint: string; port: number; useS
     const useSSL = url.protocol === 'https:';
     return {
         endPoint: url.hostname,
-        port: url.port ? Number(url.port) : (useSSL ? 443 : 80),
+        port: url.port ? Number(url.port) : useSSL ? 443 : 80,
         useSSL,
     };
 }
@@ -43,7 +44,9 @@ export class MinIOStorageProvider implements StorageProvider {
         const bucket = process.env.S3_BUCKET?.trim();
 
         if (!endpoint || !accessKey || !secretKey || !bucket) {
-            throw new Error('S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET must be set for MinIO storage');
+            throw new Error(
+                'S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET must be set for MinIO storage',
+            );
         }
 
         const { endPoint, port, useSSL } = parseEndpoint(endpoint);
@@ -75,14 +78,21 @@ export class MinIOStorageProvider implements StorageProvider {
         return this.bucketReady;
     }
 
-    async upload(bucket: string, objectPath: string, file: Buffer | ArrayBuffer | Blob, mimeType: string, upsert: boolean = false): Promise<string> {
+    async upload(
+        bucket: string,
+        objectPath: string,
+        file: Buffer | ArrayBuffer | Blob,
+        mimeType: string,
+        upsert: boolean = false,
+    ): Promise<string> {
         await this.ensureBucket();
 
-        const buf = file instanceof Buffer
-            ? file
-            : file instanceof ArrayBuffer
-                ? Buffer.from(file)
-                : Buffer.from(await (file as Blob).arrayBuffer());
+        const buf =
+            file instanceof Buffer
+                ? file
+                : file instanceof ArrayBuffer
+                  ? Buffer.from(file)
+                  : Buffer.from(await (file as Blob).arrayBuffer());
 
         if (!upsert) {
             try {

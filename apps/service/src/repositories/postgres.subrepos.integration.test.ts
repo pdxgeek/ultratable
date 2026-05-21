@@ -22,13 +22,15 @@
  *   - removeSeason cascade behaviour (fixtures + standings)
  *   - Constraint violations & FK errors
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import type { IFootballProvider, IngestedSquadPlayer } from '../integrations/types';
+
 import { eq, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { createPostgresRepository } from './postgres';
 import { FIXTURE_UPSERT_SET, NOW_MS } from './postgres/shared';
-import type { IFootballProvider, IngestedSquadPlayer } from '../integrations/types';
 
 const TEST_SOURCE = 'test-integration';
 const TEST_SOURCE_ID_BASE = 9_900_000;
@@ -38,16 +40,36 @@ const TEST_SOURCE_ID_BASE = 9_900_000;
 class StubProvider implements IFootballProvider {
     name = TEST_SOURCE;
     nextSquad: IngestedSquadPlayer[] = [];
-    async getCountries() { return []; }
-    async getLeagues() { return []; }
-    async getSeasons() { return []; }
-    async getTeams() { return { teams: [], venues: [] }; }
-    async getFixtures() { return { fixtures: [], venues: [] }; }
-    async getFixturesByIds() { return { fixtures: [], venues: [] }; }
-    async getMatchEvents() { return []; }
-    async getPlayerData() { return null; }
-    async getLineups() { return []; }
-    async getSquad(): Promise<IngestedSquadPlayer[]> { return this.nextSquad; }
+    async getCountries() {
+        return [];
+    }
+    async getLeagues() {
+        return [];
+    }
+    async getSeasons() {
+        return [];
+    }
+    async getTeams() {
+        return { teams: [], venues: [] };
+    }
+    async getFixtures() {
+        return { fixtures: [], venues: [] };
+    }
+    async getFixturesByIds() {
+        return { fixtures: [], venues: [] };
+    }
+    async getMatchEvents() {
+        return [];
+    }
+    async getPlayerData() {
+        return null;
+    }
+    async getLineups() {
+        return [];
+    }
+    async getSquad(): Promise<IngestedSquadPlayer[]> {
+        return this.nextSquad;
+    }
 }
 
 const provider = new StubProvider();
@@ -66,17 +88,29 @@ async function deleteTestRows() {
         OR player_id IN (SELECT id FROM players WHERE source_name = ${TEST_SOURCE})
         OR season_id IN (SELECT id FROM seasons WHERE league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE}))
     `);
-    await db.delete(schema.playerSourceMappings).where(eq(schema.playerSourceMappings.sourceName, TEST_SOURCE));
+    await db
+        .delete(schema.playerSourceMappings)
+        .where(eq(schema.playerSourceMappings.sourceName, TEST_SOURCE));
     await db.delete(schema.players).where(eq(schema.players.sourceName, TEST_SOURCE));
-    await db.delete(schema.seasonsToTeams).where(sql`team_id IN (SELECT id FROM teams WHERE source_name = ${TEST_SOURCE})`);
-    await db.delete(schema.standingsRows).where(sql`season_id IN (SELECT id FROM seasons WHERE league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE}))`);
+    await db
+        .delete(schema.seasonsToTeams)
+        .where(sql`team_id IN (SELECT id FROM teams WHERE source_name = ${TEST_SOURCE})`);
+    await db
+        .delete(schema.standingsRows)
+        .where(
+            sql`season_id IN (SELECT id FROM seasons WHERE league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE}))`,
+        );
     await db.delete(schema.fixtures).where(eq(schema.fixtures.sourceName, TEST_SOURCE));
-    await db.delete(schema.seasons).where(sql`league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE})`);
+    await db
+        .delete(schema.seasons)
+        .where(sql`league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE})`);
     await db.delete(schema.teams).where(eq(schema.teams.sourceName, TEST_SOURCE));
     await db.delete(schema.venues).where(eq(schema.venues.sourceName, TEST_SOURCE));
     await db.delete(schema.leagues).where(eq(schema.leagues.sourceName, TEST_SOURCE));
     await db.delete(schema.catalogLeagues).where(eq(schema.catalogLeagues.sourceName, TEST_SOURCE));
-    await db.delete(schema.catalogCountries).where(eq(schema.catalogCountries.sourceName, TEST_SOURCE));
+    await db
+        .delete(schema.catalogCountries)
+        .where(eq(schema.catalogCountries.sourceName, TEST_SOURCE));
 }
 
 interface FixtureScaffold {
@@ -87,41 +121,59 @@ interface FixtureScaffold {
     venue: typeof schema.venues.$inferSelect;
 }
 
-async function buildScaffold(opts: { sourceIdSuffix: number; year?: number }): Promise<FixtureScaffold> {
+async function buildScaffold(opts: {
+    sourceIdSuffix: number;
+    year?: number;
+}): Promise<FixtureScaffold> {
     const base = TEST_SOURCE_ID_BASE + opts.sourceIdSuffix;
     const year = opts.year ?? 9000;
 
-    const [league] = await db.insert(schema.leagues).values({
-        name: `Test League ${base}`,
-        slug: `test-league-${base}`,
-        country: 'Testland',
-        sourceName: TEST_SOURCE,
-        sourceId: base,
-    }).returning();
+    const [league] = await db
+        .insert(schema.leagues)
+        .values({
+            name: `Test League ${base}`,
+            slug: `test-league-${base}`,
+            country: 'Testland',
+            sourceName: TEST_SOURCE,
+            sourceId: base,
+        })
+        .returning();
 
-    const [season] = await db.insert(schema.seasons).values({
-        leagueId: league.id,
-        year,
-    }).returning();
+    const [season] = await db
+        .insert(schema.seasons)
+        .values({
+            leagueId: league.id,
+            year,
+        })
+        .returning();
 
-    const [venue] = await db.insert(schema.venues).values({
-        name: `Test Stadium ${base}`,
-        sourceName: TEST_SOURCE,
-        sourceId: base + 1,
-    }).returning();
+    const [venue] = await db
+        .insert(schema.venues)
+        .values({
+            name: `Test Stadium ${base}`,
+            sourceName: TEST_SOURCE,
+            sourceId: base + 1,
+        })
+        .returning();
 
-    const [homeTeam] = await db.insert(schema.teams).values({
-        name: `Home FC ${base}`,
-        sourceName: TEST_SOURCE,
-        sourceId: base + 2,
-        venueId: venue.id,
-    }).returning();
+    const [homeTeam] = await db
+        .insert(schema.teams)
+        .values({
+            name: `Home FC ${base}`,
+            sourceName: TEST_SOURCE,
+            sourceId: base + 2,
+            venueId: venue.id,
+        })
+        .returning();
 
-    const [awayTeam] = await db.insert(schema.teams).values({
-        name: `Away FC ${base}`,
-        sourceName: TEST_SOURCE,
-        sourceId: base + 3,
-    }).returning();
+    const [awayTeam] = await db
+        .insert(schema.teams)
+        .values({
+            name: `Away FC ${base}`,
+            sourceName: TEST_SOURCE,
+            sourceId: base + 3,
+        })
+        .returning();
 
     await db.insert(schema.seasonsToTeams).values([
         { seasonId: season.id, teamId: homeTeam.id },
@@ -145,7 +197,9 @@ describe('Postgres sub-repositories — integration', () => {
     // LeaguesRepository
     // ----------------------------------------------------------------------
     describe('LeaguesRepository', () => {
-        beforeEach(async () => { await deleteTestRows(); });
+        beforeEach(async () => {
+            await deleteTestRows();
+        });
 
         it('persists and retrieves leagues; getLeagueById returns the row', async () => {
             const scaffold = await buildScaffold({ sourceIdSuffix: 1 });
@@ -157,7 +211,7 @@ describe('Postgres sub-repositories — integration', () => {
             const a = await buildScaffold({ sourceIdSuffix: 10 });
             const b = await buildScaffold({ sourceIdSuffix: 20 });
             const rows = await repo.leagues.getLeaguesByIds([a.league.id, b.league.id]);
-            expect(rows.map(r => r.id).sort()).toEqual([a.league.id, b.league.id].sort());
+            expect(rows.map((r) => r.id).sort()).toEqual([a.league.id, b.league.id].sort());
         });
 
         it('getLeaguesByIds returns [] for empty input', async () => {
@@ -166,7 +220,10 @@ describe('Postgres sub-repositories — integration', () => {
 
         it('updateLeagueConfig replaces metadata atomically', async () => {
             const { league } = await buildScaffold({ sourceIdSuffix: 30 });
-            const updated = await repo.leagues.updateLeagueConfig(league.id, { promotion: 2, relegation: 3 });
+            const updated = await repo.leagues.updateLeagueConfig(league.id, {
+                promotion: 2,
+                relegation: 3,
+            });
             expect(updated.metadata).toEqual({ promotion: 2, relegation: 3 });
         });
 
@@ -180,17 +237,21 @@ describe('Postgres sub-repositories — integration', () => {
         it('getInternalSeasons returns seasons under the league', async () => {
             const { league, season } = await buildScaffold({ sourceIdSuffix: 50, year: 1234 });
             const seasons = await repo.leagues.getInternalSeasons(league.sourceId, league.id);
-            expect(seasons.find(s => s.id === season.id)).toBeTruthy();
+            expect(seasons.find((s) => s.id === season.id)).toBeTruthy();
         });
 
         it('updateSeasonConfig writes metadata', async () => {
             const { season } = await buildScaffold({ sourceIdSuffix: 60 });
-            const updated = await repo.leagues.updateSeasonConfig(season.id, { rankingCriteria: ['standard_pts'] });
+            const updated = await repo.leagues.updateSeasonConfig(season.id, {
+                rankingCriteria: ['standard_pts'],
+            });
             expect(updated.metadata).toEqual({ rankingCriteria: ['standard_pts'] });
         });
 
         it('removeSeason cascades: fixtures and standings under that season are also deleted', async () => {
-            const { league, season, homeTeam, awayTeam } = await buildScaffold({ sourceIdSuffix: 70 });
+            const { league, season, homeTeam, awayTeam } = await buildScaffold({
+                sourceIdSuffix: 70,
+            });
 
             // Put fixtures + a standings row under the season.
             const sourceId = TEST_SOURCE_ID_BASE + 70 + 100;
@@ -221,9 +282,18 @@ describe('Postgres sub-repositories — integration', () => {
             const ok = await repo.leagues.removeSeason(season.id);
             expect(ok).toBe(true);
 
-            const remainingFixtures = await db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, season.id));
-            const remainingStandings = await db.select().from(schema.standingsRows).where(eq(schema.standingsRows.seasonId, season.id));
-            const remainingSeasons = await db.select().from(schema.seasons).where(eq(schema.seasons.id, season.id));
+            const remainingFixtures = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.seasonId, season.id));
+            const remainingStandings = await db
+                .select()
+                .from(schema.standingsRows)
+                .where(eq(schema.standingsRows.seasonId, season.id));
+            const remainingSeasons = await db
+                .select()
+                .from(schema.seasons)
+                .where(eq(schema.seasons.id, season.id));
             expect(remainingFixtures).toEqual([]);
             expect(remainingStandings).toEqual([]);
             expect(remainingSeasons).toEqual([]);
@@ -236,8 +306,18 @@ describe('Postgres sub-repositories — integration', () => {
 
         it('saveRankingFormula upserts on conflict (id is the primary key)', async () => {
             const id = `${TEST_SOURCE}-formula-${Date.now()}`;
-            const first = await repo.leagues.saveRankingFormula({ id, name: 'V1', description: 'first', logicType: 'standard' });
-            const second = await repo.leagues.saveRankingFormula({ id, name: 'V2', description: 'second', logicType: 'standard' });
+            const first = await repo.leagues.saveRankingFormula({
+                id,
+                name: 'V1',
+                description: 'first',
+                logicType: 'standard',
+            });
+            const second = await repo.leagues.saveRankingFormula({
+                id,
+                name: 'V2',
+                description: 'second',
+                logicType: 'standard',
+            });
             expect(second.id).toBe(first.id);
             expect(second.name).toBe('V2');
             expect(second.description).toBe('second');
@@ -251,12 +331,14 @@ describe('Postgres sub-repositories — integration', () => {
     // TeamsRepository
     // ----------------------------------------------------------------------
     describe('TeamsRepository', () => {
-        beforeEach(async () => { await deleteTestRows(); });
+        beforeEach(async () => {
+            await deleteTestRows();
+        });
 
         it('getAllTeams includes inserted test teams', async () => {
             const { homeTeam } = await buildScaffold({ sourceIdSuffix: 100 });
             const all = await repo.teams.getAllTeams();
-            expect(all.some(t => t.id === homeTeam.id)).toBe(true);
+            expect(all.some((t) => t.id === homeTeam.id)).toBe(true);
         });
 
         it('getTeamById returns null for unknown UUID', async () => {
@@ -272,7 +354,7 @@ describe('Postgres sub-repositories — integration', () => {
             const { season, homeTeam, awayTeam } = await buildScaffold({ sourceIdSuffix: 110 });
 
             const all = await repo.teams.getTeamsBySeasonId(season.id);
-            expect(all.map(t => t.id).sort()).toEqual([homeTeam.id, awayTeam.id].sort());
+            expect(all.map((t) => t.id).sort()).toEqual([homeTeam.id, awayTeam.id].sort());
 
             // future since → no rows
             const future = new Date(Date.now() + 60_000);
@@ -288,12 +370,31 @@ describe('Postgres sub-repositories — integration', () => {
         it('upsertVenues inserts new venues and updates existing on conflict', async () => {
             const sourceId = TEST_SOURCE_ID_BASE + 130;
             await repo.teams.upsertVenues([
-                { name: 'A', city: null, capacity: null, surface: null, image: null, sourceId, sourceName: TEST_SOURCE },
+                {
+                    name: 'A',
+                    city: null,
+                    capacity: null,
+                    surface: null,
+                    image: null,
+                    sourceId,
+                    sourceName: TEST_SOURCE,
+                },
             ]);
             await repo.teams.upsertVenues([
-                { name: 'A-updated', city: 'Somewhere', capacity: 1000, surface: 'grass', image: null, sourceId, sourceName: TEST_SOURCE },
+                {
+                    name: 'A-updated',
+                    city: 'Somewhere',
+                    capacity: 1000,
+                    surface: 'grass',
+                    image: null,
+                    sourceId,
+                    sourceName: TEST_SOURCE,
+                },
             ]);
-            const [row] = await db.select().from(schema.venues).where(eq(schema.venues.sourceId, sourceId));
+            const [row] = await db
+                .select()
+                .from(schema.venues)
+                .where(eq(schema.venues.sourceId, sourceId));
             expect(row.name).toBe('A-updated');
             expect(row.city).toBe('Somewhere');
             expect(row.capacity).toBe(1000);
@@ -302,8 +403,22 @@ describe('Postgres sub-repositories — integration', () => {
         it('importSquad creates players, source mappings, and a roster entry', async () => {
             const { season, homeTeam } = await buildScaffold({ sourceIdSuffix: 140 });
             provider.nextSquad = [
-                { sourceId: TEST_SOURCE_ID_BASE + 140 + 10, name: 'Player One', age: 24, number: 7, position: 'F', photo: null },
-                { sourceId: TEST_SOURCE_ID_BASE + 140 + 11, name: 'Player Two', age: 28, number: 10, position: 'M', photo: null },
+                {
+                    sourceId: TEST_SOURCE_ID_BASE + 140 + 10,
+                    name: 'Player One',
+                    age: 24,
+                    number: 7,
+                    position: 'F',
+                    photo: null,
+                },
+                {
+                    sourceId: TEST_SOURCE_ID_BASE + 140 + 11,
+                    name: 'Player Two',
+                    age: 28,
+                    number: 10,
+                    position: 'M',
+                    photo: null,
+                },
             ];
 
             const roster = await repo.teams.importSquad(homeTeam.id, homeTeam.sourceId, season.id);
@@ -312,14 +427,21 @@ describe('Postgres sub-repositories — integration', () => {
             // Roster fetch returns the same players, joined to the player row.
             const fetched = await repo.teams.getTeamRoster(homeTeam.id, season.id);
             expect(fetched).toHaveLength(2);
-            expect(fetched.map(r => r.player.name).sort()).toEqual(['Player One', 'Player Two']);
+            expect(fetched.map((r) => r.player.name).sort()).toEqual(['Player One', 'Player Two']);
 
             // resolvePlayerBySourceId hits either the mapping table or the players table.
-            const resolved = await repo.players.resolvePlayerBySourceId(TEST_SOURCE, TEST_SOURCE_ID_BASE + 140 + 10);
+            const resolved = await repo.players.resolvePlayerBySourceId(
+                TEST_SOURCE,
+                TEST_SOURCE_ID_BASE + 140 + 10,
+            );
             expect(resolved).toBeTruthy();
 
             // Re-importing the same squad must be idempotent (same player IDs, same roster row count).
-            const rosterAgain = await repo.teams.importSquad(homeTeam.id, homeTeam.sourceId, season.id);
+            const rosterAgain = await repo.teams.importSquad(
+                homeTeam.id,
+                homeTeam.sourceId,
+                season.id,
+            );
             expect(rosterAgain).toHaveLength(2);
             const reFetched = await repo.teams.getTeamRoster(homeTeam.id, season.id);
             expect(reFetched).toHaveLength(2);
@@ -330,11 +452,17 @@ describe('Postgres sub-repositories — integration', () => {
     // FixturesRepository — FIXTURE_UPSERT_SET correctness
     // ----------------------------------------------------------------------
     describe('FixturesRepository', () => {
-        beforeEach(async () => { await deleteTestRows(); });
+        beforeEach(async () => {
+            await deleteTestRows();
+        });
 
-        async function insertFixture(scaffold: FixtureScaffold, overrides: Partial<typeof schema.fixtures.$inferInsert> = {}) {
-            const sourceId = TEST_SOURCE_ID_BASE + 200 + (overrides.sourceId as number ?? 0);
-            await db.insert(schema.fixtures)
+        async function insertFixture(
+            scaffold: FixtureScaffold,
+            overrides: Partial<typeof schema.fixtures.$inferInsert> = {},
+        ) {
+            const sourceId = TEST_SOURCE_ID_BASE + 200 + ((overrides.sourceId as number) ?? 0);
+            await db
+                .insert(schema.fixtures)
                 .values({
                     leagueId: scaffold.league.id,
                     seasonId: scaffold.season.id,
@@ -361,7 +489,10 @@ describe('Postgres sub-repositories — integration', () => {
         it('FIXTURE_UPSERT_SET: insert-fresh works (no conflict, full row written)', async () => {
             const scaffold = await buildScaffold({ sourceIdSuffix: 200 });
             const sourceId = await insertFixture(scaffold);
-            const [row] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.sourceId, sourceId));
+            const [row] = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.sourceId, sourceId));
             expect(row.status).toBe('scheduled');
             expect(row.gameweek).toBe(1);
         });
@@ -371,7 +502,8 @@ describe('Postgres sub-repositories — integration', () => {
             const sourceId = await insertFixture(scaffold);
 
             const newSchedule = new Date('2025-01-02T18:00:00Z');
-            await db.insert(schema.fixtures)
+            await db
+                .insert(schema.fixtures)
                 .values({
                     leagueId: scaffold.league.id,
                     seasonId: scaffold.season.id,
@@ -392,7 +524,10 @@ describe('Postgres sub-repositories — integration', () => {
                     set: FIXTURE_UPSERT_SET,
                 });
 
-            const [row] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.sourceId, sourceId));
+            const [row] = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.sourceId, sourceId));
             expect(row.status).toBe('played');
             expect(row.homeGoals).toBe(3);
             expect(row.awayGoals).toBe(1);
@@ -403,22 +538,33 @@ describe('Postgres sub-repositories — integration', () => {
         it('FIXTURE_UPSERT_SET: no-op on identical input still bumps updatedAt', async () => {
             const scaffold = await buildScaffold({ sourceIdSuffix: 220 });
             const sourceId = await insertFixture(scaffold);
-            const [before] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.sourceId, sourceId));
+            const [before] = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.sourceId, sourceId));
 
             // sleep ~5ms so updatedAt's millisecond precision can advance
-            await new Promise(r => setTimeout(r, 10));
+            await new Promise((r) => setTimeout(r, 10));
 
             await insertFixture(scaffold, { sourceId: 0 }); // same sourceId → conflict path
-            const [after] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.sourceId, sourceId));
+            const [after] = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.sourceId, sourceId));
 
-            expect(new Date(after.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(before.updatedAt).getTime());
+            expect(new Date(after.updatedAt).getTime()).toBeGreaterThanOrEqual(
+                new Date(before.updatedAt).getTime(),
+            );
             expect(after.status).toBe(before.status);
         });
 
         it('getFixtureById returns the row by UUID', async () => {
             const scaffold = await buildScaffold({ sourceIdSuffix: 230 });
             const sourceId = await insertFixture(scaffold);
-            const [row] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.sourceId, sourceId));
+            const [row] = await db
+                .select()
+                .from(schema.fixtures)
+                .where(eq(schema.fixtures.sourceId, sourceId));
 
             const fetched = await repo.fixtures.getFixtureById(row.id);
             expect(fetched?.sourceId).toBe(sourceId);
@@ -457,7 +603,7 @@ describe('Postgres sub-repositories — integration', () => {
             expect(found?.name).toBe(testJobName);
 
             const all = await repo.workers.listJobs();
-            expect(all.some(j => j.name === testJobName)).toBe(true);
+            expect(all.some((j) => j.name === testJobName)).toBe(true);
 
             await db.delete(schema.jobs).where(eq(schema.jobs.name, testJobName));
         });
@@ -475,7 +621,9 @@ describe('Postgres sub-repositories — integration', () => {
 
             const rows = await repo.workers.listJobExecutions(job.id, 10);
             expect(rows.length).toBe(2);
-            expect(new Date(rows[0].startedAt).getTime()).toBeGreaterThan(new Date(rows[1].startedAt).getTime());
+            expect(new Date(rows[0].startedAt).getTime()).toBeGreaterThan(
+                new Date(rows[1].startedAt).getTime(),
+            );
 
             const latest = await repo.workers.getLatestJobExecution(job.id);
             expect(latest?.startedAt.toString()).toBe(rows[0].startedAt.toString());
@@ -495,7 +643,9 @@ describe('Postgres sub-repositories — integration', () => {
     // ----------------------------------------------------------------------
     describe('ConfigRepository (masked getters only)', () => {
         const savedEnv = { ...process.env };
-        afterAll(() => { process.env = savedEnv; });
+        afterAll(() => {
+            process.env = savedEnv;
+        });
 
         it('getDatabaseUrlMasked redacts credentials but keeps host visible', async () => {
             process.env.DATABASE_URL = 'postgresql://u:p@localhost:5432/db';
@@ -536,12 +686,19 @@ describe('Postgres sub-repositories — integration', () => {
         };
 
         beforeEach(async () => {
-            await db.delete(schema.graphics).where(eq(schema.graphics.entityId, testGraphic.entityId));
+            await db
+                .delete(schema.graphics)
+                .where(eq(schema.graphics.entityId, testGraphic.entityId));
         });
 
         it('saveGraphic inserts then upserts on (entityType, entityId)', async () => {
             const first = await repo.graphics.saveGraphic({ ...testGraphic, metadata: { v: 1 } });
-            const second = await repo.graphics.saveGraphic({ ...testGraphic, blobPath: 'gfx/updated.png', mimeType: 'image/jpeg', metadata: { v: 2 } });
+            const second = await repo.graphics.saveGraphic({
+                ...testGraphic,
+                blobPath: 'gfx/updated.png',
+                mimeType: 'image/jpeg',
+                metadata: { v: 2 },
+            });
             expect(second.id).toBe(first.id);
             expect(second.blobPath).toBe('gfx/updated.png');
             expect(second.mimeType).toBe('image/jpeg');
@@ -550,7 +707,10 @@ describe('Postgres sub-repositories — integration', () => {
 
         it('getGraphics filters by entityType + entityId', async () => {
             await repo.graphics.saveGraphic(testGraphic);
-            const rows = await repo.graphics.getGraphics(testGraphic.entityType, testGraphic.entityId);
+            const rows = await repo.graphics.getGraphics(
+                testGraphic.entityType,
+                testGraphic.entityId,
+            );
             expect(rows).toHaveLength(1);
         });
     });
@@ -559,25 +719,31 @@ describe('Postgres sub-repositories — integration', () => {
     // Constraint violations & error paths
     // ----------------------------------------------------------------------
     describe('error paths', () => {
-        beforeEach(async () => { await deleteTestRows(); });
+        beforeEach(async () => {
+            await deleteTestRows();
+        });
 
         it('inserting a fixture with a missing leagueId FK throws', async () => {
             const { season, homeTeam, awayTeam } = await buildScaffold({ sourceIdSuffix: 700 });
-            await expect(db.insert(schema.fixtures).values({
-                leagueId: '00000000-0000-0000-0000-000000000000', // bad FK
-                seasonId: season.id,
-                homeTeamId: homeTeam.id,
-                awayTeamId: awayTeam.id,
-                scheduledAt: new Date(),
-                sourceName: TEST_SOURCE,
-                sourceId: TEST_SOURCE_ID_BASE + 700,
-            })).rejects.toThrow();
+            await expect(
+                db.insert(schema.fixtures).values({
+                    leagueId: '00000000-0000-0000-0000-000000000000', // bad FK
+                    seasonId: season.id,
+                    homeTeamId: homeTeam.id,
+                    awayTeamId: awayTeam.id,
+                    scheduledAt: new Date(),
+                    sourceName: TEST_SOURCE,
+                    sourceId: TEST_SOURCE_ID_BASE + 700,
+                }),
+            ).rejects.toThrow();
         });
 
         it('two teams cannot share the same (sourceName, sourceId)', async () => {
             const sourceId = TEST_SOURCE_ID_BASE + 800;
             await db.insert(schema.teams).values({ name: 'A', sourceName: TEST_SOURCE, sourceId });
-            await expect(db.insert(schema.teams).values({ name: 'B', sourceName: TEST_SOURCE, sourceId })).rejects.toThrow();
+            await expect(
+                db.insert(schema.teams).values({ name: 'B', sourceName: TEST_SOURCE, sourceId }),
+            ).rejects.toThrow();
         });
 
         it('syncSeasons throws when the league sourceId is unknown', async () => {

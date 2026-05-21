@@ -1,7 +1,9 @@
+import type { MatchPlayer } from './types';
+
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+
 import PlayerInfoPopup from '../PlayerInfoPopup';
-import type { MatchPlayer } from './types';
 
 interface PlayerRowProps {
     player: MatchPlayer;
@@ -45,21 +47,24 @@ const PlayerRow: React.FC<PlayerRowProps> = ({ player, season, leagueSourceId, r
                 <div className="player-photo-placeholder" />
             )}
             <span className="player-name">{player.name}</span>
-            {showPopup && createPortal(
-                <div
-                    onMouseEnter={() => { if (hoverTimer.current) clearTimeout(hoverTimer.current); }}
-                    onMouseLeave={handleMouseLeave}
-                >
-                    <PlayerInfoPopup
-                        playerId={player.sourceId}
-                        season={season}
-                        leagueSourceId={leagueSourceId}
-                        anchorRect={anchorRect}
-                        onClose={handleMouseLeave}
-                    />
-                </div>,
-                document.body
-            )}
+            {showPopup &&
+                createPortal(
+                    <div
+                        onMouseEnter={() => {
+                            if (hoverTimer.current) clearTimeout(hoverTimer.current);
+                        }}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        <PlayerInfoPopup
+                            playerId={player.sourceId}
+                            season={season}
+                            leagueSourceId={leagueSourceId}
+                            anchorRect={anchorRect}
+                            onClose={handleMouseLeave}
+                        />
+                    </div>,
+                    document.body,
+                )}
         </li>
     );
 };

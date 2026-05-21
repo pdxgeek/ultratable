@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import LeagueSelector from './LeagueSelector';
+
 import ultratableBanner from '../assets/ultratable_banner.png';
+import LeagueSelector from './LeagueSelector';
 
 const TopNav: React.FC = () => {
     return (

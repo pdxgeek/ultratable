@@ -1,9 +1,11 @@
+import type { Fixture, Team } from '../db';
+
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Fixture, Team } from '../db';
-import { db } from '../db';
-import { usePopup } from '../context/PopupContext';
 import { useNavigate } from 'react-router-dom';
+
+import { usePopup } from '../context/PopupContext';
+import { db } from '../db';
 
 interface MatchPopupProps {
     fixture: Fixture;
@@ -57,8 +59,11 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
         return d.toLocaleDateString(undefined, {
-            weekday: 'short', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit'
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
         });
     };
 
@@ -90,16 +95,21 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
                         </div>
                     )}
                     <div className="match-popup__venue-name">
-                        📍 {venue.name}{venue.city ? `, ${venue.city}` : ''}
+                        📍 {venue.name}
+                        {venue.city ? `, ${venue.city}` : ''}
                     </div>
                 </div>
             )}
 
             <div className="match-popup__status">
                 {isUpcoming && <span className="badge badge--upcoming">Upcoming</span>}
-                {fixture.status === 'postponed' && <span className="badge badge--postponed">Postponed</span>}
+                {fixture.status === 'postponed' && (
+                    <span className="badge badge--postponed">Postponed</span>
+                )}
                 {isPlayed && <span className="badge badge--played">Full Time</span>}
-                {fixture.gameweek && <span className="badge badge--gameweek">Gameweek {fixture.gameweek}</span>}
+                {fixture.gameweek && (
+                    <span className="badge badge--gameweek">Gameweek {fixture.gameweek}</span>
+                )}
             </div>
 
             <div className="match-popup__header">
@@ -109,7 +119,9 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
                             src={homeTeam.logo}
                             alt=""
                             className="match-popup__logo"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                            }}
                         />
                     )}
                     <span className="match-popup__team-name">{homeTeam?.name ?? 'Unknown'}</span>
@@ -133,16 +145,16 @@ export default function MatchPopup({ fixture, teamsMap, anchorRect }: MatchPopup
                             src={awayTeam.logo}
                             alt=""
                             className="match-popup__logo"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                            }}
                         />
                     )}
                     <span className="match-popup__team-name">{awayTeam?.name ?? 'Unknown'}</span>
                 </div>
             </div>
 
-            <div className="match-popup__date">
-                📅 {formatDate(fixture.scheduledAt)}
-            </div>
+            <div className="match-popup__date">📅 {formatDate(fixture.scheduledAt)}</div>
         </div>
     );
 }

@@ -1,6 +1,8 @@
-import React from 'react';
-import PlayerRow from './PlayerRow';
 import type { MatchLineup } from './types';
+
+import React from 'react';
+
+import PlayerRow from './PlayerRow';
 
 interface TeamLineupColumnProps {
     lineup: MatchLineup | null;
@@ -15,7 +17,7 @@ const TeamLineupColumn: React.FC<TeamLineupColumnProps> = ({
     season,
     leagueSourceId,
     reverse,
-    keyPrefix
+    keyPrefix,
 }) => {
     if (!lineup) return <div className="team-column" />;
 
@@ -38,7 +40,7 @@ const TeamLineupColumn: React.FC<TeamLineupColumnProps> = ({
 
             <h4 style={alignRight}>Starting XI</h4>
             <ul className="player-list" style={alignRight}>
-                {lineup.startXI?.map(p => (
+                {lineup.startXI?.map((p) => (
                     <PlayerRow
                         key={`${keyPrefix}-start-${p.sourceId}`}
                         player={p}
@@ -51,7 +53,7 @@ const TeamLineupColumn: React.FC<TeamLineupColumnProps> = ({
 
             <h4 style={alignRight}>Substitutes</h4>
             <p className="subs-list-text" style={alignRight}>
-                {lineup.substitutes?.map(p => p.name).join(', ')}
+                {lineup.substitutes?.map((p) => p.name).join(', ')}
             </p>
         </div>
     );

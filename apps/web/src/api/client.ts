@@ -1,4 +1,4 @@
-import { createClient, cacheExchange, fetchExchange } from 'urql';
+import { cacheExchange, createClient, fetchExchange } from 'urql';
 
 // In production (Vercel), VITE_API_URL points to the service (e.g. https://api.ultratable.io).
 // In dev, Vite proxies /graphql to the local service automatically.

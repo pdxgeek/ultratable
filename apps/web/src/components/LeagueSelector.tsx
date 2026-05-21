@@ -1,8 +1,10 @@
 import React from 'react';
+
 import { useLeague } from '../context/LeagueContext';
 
 const LeagueSelector: React.FC = () => {
-    const { availableLeagues, availableSeasons, activeSeason, setActiveSeasonId, isSyncing } = useLeague();
+    const { availableLeagues, availableSeasons, activeSeason, setActiveSeasonId, isSyncing } =
+        useLeague();
 
     return (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -17,21 +19,22 @@ const LeagueSelector: React.FC = () => {
                     border: '1px solid var(--border-color)',
                     fontSize: '0.9rem',
                     fontWeight: 600,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                 }}
             >
-                <option value="" disabled>Select Season</option>
-                {availableLeagues.map(league => (
+                <option value="" disabled>
+                    Select Season
+                </option>
+                {availableLeagues.map((league) => (
                     <optgroup key={league.id} label={league.name}>
                         {availableSeasons
-                            .filter(s => s.leagueId === league.id)
+                            .filter((s) => s.leagueId === league.id)
                             .sort((a, b) => b.year - a.year)
-                            .map(season => (
+                            .map((season) => (
                                 <option key={season.id} value={season.id}>
                                     {league.name} {season.year}
                                 </option>
-                            ))
-                        }
+                            ))}
                     </optgroup>
                 ))}
             </select>

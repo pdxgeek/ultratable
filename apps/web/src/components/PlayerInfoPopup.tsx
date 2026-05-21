@@ -1,5 +1,7 @@
 import React from 'react';
+
 import { usePlayer } from '../hooks/usePlayer';
+
 import './PlayerInfoPopup.css';
 
 interface PlayerInfoPopupProps {
@@ -13,12 +15,24 @@ interface PlayerInfoPopupProps {
 interface PlayerStats {
     league?: { id: number };
     team?: { name: string };
-    games?: { appearences?: number; minutes?: number; rating?: string; number?: number; position?: string };
+    games?: {
+        appearences?: number;
+        minutes?: number;
+        rating?: string;
+        number?: number;
+        position?: string;
+    };
     goals?: { total?: number; assists?: number };
     cards?: { yellow?: number; red?: number };
 }
 
-const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, leagueSourceId, anchorRect, onClose }) => {
+const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
+    playerId,
+    season,
+    leagueSourceId,
+    anchorRect,
+    onClose,
+}) => {
     const { player, isLoading } = usePlayer(playerId, season);
 
     if (!anchorRect) return null;
@@ -35,24 +49,27 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
         left: `${left}px`,
     };
 
-    if (isLoading) return (
-        <div className="player-popup" style={style}>
-            <div className="player-popup__loading">
-                <div className="player-popup__loading-photo" />
-                <div className="player-popup__loading-lines">
-                    <div className="player-popup__loading-line" />
-                    <div className="player-popup__loading-line" />
-                    <div className="player-popup__loading-line" />
+    if (isLoading)
+        return (
+            <div className="player-popup" style={style}>
+                <div className="player-popup__loading">
+                    <div className="player-popup__loading-photo" />
+                    <div className="player-popup__loading-lines">
+                        <div className="player-popup__loading-line" />
+                        <div className="player-popup__loading-line" />
+                        <div className="player-popup__loading-line" />
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
 
     if (!player) {
         const initials = String(playerId).slice(0, 2);
         return (
             <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-                <button className="player-popup__close" onClick={onClose}>✕</button>
+                <button className="player-popup__close" onClick={onClose}>
+                    ✕
+                </button>
                 <div className="player-popup__header">
                     <div className="player-popup__photo-placeholder">{initials}</div>
                     <div className="player-popup__identity">
@@ -68,18 +85,24 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
     const currentStats = (() => {
         if (!player.statistics?.length) return null;
         if (leagueSourceId) {
-            const match = player.statistics.find((s: PlayerStats) => s.league?.id === leagueSourceId);
+            const match = player.statistics.find(
+                (s: PlayerStats) => s.league?.id === leagueSourceId,
+            );
             if (match) return match as PlayerStats;
         }
         // Fallback: pick entry with most appearances
-        return player.statistics.reduce((best: PlayerStats, s: PlayerStats) =>
-            (s.games?.appearences || 0) > (best?.games?.appearences || 0) ? s : best
-            , player.statistics[0]) as PlayerStats;
+        return player.statistics.reduce(
+            (best: PlayerStats, s: PlayerStats) =>
+                (s.games?.appearences || 0) > (best?.games?.appearences || 0) ? s : best,
+            player.statistics[0],
+        ) as PlayerStats;
     })();
 
     return (
         <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-            <button className="player-popup__close" onClick={onClose}>✕</button>
+            <button className="player-popup__close" onClick={onClose}>
+                ✕
+            </button>
 
             {/* Header: Photo + Name */}
             <div className="player-popup__header">
@@ -87,12 +110,19 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
                     <img src={player.photo} alt={player.name} className="player-popup__photo" />
                 ) : (
                     <div className="player-popup__photo-placeholder">
-                        {player.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                        {player.name
+                            ?.split(' ')
+                            .map((n: string) => n[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase()}
                     </div>
                 )}
                 <div className="player-popup__identity">
                     <h3 className="player-popup__name">{player.name}</h3>
-                    {player.nationality && <p className="player-popup__nationality">{player.nationality}</p>}
+                    {player.nationality && (
+                        <p className="player-popup__nationality">{player.nationality}</p>
+                    )}
                     {currentStats?.games?.position && (
                         <p className="player-popup__nationality">{currentStats.games.position}</p>
                     )}
@@ -114,10 +144,20 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
                         <div className="player-popup__section">
                             <div className="player-popup__section-title">Season Stats</div>
                             <Row label="Team" value={currentStats.team?.name} />
-                            {currentStats.games?.number && <Row label="Number" value={`#${currentStats.games.number}`} />}
+                            {currentStats.games?.number && (
+                                <Row label="Number" value={`#${currentStats.games.number}`} />
+                            )}
                             <Row label="Appearances" value={currentStats.games?.appearences || 0} />
-                            <Row label="Minutes" value={(currentStats.games?.minutes || 0).toLocaleString()} />
-                            {currentStats.games?.rating && <Row label="Rating" value={parseFloat(currentStats.games.rating).toFixed(2)} />}
+                            <Row
+                                label="Minutes"
+                                value={(currentStats.games?.minutes || 0).toLocaleString()}
+                            />
+                            {currentStats.games?.rating && (
+                                <Row
+                                    label="Rating"
+                                    value={parseFloat(currentStats.games.rating).toFixed(2)}
+                                />
+                            )}
                         </div>
 
                         <div className="player-popup__section">
@@ -127,19 +167,19 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({ playerId, season, lea
                             <div className="player-popup__row">
                                 <span className="player-popup__label">Cards</span>
                                 <span className="player-popup__cards">
-                                    <span style={{ color: '#ffd700' }}>🟨 {currentStats.cards?.yellow || 0}</span>
-                                    <span style={{ color: '#ff4d4d' }}>🟥 {currentStats.cards?.red || 0}</span>
+                                    <span style={{ color: '#ffd700' }}>
+                                        🟨 {currentStats.cards?.yellow || 0}
+                                    </span>
+                                    <span style={{ color: '#ff4d4d' }}>
+                                        🟥 {currentStats.cards?.red || 0}
+                                    </span>
                                 </span>
                             </div>
                         </div>
                     </>
                 )}
 
-                {player.injured && (
-                    <div className="player-popup__injury">
-                        ⚠️ Currently Injured
-                    </div>
-                )}
+                {player.injured && <div className="player-popup__injury">⚠️ Currently Injured</div>}
             </div>
         </div>
     );

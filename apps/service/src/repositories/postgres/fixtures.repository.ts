@@ -1,14 +1,15 @@
 import { and, count, eq, gt, inArray, lte, notInArray, sql } from 'drizzle-orm';
+
 import { db } from '../../db';
 import * as schema from '../../db/schema';
 import { IFootballProvider, IngestedFixture } from '../../integrations/types';
-import { JobReporter } from '../../workers/runner';
+import { cacheService, TTL } from '../../services/cache.service';
 import { graphicsService } from '../../services/graphics.service';
 import { globalLogger } from '../../services/log.service';
-import { cacheService, TTL } from '../../services/cache.service';
+import { JobReporter } from '../../workers/runner';
 import { FixturesRepository } from '../fixtures';
-import { TeamsRepository } from '../teams';
 import { SyncResult } from '../shared';
+import { TeamsRepository } from '../teams';
 import { FIXTURE_UPSERT_SET, FixtureLookups, NOW_MS } from './shared';
 
 const logger = globalLogger.child({ module: 'PostgresFixturesRepository' });
@@ -28,7 +29,9 @@ export class PostgresFixturesRepository implements FixturesRepository {
         ]);
         return {
             teamMap: new Map<number, string>(teams.map((t) => [t.sourceId, t.id])),
-            teamVenueMap: new Map<string, string>(teams.filter((t) => t.venueId).map((t) => [t.id, t.venueId!])),
+            teamVenueMap: new Map<string, string>(
+                teams.filter((t) => t.venueId).map((t) => [t.id, t.venueId!]),
+            ),
             venueMap: new Map<number, string>(currentVenues.map((v) => [v.sourceId, v.id])),
         };
     }
@@ -49,7 +52,9 @@ export class PostgresFixturesRepository implements FixturesRepository {
         const awayId = lookups.teamMap.get(normalized.awayTeamSourceId);
         if (!homeId || !awayId) return null;
 
-        const fixtureVenueId = normalized.venueSourceId ? lookups.venueMap.get(normalized.venueSourceId) : undefined;
+        const fixtureVenueId = normalized.venueSourceId
+            ? lookups.venueMap.get(normalized.venueSourceId)
+            : undefined;
 
         return {
             sourceName: normalized.sourceName,
@@ -69,30 +74,46 @@ export class PostgresFixturesRepository implements FixturesRepository {
         };
     }
 
-    async syncFixtures(leagueSourceId: number, seasonYear: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>> {
+    async syncFixtures(
+        leagueSourceId: number,
+        seasonYear: number,
+        reporter?: JobReporter,
+    ): Promise<SyncResult<typeof schema.fixtures.$inferSelect>> {
         if (!db) return { data: [], stats: { processedCount: 0, apiCallsCount: 0 } };
         let apiCallsCount = 0;
 
-        const [localLeague] = await db.select().from(schema.leagues).where(eq(schema.leagues.sourceId, leagueSourceId));
+        const [localLeague] = await db
+            .select()
+            .from(schema.leagues)
+            .where(eq(schema.leagues.sourceId, leagueSourceId));
         if (!localLeague) throw new Error(`League ${leagueSourceId} not found`);
 
-        let [localSeason] = await db.select().from(schema.seasons)
-            .where(sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`);
+        let [localSeason] = await db
+            .select()
+            .from(schema.seasons)
+            .where(
+                sql`${schema.seasons.leagueId} = ${localLeague.id} AND ${schema.seasons.year} = ${seasonYear}`,
+            );
 
         if (!localSeason) {
             // Only create the specific season we need, NOT all seasons
-            const [created] = await db.insert(schema.seasons).values({
-                leagueId: localLeague.id,
-                year: seasonYear,
-                updatedAt: new Date()
-            }).onConflictDoUpdate({
-                target: [schema.seasons.leagueId, schema.seasons.year],
-                set: { updatedAt: new Date() }
-            }).returning();
+            const [created] = await db
+                .insert(schema.seasons)
+                .values({
+                    leagueId: localLeague.id,
+                    year: seasonYear,
+                    updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                    target: [schema.seasons.leagueId, schema.seasons.year],
+                    set: { updatedAt: new Date() },
+                })
+                .returning();
             localSeason = created;
         }
 
-        if (!localSeason) throw new Error(`Season ${seasonYear} not found for league ${leagueSourceId}`);
+        if (!localSeason)
+            throw new Error(`Season ${seasonYear} not found for league ${leagueSourceId}`);
 
         await this.teams.syncTeams(leagueSourceId, seasonYear);
         apiCallsCount++;
@@ -104,18 +125,29 @@ export class PostgresFixturesRepository implements FixturesRepository {
 
         const lookups = await this.loadFixtureLookups();
 
-        const fixturesToInsert = fixtures.map((normalized) => {
-            const row = this.buildFixtureRow(normalized, localLeague.id, localSeason.id, lookups);
-            if (!row) {
-                const homeMapped = lookups.teamMap.has(normalized.homeTeamSourceId);
-                const awayMapped = lookups.teamMap.has(normalized.awayTeamSourceId);
-                logger.warn(
-                    { homeSource: normalized.homeTeamSourceId, awaySource: normalized.awayTeamSourceId, fixtureSource: normalized.sourceId },
-                    `Dropping fixture ${normalized.sourceId}: missing team mapping (home=${homeMapped}, away=${awayMapped})`
+        const fixturesToInsert = fixtures
+            .map((normalized) => {
+                const row = this.buildFixtureRow(
+                    normalized,
+                    localLeague.id,
+                    localSeason.id,
+                    lookups,
                 );
-            }
-            return row;
-        }).filter(Boolean);
+                if (!row) {
+                    const homeMapped = lookups.teamMap.has(normalized.homeTeamSourceId);
+                    const awayMapped = lookups.teamMap.has(normalized.awayTeamSourceId);
+                    logger.warn(
+                        {
+                            homeSource: normalized.homeTeamSourceId,
+                            awaySource: normalized.awayTeamSourceId,
+                            fixtureSource: normalized.sourceId,
+                        },
+                        `Dropping fixture ${normalized.sourceId}: missing team mapping (home=${homeMapped}, away=${awayMapped})`,
+                    );
+                }
+                return row;
+            })
+            .filter(Boolean);
 
         const totalCount = fixturesToInsert.length;
         let processedCount = 0;
@@ -123,8 +155,9 @@ export class PostgresFixturesRepository implements FixturesRepository {
 
         for (let i = 0; i < totalCount; i += BATCH_SIZE) {
             const batch = fixturesToInsert.slice(i, i + BATCH_SIZE);
-            await db.insert(schema.fixtures)
-                .values(batch as unknown as typeof schema.fixtures.$inferInsert[])
+            await db
+                .insert(schema.fixtures)
+                .values(batch as unknown as (typeof schema.fixtures.$inferInsert)[])
                 .onConflictDoUpdate({
                     target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
                     set: FIXTURE_UPSERT_SET,
@@ -149,21 +182,28 @@ export class PostgresFixturesRepository implements FixturesRepository {
             stats: {
                 processedCount,
                 totalCount,
-                apiCallsCount
-            }
+                apiCallsCount,
+            },
         };
     }
 
-    async getFixtures(leagueSourceId: number, seasonYear: number, since?: Date): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+    async getFixtures(
+        leagueSourceId: number,
+        seasonYear: number,
+        since?: Date,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
-        const [season] = await db.select()
+        const [season] = await db
+            .select()
             .from(schema.seasons)
             .innerJoin(schema.leagues, eq(schema.seasons.leagueId, schema.leagues.id))
-            .where(and(
-                eq(schema.leagues.sourceId, leagueSourceId),
-                eq(schema.seasons.year, seasonYear)
-            ));
+            .where(
+                and(
+                    eq(schema.leagues.sourceId, leagueSourceId),
+                    eq(schema.seasons.year, seasonYear),
+                ),
+            );
 
         if (!season) return [];
 
@@ -182,16 +222,29 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
                 : Infinity;
 
-            logger.info({ leagueSourceId, seasonYear, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS }, 'Live polling: decision check');
+            logger.info(
+                {
+                    leagueSourceId,
+                    seasonYear,
+                    isCompleted: seasonRecord.isCompleted,
+                    lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(),
+                    timeSinceLastSyncMs: timeSinceLastSync,
+                    thresholdMs: FIVE_MINUTES_MS,
+                },
+                'Live polling: decision check',
+            );
 
             if (timeSinceLastSync > FIVE_MINUTES_MS) {
                 const threshold = new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
-                const claimed = await db.update(schema.seasons)
+                const claimed = await db
+                    .update(schema.seasons)
                     .set({ lastLiveSyncAt: now })
-                    .where(and(
-                        eq(schema.seasons.id, seasonRecord.id),
-                        sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`
-                    ))
+                    .where(
+                        and(
+                            eq(schema.seasons.id, seasonRecord.id),
+                            sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`,
+                        ),
+                    )
                     .returning({ id: schema.seasons.id });
 
                 logger.info({ claimed: claimed.length }, 'Live polling: lock claim result');
@@ -199,34 +252,59 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 if (claimed.length === 0) {
                     logger.info('Live polling: skipped — lock not claimed');
                 } else {
-
-                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
-                    const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
+                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = [
+                        'played',
+                        'postponed',
+                        'cancelled',
+                    ];
+                    const pastDue = await db
+                        .select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
                         .from(schema.fixtures)
-                        .where(and(
-                            eq(schema.fixtures.seasonId, seasonRecord.id),
-                            lte(schema.fixtures.scheduledAt, now),
-                            notInArray(schema.fixtures.status, TERMINAL_STATUSES)
-                        ));
+                        .where(
+                            and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                lte(schema.fixtures.scheduledAt, now),
+                                notInArray(schema.fixtures.status, TERMINAL_STATUSES),
+                            ),
+                        );
 
                     if (pastDue.length > 0) {
                         try {
-                            const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
-                            logger.info({ leagueSourceId, seasonYear }, `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`);
+                            const sourceIdsToFetch = pastDue.map(
+                                (f: { sourceId: number }) => f.sourceId,
+                            );
+                            logger.info(
+                                { leagueSourceId, seasonYear },
+                                `Live polling: fetching ${sourceIdsToFetch.length} past-due fixtures`,
+                            );
 
-                            const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
+                            const { fixtures: updatedFixtures } =
+                                await this.provider.getFixturesByIds(sourceIdsToFetch);
 
                             if (updatedFixtures.length > 0) {
                                 const lookups = await this.loadFixtureLookups();
                                 const fixturesToUpdate = updatedFixtures
-                                    .map(n => this.buildFixtureRow(n, season.leagues.id, seasonRecord.id, lookups))
+                                    .map((n) =>
+                                        this.buildFixtureRow(
+                                            n,
+                                            season.leagues.id,
+                                            seasonRecord.id,
+                                            lookups,
+                                        ),
+                                    )
                                     .filter(Boolean);
 
                                 if (fixturesToUpdate.length > 0) {
-                                    await db.insert(schema.fixtures)
-                                        .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
+                                    await db
+                                        .insert(schema.fixtures)
+                                        .values(
+                                            fixturesToUpdate as unknown as (typeof schema.fixtures.$inferInsert)[],
+                                        )
                                         .onConflictDoUpdate({
-                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            target: [
+                                                schema.fixtures.sourceName,
+                                                schema.fixtures.sourceId,
+                                            ],
                                             set: FIXTURE_UPSERT_SET,
                                         });
                                     pollingDidUpdate = true;
@@ -240,38 +318,57 @@ export class PostgresFixturesRepository implements FixturesRepository {
                         // Both conditions must hold to avoid false positives where
                         // a poll resolves one batch of stale fixtures but other
                         // non-terminal fixtures remain.
-                        const futureMatches = await db.select({ count: sql`count(*)` })
+                        const futureMatches = await db
+                            .select({ count: sql`count(*)` })
                             .from(schema.fixtures)
-                            .where(and(
-                                eq(schema.fixtures.seasonId, seasonRecord.id),
-                                gt(schema.fixtures.scheduledAt, now)
-                            ));
+                            .where(
+                                and(
+                                    eq(schema.fixtures.seasonId, seasonRecord.id),
+                                    gt(schema.fixtures.scheduledAt, now),
+                                ),
+                            );
 
-                        const nonTerminal = await db.select({ count: sql`count(*)` })
+                        const nonTerminal = await db
+                            .select({ count: sql`count(*)` })
                             .from(schema.fixtures)
-                            .where(and(
-                                eq(schema.fixtures.seasonId, seasonRecord.id),
-                                notInArray(schema.fixtures.status, TERMINAL_STATUSES)
-                            ));
+                            .where(
+                                and(
+                                    eq(schema.fixtures.seasonId, seasonRecord.id),
+                                    notInArray(schema.fixtures.status, TERMINAL_STATUSES),
+                                ),
+                            );
 
                         const futureCount = Number(futureMatches[0]?.count || 0);
                         const nonTerminalCount = Number(nonTerminal[0]?.count || 0);
 
                         if (futureCount === 0 && nonTerminalCount === 0) {
-                            logger.info({ leagueSourceId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonYear} complete`);
-                            await db.update(schema.seasons)
+                            logger.info(
+                                { leagueSourceId, futureCount, nonTerminalCount },
+                                `Live polling: marking season ${seasonYear} complete`,
+                            );
+                            await db
+                                .update(schema.seasons)
                                 .set({ isCompleted: true })
                                 .where(eq(schema.seasons.id, seasonRecord.id));
                         } else {
-                            logger.info({ leagueSourceId, futureCount, nonTerminalCount }, `Live polling: season ${seasonYear} NOT complete`);
+                            logger.info(
+                                { leagueSourceId, futureCount, nonTerminalCount },
+                                `Live polling: season ${seasonYear} NOT complete`,
+                            );
                         }
                     }
                 }
             } else {
-                logger.info({ timeSinceLastSyncMs: timeSinceLastSync }, 'Live polling: skipped — last sync too recent');
+                logger.info(
+                    { timeSinceLastSyncMs: timeSinceLastSync },
+                    'Live polling: skipped — last sync too recent',
+                );
             }
         } else {
-            logger.info({ leagueSourceId, seasonYear }, 'Live polling: skipped — season is completed');
+            logger.info(
+                { leagueSourceId, seasonYear },
+                'Live polling: skipped — season is completed',
+            );
         }
 
         if (pollingDidUpdate) {
@@ -284,13 +381,21 @@ export class PostgresFixturesRepository implements FixturesRepository {
             if (cached) return cached;
         }
 
-        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonRecord.id));
+        let query = db
+            .select()
+            .from(schema.fixtures)
+            .where(eq(schema.fixtures.seasonId, seasonRecord.id));
 
         if (since) {
-            query = db.select().from(schema.fixtures).where(and(
-                eq(schema.fixtures.seasonId, seasonRecord.id),
-                gt(schema.fixtures.updatedAt, since)
-            ));
+            query = db
+                .select()
+                .from(schema.fixtures)
+                .where(
+                    and(
+                        eq(schema.fixtures.seasonId, seasonRecord.id),
+                        gt(schema.fixtures.updatedAt, since),
+                    ),
+                );
         }
 
         const result = await query;
@@ -305,13 +410,23 @@ export class PostgresFixturesRepository implements FixturesRepository {
      * Queries directly by seasonId — no league/source ID resolution needed.
      * Includes the same live polling logic as getFixtures().
      */
-    async getFixturesBySeasonId(seasonId: string, since?: Date, forceRefresh?: boolean): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+    async getFixturesBySeasonId(
+        seasonId: string,
+        since?: Date,
+        forceRefresh?: boolean,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>> {
         if (!db) return [];
 
-        const [seasonRecord] = await db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId));
+        const [seasonRecord] = await db
+            .select()
+            .from(schema.seasons)
+            .where(eq(schema.seasons.id, seasonId));
         if (!seasonRecord) return [];
 
-        const [leagueRecord] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, seasonRecord.leagueId));
+        const [leagueRecord] = await db
+            .select()
+            .from(schema.leagues)
+            .where(eq(schema.leagues.id, seasonRecord.leagueId));
 
         const now = new Date();
         const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -322,7 +437,18 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 ? now.getTime() - seasonRecord.lastLiveSyncAt.getTime()
                 : Infinity;
 
-            logger.info({ seasonId, seasonYear: seasonRecord.year, isCompleted: seasonRecord.isCompleted, lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(), timeSinceLastSyncMs: timeSinceLastSync, thresholdMs: FIVE_MINUTES_MS, forceRefresh: !!forceRefresh }, 'Live polling: decision check');
+            logger.info(
+                {
+                    seasonId,
+                    seasonYear: seasonRecord.year,
+                    isCompleted: seasonRecord.isCompleted,
+                    lastLiveSyncAt: seasonRecord.lastLiveSyncAt?.toISOString(),
+                    timeSinceLastSyncMs: timeSinceLastSync,
+                    thresholdMs: FIVE_MINUTES_MS,
+                    forceRefresh: !!forceRefresh,
+                },
+                'Live polling: decision check',
+            );
 
             if (forceRefresh || timeSinceLastSync > FIVE_MINUTES_MS) {
                 // When forceRefresh is true, use current time as threshold so the lock
@@ -331,12 +457,15 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 const threshold = forceRefresh
                     ? now.toISOString()
                     : new Date(now.getTime() - FIVE_MINUTES_MS).toISOString();
-                const claimed = await db.update(schema.seasons)
+                const claimed = await db
+                    .update(schema.seasons)
                     .set({ lastLiveSyncAt: now })
-                    .where(and(
-                        eq(schema.seasons.id, seasonRecord.id),
-                        sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`
-                    ))
+                    .where(
+                        and(
+                            eq(schema.seasons.id, seasonRecord.id),
+                            sql`(${schema.seasons.lastLiveSyncAt} IS NULL OR ${schema.seasons.lastLiveSyncAt} <= ${threshold})`,
+                        ),
+                    )
                     .returning({ id: schema.seasons.id });
 
                 logger.info({ claimed: claimed.length }, 'Live polling: lock claim result');
@@ -344,41 +473,77 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 if (claimed.length === 0) {
                     logger.info('Live polling: skipped — lock not claimed');
                 } else {
-                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
-                    const pastDue = await db.select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
+                    const TERMINAL_STATUSES: ('played' | 'postponed' | 'cancelled')[] = [
+                        'played',
+                        'postponed',
+                        'cancelled',
+                    ];
+                    const pastDue = await db
+                        .select({ id: schema.fixtures.id, sourceId: schema.fixtures.sourceId })
                         .from(schema.fixtures)
-                        .where(and(
-                            eq(schema.fixtures.seasonId, seasonRecord.id),
-                            lte(schema.fixtures.scheduledAt, now),
-                            notInArray(schema.fixtures.status, TERMINAL_STATUSES)
-                        ));
+                        .where(
+                            and(
+                                eq(schema.fixtures.seasonId, seasonRecord.id),
+                                lte(schema.fixtures.scheduledAt, now),
+                                notInArray(schema.fixtures.status, TERMINAL_STATUSES),
+                            ),
+                        );
 
                     // --- STALE FIXTURE POLLING (runs every 5 min when past-due exist) ---
                     if (pastDue.length > 0) {
                         try {
-                            const sourceIdsToFetch = pastDue.map((f: { sourceId: number }) => f.sourceId);
-                            logger.info({ seasonId, seasonYear: seasonRecord.year, count: sourceIdsToFetch.length }, 'Stale polling: fetching past-due fixtures by ID');
+                            const sourceIdsToFetch = pastDue.map(
+                                (f: { sourceId: number }) => f.sourceId,
+                            );
+                            logger.info(
+                                {
+                                    seasonId,
+                                    seasonYear: seasonRecord.year,
+                                    count: sourceIdsToFetch.length,
+                                },
+                                'Stale polling: fetching past-due fixtures by ID',
+                            );
 
-                            const { fixtures: updatedFixtures } = await this.provider.getFixturesByIds(sourceIdsToFetch);
+                            const { fixtures: updatedFixtures } =
+                                await this.provider.getFixturesByIds(sourceIdsToFetch);
 
                             if (updatedFixtures.length > 0) {
                                 const lookups = await this.loadFixtureLookups();
                                 const fixturesToUpdate = updatedFixtures
-                                    .map(n => this.buildFixtureRow(n, seasonRecord.leagueId, seasonRecord.id, lookups))
+                                    .map((n) =>
+                                        this.buildFixtureRow(
+                                            n,
+                                            seasonRecord.leagueId,
+                                            seasonRecord.id,
+                                            lookups,
+                                        ),
+                                    )
                                     .filter(Boolean);
 
                                 if (fixturesToUpdate.length > 0) {
-                                    await db.insert(schema.fixtures)
-                                        .values(fixturesToUpdate as unknown as typeof schema.fixtures.$inferInsert[])
+                                    await db
+                                        .insert(schema.fixtures)
+                                        .values(
+                                            fixturesToUpdate as unknown as (typeof schema.fixtures.$inferInsert)[],
+                                        )
                                         .onConflictDoUpdate({
-                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            target: [
+                                                schema.fixtures.sourceName,
+                                                schema.fixtures.sourceId,
+                                            ],
                                             set: FIXTURE_UPSERT_SET,
                                         });
                                     pollingDidUpdate = true;
-                                    logger.info({ updated: fixturesToUpdate.length }, 'Stale polling: upsert complete');
+                                    logger.info(
+                                        { updated: fixturesToUpdate.length },
+                                        'Stale polling: upsert complete',
+                                    );
                                 }
                             } else {
-                                logger.info({ requested: sourceIdsToFetch.length }, 'Stale polling: API returned 0 fixtures (ids param may not be available — daily discovery will catch them)');
+                                logger.info(
+                                    { requested: sourceIdsToFetch.length },
+                                    'Stale polling: API returned 0 fixtures (ids param may not be available — daily discovery will catch them)',
+                                );
                             }
                         } catch (e: unknown) {
                             const err = e instanceof Error ? e : new Error(String(e));
@@ -396,23 +561,47 @@ export class PostgresFixturesRepository implements FixturesRepository {
 
                     if (discoveryNeeded && leagueRecord) {
                         try {
-                            logger.info({ seasonId, seasonYear: seasonRecord.year, leagueSourceId: leagueRecord.sourceId, forceRefresh: !!forceRefresh }, 'Fixture discovery: fetching full season to find new/rescheduled matches');
+                            logger.info(
+                                {
+                                    seasonId,
+                                    seasonYear: seasonRecord.year,
+                                    leagueSourceId: leagueRecord.sourceId,
+                                    forceRefresh: !!forceRefresh,
+                                },
+                                'Fixture discovery: fetching full season to find new/rescheduled matches',
+                            );
 
-                            const { fixtures: allFixtures } = await this.provider.getFixtures(leagueRecord.sourceId, seasonRecord.year);
+                            const { fixtures: allFixtures } = await this.provider.getFixtures(
+                                leagueRecord.sourceId,
+                                seasonRecord.year,
+                            );
 
                             if (allFixtures.length > 0) {
                                 const lookups = await this.loadFixtureLookups();
                                 const fixturesToUpsert = allFixtures
-                                    .map(n => this.buildFixtureRow(n, seasonRecord.leagueId, seasonRecord.id, lookups))
+                                    .map((n) =>
+                                        this.buildFixtureRow(
+                                            n,
+                                            seasonRecord.leagueId,
+                                            seasonRecord.id,
+                                            lookups,
+                                        ),
+                                    )
                                     .filter(Boolean);
 
                                 if (fixturesToUpsert.length > 0) {
                                     // Only update (and bump updatedAt) when data actually changed.
                                     // IS DISTINCT FROM handles NULLs correctly.
-                                    await db.insert(schema.fixtures)
-                                        .values(fixturesToUpsert as unknown as typeof schema.fixtures.$inferInsert[])
+                                    await db
+                                        .insert(schema.fixtures)
+                                        .values(
+                                            fixturesToUpsert as unknown as (typeof schema.fixtures.$inferInsert)[],
+                                        )
                                         .onConflictDoUpdate({
-                                            target: [schema.fixtures.sourceName, schema.fixtures.sourceId],
+                                            target: [
+                                                schema.fixtures.sourceName,
+                                                schema.fixtures.sourceId,
+                                            ],
                                             set: FIXTURE_UPSERT_SET,
                                             where: sql`
                                                 ${schema.fixtures.scheduledAt} IS DISTINCT FROM EXCLUDED.scheduled_at
@@ -421,10 +610,13 @@ export class PostgresFixturesRepository implements FixturesRepository {
                                                 OR ${schema.fixtures.awayGoals} IS DISTINCT FROM EXCLUDED.away_goals
                                                 OR ${schema.fixtures.venueId} IS DISTINCT FROM EXCLUDED.venue_id
                                                 OR ${schema.fixtures.gameweek} IS DISTINCT FROM EXCLUDED.gameweek
-                                            `
+                                            `,
                                         });
                                     pollingDidUpdate = true;
-                                    logger.info({ total: fixturesToUpsert.length }, 'Fixture discovery: upsert complete (only changed/new rows affected)');
+                                    logger.info(
+                                        { total: fixturesToUpsert.length },
+                                        'Fixture discovery: upsert complete (only changed/new rows affected)',
+                                    );
                                 }
                             }
 
@@ -436,39 +628,62 @@ export class PostgresFixturesRepository implements FixturesRepository {
                     }
 
                     if (pastDue.length === 0 && !discoveryNeeded) {
-                        const TERMINAL_STATUSES_CHECK: ('played' | 'postponed' | 'cancelled')[] = ['played', 'postponed', 'cancelled'];
-                        const futureMatches = await db.select({ count: sql`count(*)` })
+                        const TERMINAL_STATUSES_CHECK: ('played' | 'postponed' | 'cancelled')[] = [
+                            'played',
+                            'postponed',
+                            'cancelled',
+                        ];
+                        const futureMatches = await db
+                            .select({ count: sql`count(*)` })
                             .from(schema.fixtures)
-                            .where(and(
-                                eq(schema.fixtures.seasonId, seasonRecord.id),
-                                gt(schema.fixtures.scheduledAt, now)
-                            ));
+                            .where(
+                                and(
+                                    eq(schema.fixtures.seasonId, seasonRecord.id),
+                                    gt(schema.fixtures.scheduledAt, now),
+                                ),
+                            );
 
-                        const nonTerminal = await db.select({ count: sql`count(*)` })
+                        const nonTerminal = await db
+                            .select({ count: sql`count(*)` })
                             .from(schema.fixtures)
-                            .where(and(
-                                eq(schema.fixtures.seasonId, seasonRecord.id),
-                                notInArray(schema.fixtures.status, TERMINAL_STATUSES_CHECK)
-                            ));
+                            .where(
+                                and(
+                                    eq(schema.fixtures.seasonId, seasonRecord.id),
+                                    notInArray(schema.fixtures.status, TERMINAL_STATUSES_CHECK),
+                                ),
+                            );
 
                         const futureCount = Number(futureMatches[0]?.count || 0);
                         const nonTerminalCount = Number(nonTerminal[0]?.count || 0);
 
                         if (futureCount === 0 && nonTerminalCount === 0) {
-                            logger.info({ seasonId, futureCount, nonTerminalCount }, `Live polling: marking season ${seasonRecord.year} complete`);
-                            await db.update(schema.seasons)
+                            logger.info(
+                                { seasonId, futureCount, nonTerminalCount },
+                                `Live polling: marking season ${seasonRecord.year} complete`,
+                            );
+                            await db
+                                .update(schema.seasons)
                                 .set({ isCompleted: true })
                                 .where(eq(schema.seasons.id, seasonRecord.id));
                         } else {
-                            logger.info({ seasonId, futureCount, nonTerminalCount }, `Live polling: season ${seasonRecord.year} NOT complete`);
+                            logger.info(
+                                { seasonId, futureCount, nonTerminalCount },
+                                `Live polling: season ${seasonRecord.year} NOT complete`,
+                            );
                         }
                     }
                 }
             } else {
-                logger.info({ timeSinceLastSyncMs: timeSinceLastSync }, 'Live polling: skipped — last sync too recent');
+                logger.info(
+                    { timeSinceLastSyncMs: timeSinceLastSync },
+                    'Live polling: skipped — last sync too recent',
+                );
             }
         } else {
-            logger.info({ seasonId, seasonYear: seasonRecord.year }, 'Live polling: skipped — season is completed');
+            logger.info(
+                { seasonId, seasonYear: seasonRecord.year },
+                'Live polling: skipped — season is completed',
+            );
         }
 
         if (pollingDidUpdate) {
@@ -484,13 +699,21 @@ export class PostgresFixturesRepository implements FixturesRepository {
             if (cached) return cached;
         }
 
-        let query = db.select().from(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonRecord.id));
+        let query = db
+            .select()
+            .from(schema.fixtures)
+            .where(eq(schema.fixtures.seasonId, seasonRecord.id));
 
         if (since) {
-            query = db.select().from(schema.fixtures).where(and(
-                eq(schema.fixtures.seasonId, seasonRecord.id),
-                gt(schema.fixtures.updatedAt, since)
-            ));
+            query = db
+                .select()
+                .from(schema.fixtures)
+                .where(
+                    and(
+                        eq(schema.fixtures.seasonId, seasonRecord.id),
+                        gt(schema.fixtures.updatedAt, since),
+                    ),
+                );
         }
 
         const result = await query;
@@ -502,21 +725,28 @@ export class PostgresFixturesRepository implements FixturesRepository {
 
     async getFixtureById(fixtureId: string): Promise<typeof schema.fixtures.$inferSelect | null> {
         if (!db) return null;
-        const [row] = await db.select().from(schema.fixtures).where(eq(schema.fixtures.id, fixtureId));
+        const [row] = await db
+            .select()
+            .from(schema.fixtures)
+            .where(eq(schema.fixtures.id, fixtureId));
         return row ?? null;
     }
 
     async countFixturesInSeason(seasonId: string): Promise<number> {
         if (!db) return 0;
-        const [res] = await db.select({ val: count() })
+        const [res] = await db
+            .select({ val: count() })
             .from(schema.fixtures)
             .where(eq(schema.fixtures.seasonId, seasonId));
         return Number(res?.val ?? 0);
     }
 
-    async getMatchEvents(fixtureId: number): Promise<import('../../integrations/types').IngestedEvent[]> {
+    async getMatchEvents(
+        fixtureId: number,
+    ): Promise<import('../../integrations/types').IngestedEvent[]> {
         const cacheKey = `events:${fixtureId}`;
-        const cached = cacheService.get<import('../../integrations/types').IngestedEvent[]>(cacheKey);
+        const cached =
+            cacheService.get<import('../../integrations/types').IngestedEvent[]>(cacheKey);
         if (cached) return cached;
 
         const events = await this.provider.getMatchEvents(fixtureId);
@@ -526,22 +756,33 @@ export class PostgresFixturesRepository implements FixturesRepository {
             .filter((id: number | null) => id != null);
 
         if (sourceIds.length > 0) {
-            const existingPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+            const existingPlayers = await db
+                .select({ id: schema.players.id, sourceId: schema.players.sourceId })
                 .from(schema.players)
-                .where(and(
-                    eq(schema.players.sourceName, this.provider.name),
-                    inArray(schema.players.sourceId, sourceIds)
-                ));
-            const playerMap = new Map<number, string>(existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]));
+                .where(
+                    and(
+                        eq(schema.players.sourceName, this.provider.name),
+                        inArray(schema.players.sourceId, sourceIds),
+                    ),
+                );
+            const playerMap = new Map<number, string>(
+                existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]),
+            );
 
             const unresolvedIds = sourceIds.filter((id: number) => !playerMap.has(id));
             if (unresolvedIds.length > 0) {
-                const mappings = await db.select({ playerId: schema.playerSourceMappings.playerId, sourceId: schema.playerSourceMappings.sourceId })
+                const mappings = await db
+                    .select({
+                        playerId: schema.playerSourceMappings.playerId,
+                        sourceId: schema.playerSourceMappings.sourceId,
+                    })
                     .from(schema.playerSourceMappings)
-                    .where(and(
-                        eq(schema.playerSourceMappings.sourceName, this.provider.name),
-                        inArray(schema.playerSourceMappings.sourceId, unresolvedIds)
-                    ));
+                    .where(
+                        and(
+                            eq(schema.playerSourceMappings.sourceName, this.provider.name),
+                            inArray(schema.playerSourceMappings.sourceId, unresolvedIds),
+                        ),
+                    );
                 for (const m of mappings) {
                     playerMap.set(m.sourceId, m.playerId);
                 }
@@ -561,7 +802,9 @@ export class PostgresFixturesRepository implements FixturesRepository {
         return events;
     }
 
-    async getLineups(fixtureId: number): Promise<import('../../integrations/types').IngestedLineup[]> {
+    async getLineups(
+        fixtureId: number,
+    ): Promise<import('../../integrations/types').IngestedLineup[]> {
         const lineups = await this.provider.getLineups(fixtureId);
 
         const allPlayers: { sourceId: number; name: string; photo: string | null }[] = [];
@@ -573,43 +816,55 @@ export class PostgresFixturesRepository implements FixturesRepository {
 
         if (allPlayers.length === 0) return lineups;
 
-        const uniquePlayers = Array.from(
-            new Map(allPlayers.map(p => [p.sourceId, p])).values()
-        );
-        const sourceIds = uniquePlayers.map(p => p.sourceId);
+        const uniquePlayers = Array.from(new Map(allPlayers.map((p) => [p.sourceId, p])).values());
+        const sourceIds = uniquePlayers.map((p) => p.sourceId);
 
-        const existingPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+        const existingPlayers = await db
+            .select({ id: schema.players.id, sourceId: schema.players.sourceId })
             .from(schema.players)
-            .where(and(
-                eq(schema.players.sourceName, this.provider.name),
-                inArray(schema.players.sourceId, sourceIds)
-            ));
-        const existingMap = new Map<number, string>(existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]));
+            .where(
+                and(
+                    eq(schema.players.sourceName, this.provider.name),
+                    inArray(schema.players.sourceId, sourceIds),
+                ),
+            );
+        const existingMap = new Map<number, string>(
+            existingPlayers.map((p: { sourceId: number; id: string }) => [p.sourceId, p.id]),
+        );
 
-        const newPlayers = uniquePlayers.filter(p => !existingMap.has(p.sourceId));
+        const newPlayers = uniquePlayers.filter((p) => !existingMap.has(p.sourceId));
 
         if (newPlayers.length > 0) {
-            await db.insert(schema.players)
-                .values(newPlayers.map(p => ({
-                    name: p.name,
-                    metadata: { photo: p.photo },
-                    sourceName: this.provider.name,
-                    sourceId: p.sourceId,
-                })))
+            await db
+                .insert(schema.players)
+                .values(
+                    newPlayers.map((p) => ({
+                        name: p.name,
+                        metadata: { photo: p.photo },
+                        sourceName: this.provider.name,
+                        sourceId: p.sourceId,
+                    })),
+                )
                 .onConflictDoUpdate({
                     target: [schema.players.sourceName, schema.players.sourceId],
                     set: {
                         name: sql`EXCLUDED.name`,
                         updatedAt: NOW_MS,
-                    }
+                    },
                 });
 
-            const newDbPlayers = await db.select({ id: schema.players.id, sourceId: schema.players.sourceId })
+            const newDbPlayers = await db
+                .select({ id: schema.players.id, sourceId: schema.players.sourceId })
                 .from(schema.players)
-                .where(and(
-                    eq(schema.players.sourceName, this.provider.name),
-                    inArray(schema.players.sourceId, newPlayers.map(p => p.sourceId))
-                ));
+                .where(
+                    and(
+                        eq(schema.players.sourceName, this.provider.name),
+                        inArray(
+                            schema.players.sourceId,
+                            newPlayers.map((p) => p.sourceId),
+                        ),
+                    ),
+                );
             for (const p of newDbPlayers) {
                 existingMap.set(p.sourceId, p.id);
             }
@@ -620,7 +875,7 @@ export class PostgresFixturesRepository implements FixturesRepository {
                 const internalId = existingMap.get(p.sourceId);
                 if (internalId) {
                     Object.assign(p, { id: internalId });
-                    if (p.photo && newPlayers.some(np => np.sourceId === p.sourceId)) {
+                    if (p.photo && newPlayers.some((np) => np.sourceId === p.sourceId)) {
                         graphicsService.sideload(internalId, 'player', p.photo);
                     }
                 }

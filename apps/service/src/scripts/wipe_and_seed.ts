@@ -1,8 +1,9 @@
+import { eq } from 'drizzle-orm';
+
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { repository } from '../repositories';
 import { storageProvider } from '../providers/storage';
-import { eq } from 'drizzle-orm';
+import { repository } from '../repositories';
 
 async function clearStorage() {
     console.log('\n--- 1. Clearing Storage Bucket ---');
@@ -60,19 +61,24 @@ async function run() {
         console.log('\n--- 3. Syncing Catalog ---');
         console.log('Fetching latest Countries and Leagues from provider...');
         const syncResult = await repository.catalog.syncCatalogLeagues();
-        console.log(`✅ Catalog sync complete. Processed ${syncResult.stats.processedCount} leagues.`);
+        console.log(
+            `✅ Catalog sync complete. Processed ${syncResult.stats.processedCount} leagues.`,
+        );
 
         // 4. Promote League
         console.log('\n--- 4. Promoting League ---');
         const LEAGUE_SOURCE_ID = 40; // Championship
         console.log(`Finding and Promoting League (SourceId ${LEAGUE_SOURCE_ID})...`);
 
-        const [catLeague] = await db.select()
+        const [catLeague] = await db
+            .select()
             .from(schema.catalogLeagues)
             .where(eq(schema.catalogLeagues.sourceId, LEAGUE_SOURCE_ID));
 
         if (!catLeague) {
-            throw new Error(`League ${LEAGUE_SOURCE_ID} not found in the catalog. Was sync successful?`);
+            throw new Error(
+                `League ${LEAGUE_SOURCE_ID} not found in the catalog. Was sync successful?`,
+            );
         }
 
         const managed = await repository.catalog.promoteLeague(catLeague.id);
@@ -88,14 +94,18 @@ async function run() {
         const SEASON_YEAR = 2024;
         console.log(`Seeding fixtures for ${managed.name} ${SEASON_YEAR}...`);
         console.log('(This will also fetch basic teams and their graphics)');
-        const fixturesResult = await repository.fixtures.syncFixtures(LEAGUE_SOURCE_ID, SEASON_YEAR);
+        const fixturesResult = await repository.fixtures.syncFixtures(
+            LEAGUE_SOURCE_ID,
+            SEASON_YEAR,
+        );
 
-        console.log(`✅ Seeding Complete. Processed ${fixturesResult.stats.processedCount} fixtures.`);
+        console.log(
+            `✅ Seeding Complete. Processed ${fixturesResult.stats.processedCount} fixtures.`,
+        );
 
         console.log('\n====================================');
         console.log('✅ WIPE AND RELOAD FINISHED SUCCESSFULLY');
         console.log('====================================');
-
     } catch (error: unknown) {
         console.error('\n❌ SCRIPT FAILED:');
         console.error((error as Error).message || error);

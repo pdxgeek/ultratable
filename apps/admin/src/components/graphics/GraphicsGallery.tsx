@@ -1,9 +1,11 @@
+import type { Graphic, GraphicType } from './types';
+
 import React from 'react';
-import { Search, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Image as ImageIcon, Loader2, Search } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
-import { GRAPHIC_TYPES, type Graphic, type GraphicType } from './types';
+import { GRAPHIC_TYPES } from './types';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
@@ -20,9 +22,12 @@ interface Props {
 }
 
 export const GraphicsGallery: React.FC<Props> = ({
-    graphics, loading,
-    search, setSearch,
-    typeFilter, setTypeFilter,
+    graphics,
+    loading,
+    search,
+    setSearch,
+    typeFilter,
+    setTypeFilter,
     onSelect,
 }) => {
     return (
@@ -30,15 +35,25 @@ export const GraphicsGallery: React.FC<Props> = ({
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4 bg-[#0d1117] border border-slate-800/60 p-2 rounded-xl">
                     <button
-                        className={cn("px-4 py-1.5 rounded-lg text-sm font-medium transition-all", typeFilter === 'all' ? "bg-sky-500/20 text-sky-400" : "text-slate-400 hover:text-slate-200")}
+                        className={cn(
+                            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
+                            typeFilter === 'all'
+                                ? 'bg-sky-500/20 text-sky-400'
+                                : 'text-slate-400 hover:text-slate-200',
+                        )}
                         onClick={() => setTypeFilter('all')}
                     >
                         All Types
                     </button>
-                    {GRAPHIC_TYPES.map(t => (
+                    {GRAPHIC_TYPES.map((t) => (
                         <button
                             key={t}
-                            className={cn("px-4 py-1.5 rounded-lg text-sm font-medium transition-all capitalize", typeFilter === t ? "bg-sky-500/20 text-sky-400" : "text-slate-400 hover:text-slate-200")}
+                            className={cn(
+                                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all capitalize',
+                                typeFilter === t
+                                    ? 'bg-sky-500/20 text-sky-400'
+                                    : 'text-slate-400 hover:text-slate-200',
+                            )}
                             onClick={() => setTypeFilter(t)}
                         >
                             {t}s
@@ -53,7 +68,7 @@ export const GraphicsGallery: React.FC<Props> = ({
                         placeholder="Search by ID..."
                         className="bg-slate-900/50 border border-slate-700/50 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all w-full md:w-64"
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
+                        onChange={(e) => setSearch(e.target.value)}
                     />
                 </div>
             </div>
@@ -66,11 +81,13 @@ export const GraphicsGallery: React.FC<Props> = ({
             ) : graphics.length === 0 ? (
                 <div className="py-32 text-center bg-slate-900/10 border border-dashed border-slate-800/40 rounded-3xl">
                     <ImageIcon className="w-8 h-8 text-slate-600 mx-auto mb-4" />
-                    <p className="text-sm font-medium tracking-wide text-slate-500">No graphics found.</p>
+                    <p className="text-sm font-medium tracking-wide text-slate-500">
+                        No graphics found.
+                    </p>
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                    {graphics.map(g => (
+                    {graphics.map((g) => (
                         <button
                             key={g.id}
                             type="button"
@@ -87,7 +104,12 @@ export const GraphicsGallery: React.FC<Props> = ({
                                 />
                             </div>
                             <div className="p-3 border-t border-slate-800/60 bg-[#0d1117] flex-1">
-                                <p className="text-[10px] font-mono text-slate-500 truncate mb-1" title={g.entityId}>{g.entityId}</p>
+                                <p
+                                    className="text-[10px] font-mono text-slate-500 truncate mb-1"
+                                    title={g.entityId}
+                                >
+                                    {g.entityId}
+                                </p>
                                 <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider">
                                     <span className="text-slate-400">{g.entityType}</span>
                                     <span className="text-sky-500/50">PNG</span>

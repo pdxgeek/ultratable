@@ -1,36 +1,41 @@
 {
-  "name": "ultratable",
-  "private": true,
-  "license": "UNLICENSED",
-  "version": "0.0.0",
-  "type": "module",
-  "workspaces": [
-    "apps/*"
-  ],
-  "scripts": {
-    "setup": "node scripts/setup.mjs",
-    "dev": "npm run start:all",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "preview": "vite preview",
-    "start:service": "npm run dev --prefix apps/service",
-    "start:admin": "npm run dev --prefix apps/admin",
-    "start:web": "npm run dev --prefix apps/web",
-    "start:all": "node scripts/start-all.js",
-    "health:check": "bash health-check.sh",
-    "docker:deploy": "bash scripts/docker-deploy.sh"
-  },
-  "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18",
-    "concurrently": "^9.2.1",
-    "typescript": "~5.9.3"
-  },
-  "volta": {
-    "node": "24.15.0",
-    "npm": "11.14.1"
-  }
+    "name": "ultratable",
+    "private": true,
+    "license": "UNLICENSED",
+    "version": "0.0.0",
+    "type": "module",
+    "workspaces": [
+        "apps/*"
+    ],
+    "scripts": {
+        "setup": "node scripts/setup.mjs",
+        "dev": "npm run start:all",
+        "test": "vitest",
+        "test:ui": "vitest --ui",
+        "test:run": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "build": "npm run build --workspaces --if-present",
+        "lint": "npm run lint --workspaces --if-present",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "preview": "vite preview",
+        "start:service": "npm run dev --prefix apps/service",
+        "start:admin": "npm run dev --prefix apps/admin",
+        "start:web": "npm run dev --prefix apps/web",
+        "start:all": "node scripts/start-all.js",
+        "health:check": "bash health-check.sh",
+        "docker:deploy": "bash scripts/docker-deploy.sh"
+    },
+    "devDependencies": {
+        "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
+        "@vitest/coverage-v8": "^4.0.18",
+        "concurrently": "^9.2.1",
+        "eslint-config-prettier": "^9.1.2",
+        "prettier": "^3.8.3",
+        "typescript": "~5.9.3"
+    },
+    "volta": {
+        "node": "24.15.0",
+        "npm": "11.14.1"
+    }
 }

@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import TeamCell from './TeamCell';
+import type { Fixture, Team } from '../db';
+import type { StandingsFilter } from '../logic/dataCompiler';
+import type { StandingsRow } from '../logic/formulas';
+
+import React, { useMemo, useState } from 'react';
+
+import { useSettings } from '../context/SettingsContext';
+import { FixtureDropdown } from './FixtureDropdown';
 import FormColumn from './FormColumn';
 import NextMatchBadge from './NextMatchBadge';
-import { FixtureDropdown } from './FixtureDropdown';
-import type { StandingsRow } from '../logic/formulas';
-import type { StandingsFilter } from '../logic/dataCompiler';
-import type { Fixture, Team } from '../db';
-import { useSettings } from '../context/SettingsContext';
+import TeamCell from './TeamCell';
 
 interface StandingsTableProps {
     standings: StandingsRow[];
@@ -16,16 +18,33 @@ interface StandingsTableProps {
     onFilterChange?: (filter: StandingsFilter) => void;
 }
 
-type SortKey = 'position' | 'team' | 'played' | 'won' | 'drawn' | 'lost' | 'goalsFor' | 'goalsAgainst' | 'goalDifference' | 'points' | 'form';
+type SortKey =
+    | 'position'
+    | 'team'
+    | 'played'
+    | 'won'
+    | 'drawn'
+    | 'lost'
+    | 'goalsFor'
+    | 'goalsAgainst'
+    | 'goalDifference'
+    | 'points'
+    | 'form';
 type SortDirection = 'asc' | 'desc';
 
 function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
     return fixtures
-        .filter(f => f.homeTeamId === teamId || f.awayTeamId === teamId)
+        .filter((f) => f.homeTeamId === teamId || f.awayTeamId === teamId)
         .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 }
 
-const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, teamsMap, filter = 'all', onFilterChange }) => {
+const StandingsTable: React.FC<StandingsTableProps> = ({
+    standings,
+    fixtures,
+    teamsMap,
+    filter = 'all',
+    onFilterChange,
+}) => {
     const { settings } = useSettings();
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
         key: 'position',
@@ -79,25 +98,29 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
     }, [standings, sortConfig]);
 
     const SortIcon = ({ column }: { column: SortKey }) => {
-        if (sortConfig.key !== column) return <span className="sort-icon sort-icon--inactive">⇅</span>;
+        if (sortConfig.key !== column)
+            return <span className="sort-icon sort-icon--inactive">⇅</span>;
         return <span className="sort-icon">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
     };
 
     // Calculate unique deductions across all teams to assign asterisk legends
     const deductionMap = useMemo(() => {
-        const dMap = new Map<string, { teamName: string; reason: string; points: number; asterisks: string }>();
+        const dMap = new Map<
+            string,
+            { teamName: string; reason: string; points: number; asterisks: string }
+        >();
         let asteriskCount = 1;
 
-        sortedStandings.forEach(row => {
+        sortedStandings.forEach((row) => {
             if (row.deductions && row.deductions.length > 0) {
-                row.deductions.forEach(deduction => {
+                row.deductions.forEach((deduction) => {
                     const key = `${row.teamId}-${deduction.reason}`;
                     if (!dMap.has(key)) {
                         dMap.set(key, {
                             teamName: row.team.name,
                             reason: deduction.reason,
                             points: deduction.points,
-                            asterisks: `${asteriskCount++}`
+                            asterisks: `${asteriskCount++}`,
                         });
                     }
                 });
@@ -124,7 +147,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                             fontWeight: 600,
                             cursor: 'pointer',
                             textTransform: 'capitalize',
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
                         }}
                     >
                         {f}
@@ -136,75 +159,131 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                 <table className="standings-table">
                     <thead>
                         <tr>
-                            <th className="col-pos clickable" title="Position" onClick={() => handleSort('position')}>
+                            <th
+                                className="col-pos clickable"
+                                title="Position"
+                                onClick={() => handleSort('position')}
+                            >
                                 # <SortIcon column="position" />
                             </th>
-                            <th className="col-team clickable" title="Team Name" onClick={() => handleSort('team')}>
+                            <th
+                                className="col-team clickable"
+                                title="Team Name"
+                                onClick={() => handleSort('team')}
+                            >
                                 Team <SortIcon column="team" />
                             </th>
-                            <th className="col-stat clickable" title="Played" onClick={() => handleSort('played')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Played"
+                                onClick={() => handleSort('played')}
+                            >
                                 P <SortIcon column="played" />
                             </th>
-                            <th className="col-stat clickable" title="Won" onClick={() => handleSort('won')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Won"
+                                onClick={() => handleSort('won')}
+                            >
                                 W <SortIcon column="won" />
                             </th>
-                            <th className="col-stat clickable" title="Drawn" onClick={() => handleSort('drawn')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Drawn"
+                                onClick={() => handleSort('drawn')}
+                            >
                                 D <SortIcon column="drawn" />
                             </th>
-                            <th className="col-stat clickable" title="Lost" onClick={() => handleSort('lost')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Lost"
+                                onClick={() => handleSort('lost')}
+                            >
                                 L <SortIcon column="lost" />
                             </th>
-                            <th className="col-stat clickable" title="Goals For" onClick={() => handleSort('goalsFor')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Goals For"
+                                onClick={() => handleSort('goalsFor')}
+                            >
                                 GF <SortIcon column="goalsFor" />
                             </th>
-                            <th className="col-stat clickable" title="Goals Against" onClick={() => handleSort('goalsAgainst')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Goals Against"
+                                onClick={() => handleSort('goalsAgainst')}
+                            >
                                 GA <SortIcon column="goalsAgainst" />
                             </th>
-                            <th className="col-stat clickable" title="Goal Difference" onClick={() => handleSort('goalDifference')}>
+                            <th
+                                className="col-stat clickable"
+                                title="Goal Difference"
+                                onClick={() => handleSort('goalDifference')}
+                            >
                                 GD <SortIcon column="goalDifference" />
                             </th>
-                            <th className="col-pts clickable" title="Points" onClick={() => handleSort('points')}>
+                            <th
+                                className="col-pts clickable"
+                                title="Points"
+                                onClick={() => handleSort('points')}
+                            >
                                 Pts <SortIcon column="points" />
                             </th>
                             {settings.showForm && (
-                                <th className="col-form clickable" title="Last 5 Matches (oldest → newest)" onClick={() => handleSort('form')}>
+                                <th
+                                    className="col-form clickable"
+                                    title="Last 5 Matches (oldest → newest)"
+                                    onClick={() => handleSort('form')}
+                                >
                                     Form <SortIcon column="form" />
                                 </th>
                             )}
-                            <th className="col-next" title="Next Match">Next</th>
+                            <th className="col-next" title="Next Match">
+                                Next
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         {sortedStandings.map((row) => {
                             const teamFixtures = getTeamFixtures(row.teamId, fixtures);
                             const pastFixtures = teamFixtures
-                                .filter(f => f.status === 'played')
-                                .filter(f => {
+                                .filter((f) => f.status === 'played')
+                                .filter((f) => {
                                     if (filter === 'home') return f.homeTeamId === row.teamId;
                                     if (filter === 'away') return f.awayTeamId === row.teamId;
                                     return true;
                                 });
                             const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
                             const futureFixtures = teamFixtures
-                                .filter(f => (f.status === 'scheduled' || f.status === 'postponed') &&
-                                    new Date(f.scheduledAt).getTime() > twoHoursAgo.getTime())
-                                .filter(f => {
+                                .filter(
+                                    (f) =>
+                                        (f.status === 'scheduled' || f.status === 'postponed') &&
+                                        new Date(f.scheduledAt).getTime() > twoHoursAgo.getTime(),
+                                )
+                                .filter((f) => {
                                     if (filter === 'home') return f.homeTeamId === row.teamId;
                                     if (filter === 'away') return f.awayTeamId === row.teamId;
                                     return true;
                                 });
 
-                            const zoneClass = settings.showZones ? (
-                                row.description === 'promotion' ? 'promo' :
-                                    row.description === 'playoffs' ? 'playoff' :
-                                        row.description === 'relegation' ? 'rel' : ''
-                            ) : '';
+                            const zoneClass = settings.showZones
+                                ? row.description === 'promotion'
+                                    ? 'promo'
+                                    : row.description === 'playoffs'
+                                      ? 'playoff'
+                                      : row.description === 'relegation'
+                                        ? 'rel'
+                                        : ''
+                                : '';
 
                             return (
                                 <tr key={row.teamId} className={`standings-row ${zoneClass}`}>
                                     <td className="col-pos">{row.position}</td>
                                     <td className="col-team">
-                                        <TeamCell team={{ id: row.teamId, ...row.team }} showLogo={settings.showLogos} />
+                                        <TeamCell
+                                            team={{ id: row.teamId, ...row.team }}
+                                            showLogo={settings.showLogos}
+                                        />
                                     </td>
                                     <td className="col-stat">{row.played}</td>
                                     <td className="col-stat">{row.won}</td>
@@ -213,21 +292,45 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                                     <td className="col-stat">{row.goalsFor}</td>
                                     <td className="col-stat">{row.goalsAgainst}</td>
                                     <td className="col-stat">
-                                        <span className={row.goalDifference > 0 ? 'gd-positive' : row.goalDifference < 0 ? 'gd-negative' : ''}>
-                                            {row.goalDifference > 0 ? '+' : ''}{row.goalDifference}
+                                        <span
+                                            className={
+                                                row.goalDifference > 0
+                                                    ? 'gd-positive'
+                                                    : row.goalDifference < 0
+                                                      ? 'gd-negative'
+                                                      : ''
+                                            }
+                                        >
+                                            {row.goalDifference > 0 ? '+' : ''}
+                                            {row.goalDifference}
                                         </span>
                                     </td>
                                     <td className="col-pts">
                                         <span className="pts-value">{row.points}</span>
                                         {row.deductions && row.deductions.length > 0 && (
                                             <span className="pts-asterisk">
-                                                {row.deductions.map(d => deductionMap.find(m => m.teamName === row.team.name && m.reason === d.reason)?.asterisks).join(',')}
+                                                {row.deductions
+                                                    .map(
+                                                        (d) =>
+                                                            deductionMap.find(
+                                                                (m) =>
+                                                                    m.teamName === row.team.name &&
+                                                                    m.reason === d.reason,
+                                                            )?.asterisks,
+                                                    )
+                                                    .join(',')}
                                             </span>
                                         )}
                                     </td>
                                     {settings.showForm && (
                                         <td className="col-form">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                }}
+                                            >
                                                 <FixtureDropdown
                                                     type="past"
                                                     align="left"
@@ -235,13 +338,27 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                                                     teams={teamsMap}
                                                     fixtures={pastFixtures}
                                                 />
-                                                <FormColumn form={row.form} fixtures={fixtures} teamsMap={teamsMap} />
+                                                <FormColumn
+                                                    form={row.form}
+                                                    fixtures={fixtures}
+                                                    teamsMap={teamsMap}
+                                                />
                                             </div>
                                         </td>
                                     )}
                                     <td className="col-next">
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <NextMatchBadge fixture={row.nextFixture} teamId={row.teamId} teamsMap={teamsMap} />
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                            }}
+                                        >
+                                            <NextMatchBadge
+                                                fixture={row.nextFixture}
+                                                teamId={row.teamId}
+                                                teamsMap={teamsMap}
+                                            />
                                             <FixtureDropdown
                                                 type="future"
                                                 align="right"
@@ -261,7 +378,8 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, fixtures, te
                         <ul>
                             {deductionMap.map((d, i) => (
                                 <li key={i}>
-                                    <span className="pts-asterisk">{d.asterisks}</span> {d.teamName} had {Math.abs(d.points)} points deducted: {d.reason}
+                                    <span className="pts-asterisk">{d.asterisks}</span> {d.teamName}{' '}
+                                    had {Math.abs(d.points)} points deducted: {d.reason}
                                 </li>
                             ))}
                         </ul>

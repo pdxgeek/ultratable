@@ -13,7 +13,14 @@ export const NOW_MS = sql`date_trunc('milliseconds', now())`;
  * Mirrors the EFL tiebreaker hierarchy: Points → GD → Goals For → Head-to-Head → Wins → Away Goals.
  * (Disciplinary record is part of the EFL spec too but isn't implemented yet — card data isn't synced.)
  */
-export const DEFAULT_RANKING_CRITERIA = ['standard_pts', 'goal_diff', 'goals_for', 'head_to_head', 'wins', 'away_goals'];
+export const DEFAULT_RANKING_CRITERIA = [
+    'standard_pts',
+    'goal_diff',
+    'goals_for',
+    'head_to_head',
+    'wins',
+    'away_goals',
+];
 
 /**
  * Shared SET clause for fixture upserts. Centralised because four code paths
@@ -27,7 +34,7 @@ export const FIXTURE_UPSERT_SET = {
     awayGoals: sql`EXCLUDED.away_goals`,
     venueId: sql`EXCLUDED.venue_id`,
     gameweek: sql`EXCLUDED.gameweek`,
-    updatedAt: NOW_MS
+    updatedAt: NOW_MS,
 };
 
 export interface FixtureLookups {

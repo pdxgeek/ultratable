@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
 import type { Fixture, Team } from '../db';
+
+import { useEffect, useRef, useState } from 'react';
+
 import { FixtureRow } from './FixtureRow';
 
 interface FixtureDropdownProps {
@@ -65,19 +67,16 @@ export function FixtureDropdown({
             </button>
 
             {expanded && (
-                <div className={`fixture-dropdown__content fixture-dropdown__content--${position} fixture-dropdown__content--align-${align}`}>
+                <div
+                    className={`fixture-dropdown__content fixture-dropdown__content--${position} fixture-dropdown__content--align-${align}`}
+                >
                     <div className="fixture-dropdown__section">
                         <div className="fixture-dropdown__section-title">
                             {type === 'past' ? 'Recent Results' : 'Upcoming Schedule'}
                         </div>
                         <div className="fixture-dropdown__list">
                             {fixtures.map((f) => (
-                                <FixtureRow
-                                    key={f.id}
-                                    fixture={f}
-                                    teamId={teamId}
-                                    teams={teams}
-                                />
+                                <FixtureRow key={f.id} fixture={f} teamId={teamId} teams={teams} />
                             ))}
                         </div>
                     </div>

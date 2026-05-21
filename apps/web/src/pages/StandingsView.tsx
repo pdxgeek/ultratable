@@ -1,13 +1,17 @@
+import type { StandingsFilter } from '../logic/dataCompiler';
+
 import React, { useState } from 'react';
+
+import StandingsTable from '../components/StandingsTable';
 import { useLeague } from '../context/LeagueContext';
 import { useStandings } from '../hooks/useStandings';
-import StandingsTable from '../components/StandingsTable';
-import type { StandingsFilter } from '../logic/dataCompiler';
 
 const StandingsView: React.FC = () => {
     const { activeSeason, isLoading } = useLeague();
     const [filter, setFilter] = useState<StandingsFilter>('all');
-    const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', { filter });
+    const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', {
+        filter,
+    });
 
     if (isLoading) {
         return (
@@ -27,12 +31,14 @@ const StandingsView: React.FC = () => {
 
     return (
         <main>
-            <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-end',
-                margin: '24px 0 16px 0'
-            }}>
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-end',
+                    margin: '24px 0 16px 0',
+                }}
+            >
                 <h2 style={{ fontSize: '1.25rem', margin: 0 }}>League Table</h2>
                 {lastUpdated && (
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

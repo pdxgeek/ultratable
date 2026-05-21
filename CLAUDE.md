@@ -23,11 +23,12 @@ This interactive script (`scripts/setup.mjs`) writes `apps/service/.env` and the
 
 **Do not hand-edit env files when troubleshooting missing variables — tell the user to re-run `npm run setup`.** That script is the single source of truth for generated env files. The `.env.example` files document every variable but are not consumed at runtime.
 
-Supabase URL/keys *are* the Postgres connection when the user picks Supabase mode — they aren't an unrelated add-on. In `docker` and `system` modes they are intentionally blank and the storage features (graphics uploads) are disabled.
+Supabase URL/keys _are_ the Postgres connection when the user picks Supabase mode — they aren't an unrelated add-on. In `docker` and `system` modes they are intentionally blank and the storage features (graphics uploads) are disabled.
 
 ## Commands
 
 ### Root (all workspaces)
+
 ```bash
 npm run setup            # First-run: prompts for env vars, writes apps/service/.env + root .env
 npm run dev              # Start all three services (kills orphan processes first)
@@ -38,6 +39,7 @@ npm run health:check     # Verify all three ports are responding
 ```
 
 ### Service (`apps/service/`)
+
 ```bash
 npm run dev              # Nodemon + ts-node
 npm run db:generate      # Drizzle schema → migration files
@@ -47,6 +49,7 @@ npm run test:integration # Integration tests only
 ```
 
 ### Web / Admin (`apps/web/`, `apps/admin/`)
+
 ```bash
 npm run dev     # Vite dev server (web: 5175, admin: 5174)
 npm run build   # tsc + vite build
@@ -58,11 +61,11 @@ npm run build   # tsc + vite build
 
 UltraTable is a real-time fantasy sports platform structured as a monorepo with three apps:
 
-| App | Stack | Port | Prod |
-|-----|-------|------|------|
+| App            | Stack                                            | Port | Prod   |
+| -------------- | ------------------------------------------------ | ---- | ------ |
 | `apps/service` | Fastify 5 + GraphQL Yoga + Drizzle + Better Auth | 8080 | Fly.io |
-| `apps/web` | React 19 + Vite + urql + Dexie (IndexedDB) | 5175 | Vercel |
-| `apps/admin` | React 19 + Vite + TanStack Query | 5174 | Vercel |
+| `apps/web`     | React 19 + Vite + urql + Dexie (IndexedDB)       | 5175 | Vercel |
+| `apps/admin`   | React 19 + Vite + TanStack Query                 | 5174 | Vercel |
 
 ### Service Internals
 

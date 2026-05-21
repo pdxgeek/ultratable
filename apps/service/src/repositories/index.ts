@@ -1,5 +1,5 @@
-import { IRepository } from './repository';
 import { createPostgresRepository } from './postgres';
+import { IRepository } from './repository';
 
 /**
  * The active repository implementation. Consumers should always import from

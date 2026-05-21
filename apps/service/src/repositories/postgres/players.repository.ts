@@ -1,9 +1,10 @@
 import { and, eq } from 'drizzle-orm';
+
 import { db } from '../../db';
 import * as schema from '../../db/schema';
 import { IFootballProvider } from '../../integrations/types';
-import { graphicsService } from '../../services/graphics.service';
 import { cacheService, TTL } from '../../services/cache.service';
+import { graphicsService } from '../../services/graphics.service';
 import { PlayersRepository } from '../players';
 
 export class PostgresPlayersRepository implements PlayersRepository {
@@ -15,9 +16,25 @@ export class PostgresPlayersRepository implements PlayersRepository {
         return row ?? null;
     }
 
-    async getPlayerData(playerId: number, season: number): Promise<(typeof schema.players.$inferSelect & { sourceId: number; name: string; metadata: Record<string, unknown>; statistics?: unknown }) | null> {
+    async getPlayerData(
+        playerId: number,
+        season: number,
+    ): Promise<
+        | (typeof schema.players.$inferSelect & {
+              sourceId: number;
+              name: string;
+              metadata: Record<string, unknown>;
+              statistics?: unknown;
+          })
+        | null
+    > {
         const cacheKey = `player:${playerId}:${season}`;
-        type PlayerResult = typeof schema.players.$inferSelect & { sourceId: number; name: string; metadata: Record<string, unknown>; statistics?: unknown };
+        type PlayerResult = typeof schema.players.$inferSelect & {
+            sourceId: number;
+            name: string;
+            metadata: Record<string, unknown>;
+            statistics?: unknown;
+        };
         const cached = cacheService.get<PlayerResult>(cacheKey);
         if (cached) return cached;
 
@@ -35,7 +52,8 @@ export class PostgresPlayersRepository implements PlayersRepository {
             weight: data.weight || null,
         };
 
-        const [upserted] = await db.insert(schema.players)
+        const [upserted] = await db
+            .insert(schema.players)
             .values({
                 name: data.name,
                 sourceName: this.provider.name,
@@ -48,7 +66,7 @@ export class PostgresPlayersRepository implements PlayersRepository {
                     name: data.name,
                     metadata: playerMetadata,
                     updatedAt: new Date(),
-                }
+                },
             })
             .returning();
 
@@ -67,20 +85,26 @@ export class PostgresPlayersRepository implements PlayersRepository {
     }
 
     async resolvePlayerBySourceId(sourceName: string, sourceId: number): Promise<string | null> {
-        const [mapping] = await db.select({ playerId: schema.playerSourceMappings.playerId })
+        const [mapping] = await db
+            .select({ playerId: schema.playerSourceMappings.playerId })
             .from(schema.playerSourceMappings)
-            .where(and(
-                eq(schema.playerSourceMappings.sourceName, sourceName),
-                eq(schema.playerSourceMappings.sourceId, sourceId),
-            ));
+            .where(
+                and(
+                    eq(schema.playerSourceMappings.sourceName, sourceName),
+                    eq(schema.playerSourceMappings.sourceId, sourceId),
+                ),
+            );
         if (mapping) return mapping.playerId;
 
-        const [player] = await db.select({ id: schema.players.id })
+        const [player] = await db
+            .select({ id: schema.players.id })
             .from(schema.players)
-            .where(and(
-                eq(schema.players.sourceName, sourceName),
-                eq(schema.players.sourceId, sourceId),
-            ));
+            .where(
+                and(
+                    eq(schema.players.sourceName, sourceName),
+                    eq(schema.players.sourceId, sourceId),
+                ),
+            );
         return player?.id || null;
     }
 }

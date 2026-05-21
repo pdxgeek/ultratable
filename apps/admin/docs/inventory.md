@@ -15,16 +15,16 @@ Each box scopes the one below it. Selections in Box 1 cascade down. If no countr
 
 Component: [CatalogBrowser.tsx](../src/components/CatalogBrowser.tsx).
 
-**Purpose:** browse the upstream provider catalog (countries → leagues) and *activate* a league for use in this UltraTable installation.
+**Purpose:** browse the upstream provider catalog (countries → leagues) and _activate_ a league for use in this UltraTable installation.
 
 **States:**
 
-| State | Trigger | What renders |
-|---|---|---|
-| Empty catalog | `catalog_countries` is empty | "Initialize Catalog" button calling `syncCatalog` mutation (pulls countries + leagues globally) |
-| Populated, no country selected | Default after init | Country dropdown only; instructions to select one |
+| State                             | Trigger                         | What renders                                                                                                                     |
+| --------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Empty catalog                     | `catalog_countries` is empty    | "Initialize Catalog" button calling `syncCatalog` mutation (pulls countries + leagues globally)                                  |
+| Populated, no country selected    | Default after init              | Country dropdown only; instructions to select one                                                                                |
 | Country selected, leagues unknown | First time picking this country | Spinner; calls `syncCountryLeagues(countryId)` mutation to lazy-fetch leagues from API-Football, persists into `catalog_leagues` |
-| Country selected, leagues known | Subsequent visits | Scrollable table (max-height ~420px, sticky header) of catalog leagues. Each row: logo, name, type, and an action button. |
+| Country selected, leagues known   | Subsequent visits               | Scrollable table (max-height ~420px, sticky header) of catalog leagues. Each row: logo, name, type, and an action button.        |
 
 **Activation action:** the **Activate** button calls the `promoteLeague(catalogId)` mutation, which inserts a row into `leagues` (the managed table) seeded from the catalog metadata, including a default `rankingCriteria` (see [Configuration](#box-3--configuration--data-sync)). Once a league is managed, the row badge flips to **Active** and the league becomes selectable in Box 2.
 
@@ -41,11 +41,12 @@ Component: [SeasonImporter.tsx](../src/components/SeasonImporter.tsx).
 **Filtering:** the league dropdown shows only `leagues` whose `country` matches the country selected in Box 1. If no country is selected, the box renders an empty state with a prompt; the dropdown is hidden.
 
 **Flow:**
+
 1. Pick a managed league. The box fetches:
     - the catalog metadata for that league (`catalogLeagues(sourceId)`) — provides the list of available season years from the upstream provider;
     - the local seasons already imported for it (`seasons(leagueId)`).
 2. The table merges both: each row is a season year showing **Imported** or **Available**.
-3. **Import** button (Available rows) → `importSeason(leagueId, year)` mutation. This creates a `seasons` row, seeded with the league's `metadata.rankingCriteria` (the season is the source of truth from that point — see below). It does *not* sync fixtures.
+3. **Import** button (Available rows) → `importSeason(leagueId, year)` mutation. This creates a `seasons` row, seeded with the league's `metadata.rankingCriteria` (the season is the source of truth from that point — see below). It does _not_ sync fixtures.
 4. **Remove** button (Imported rows) → `removeSeason(seasonId)` mutation. Cascades to fixtures, standings, etc.
 5. **Fetch Catalog Seasons** button → `refreshCatalogSeasons(catalogId)` mutation re-asks the provider what season years are available for this league.
 
@@ -59,10 +60,10 @@ Component: [LeagueConfig.tsx](../src/components/LeagueConfig.tsx).
 
 **Two tabs:**
 
-| Tab | Stored on | Mutation | When to use |
-|---|---|---|---|
-| **Season** | `seasons.metadata` | `saveSeasonConfig(seasonId, configJson)` | Per-year customisations (e.g. point deductions specific to one season). **This is the source of truth used by the web app.** |
-| **League** | `leagues.metadata` | `saveLeagueConfig(leagueId, configJson)` | The template inherited by *new* seasons at import time. Editing the league does **not** retroactively update existing seasons. |
+| Tab        | Stored on          | Mutation                                 | When to use                                                                                                                    |
+| ---------- | ------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Season** | `seasons.metadata` | `saveSeasonConfig(seasonId, configJson)` | Per-year customisations (e.g. point deductions specific to one season). **This is the source of truth used by the web app.**   |
+| **League** | `leagues.metadata` | `saveLeagueConfig(leagueId, configJson)` | The template inherited by _new_ seasons at import time. Editing the league does **not** retroactively update existing seasons. |
 
 **Configurable fields:**
 
@@ -74,18 +75,18 @@ Component: [LeagueConfig.tsx](../src/components/LeagueConfig.tsx).
 
 ### Ranking criteria
 
-The standings sort runs each formula in order, short-circuiting on the first non-zero comparison. So criteria are *tiebreakers*, not parallel sort keys — if Points already separates two teams, none of the other formulas execute.
+The standings sort runs each formula in order, short-circuiting on the first non-zero comparison. So criteria are _tiebreakers_, not parallel sort keys — if Points already separates two teams, none of the other formulas execute.
 
 Available formulas (rows in `ranking_formulas`):
 
-| ID | Name | Logic |
-|---|---|---|
-| `standard_pts` | Points | 3 for a win, 1 for a draw. |
-| `goal_diff` | Goal Difference | Goals for − goals against, across the season. |
-| `goals_for` | Goals For | Total goals scored. |
-| `head_to_head` | Head-to-Head | Within the matches between the tied teams: points → goal difference → goals scored. |
-| `wins` | Wins | Total wins. |
-| `away_goals` | Away Goals Scored | Total goals scored as the away team. |
+| ID             | Name              | Logic                                                                               |
+| -------------- | ----------------- | ----------------------------------------------------------------------------------- |
+| `standard_pts` | Points            | 3 for a win, 1 for a draw.                                                          |
+| `goal_diff`    | Goal Difference   | Goals for − goals against, across the season.                                       |
+| `goals_for`    | Goals For         | Total goals scored.                                                                 |
+| `head_to_head` | Head-to-Head      | Within the matches between the tied teams: points → goal difference → goals scored. |
+| `wins`         | Wins              | Total wins.                                                                         |
+| `away_goals`   | Away Goals Scored | Total goals scored as the away team.                                                |
 
 **Default order (mirrors EFL):** `standard_pts → goal_diff → goals_for → head_to_head → wins → away_goals`.
 
@@ -95,7 +96,7 @@ Defined as `DEFAULT_RANKING_CRITERIA` in [supabase.repository.ts](../../service/
 
 - `promoteLeague` writes the default `rankingCriteria` into the new `leagues.metadata`.
 - `importSeason` reads the league's `metadata.rankingCriteria` and copies it onto the new `seasons.metadata` at creation time.
-- After that, the season is independent. Editing the season config never touches the league; editing the league only affects *future* seasons.
+- After that, the season is independent. Editing the season config never touches the league; editing the league only affects _future_ seasons.
 - The GraphQL resolver for `season.rankingCriteria` preserves the order in metadata (it maps by criteria ID rather than filtering, so the configured precedence is honoured).
 
 ### Sync data
@@ -114,14 +115,14 @@ The web's standings hook filters them out before computing the league table. The
 
 ## Quick reference — mutations touched by this page
 
-| Mutation | Triggered by | Writes |
-|---|---|---|
-| `syncCatalog` | "Initialize Catalog" button | `catalog_countries`, `catalog_leagues` |
-| `syncCountryLeagues(countryId)` | First time a country is selected | `catalog_leagues` (for that country) |
-| `promoteLeague(catalogId)` | "Activate" button | `leagues` |
-| `refreshCatalogSeasons(catalogId)` | "Fetch Catalog Seasons" button | `catalog_leagues.metadata.seasons` |
-| `importSeason(leagueId, year)` | "Import" button (Available row) | `seasons` |
-| `removeSeason(seasonId)` | "Remove" button (Imported row) | deletes `seasons`, cascades |
-| `syncFixtures(leagueSourceId, year)` | "Sync Season Data" button | `teams`, `fixtures`, `seasons_to_teams`, `venues` |
-| `saveLeagueConfig(leagueId, configJson)` | Box 3 → League tab → Save | `leagues.metadata` |
-| `saveSeasonConfig(seasonId, configJson)` | Box 3 → Season tab → Save | `seasons.metadata` |
+| Mutation                                 | Triggered by                     | Writes                                            |
+| ---------------------------------------- | -------------------------------- | ------------------------------------------------- |
+| `syncCatalog`                            | "Initialize Catalog" button      | `catalog_countries`, `catalog_leagues`            |
+| `syncCountryLeagues(countryId)`          | First time a country is selected | `catalog_leagues` (for that country)              |
+| `promoteLeague(catalogId)`               | "Activate" button                | `leagues`                                         |
+| `refreshCatalogSeasons(catalogId)`       | "Fetch Catalog Seasons" button   | `catalog_leagues.metadata.seasons`                |
+| `importSeason(leagueId, year)`           | "Import" button (Available row)  | `seasons`                                         |
+| `removeSeason(seasonId)`                 | "Remove" button (Imported row)   | deletes `seasons`, cascades                       |
+| `syncFixtures(leagueSourceId, year)`     | "Sync Season Data" button        | `teams`, `fixtures`, `seasons_to_teams`, `venues` |
+| `saveLeagueConfig(leagueId, configJson)` | Box 3 → League tab → Save        | `leagues.metadata`                                |
+| `saveSeasonConfig(seasonId, configJson)` | Box 3 → Season tab → Save        | `seasons.metadata`                                |

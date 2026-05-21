@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db', () => ({
     db: {
-        insert: vi.fn()
-    }
+        insert: vi.fn(),
+    },
 }));
 
 describe('LogService', () => {
@@ -28,10 +28,7 @@ describe('LogService', () => {
 
             await LogService.info('TestModule', 'test message', { key: 'val' });
 
-            expect(spy).toHaveBeenCalledWith(
-                { module: 'TestModule', key: 'val' },
-                'test message'
-            );
+            expect(spy).toHaveBeenCalledWith({ module: 'TestModule', key: 'val' }, 'test message');
         });
 
         it('delegates warn() to pino logger', async () => {
@@ -40,27 +37,25 @@ describe('LogService', () => {
 
             await LogService.warn('TestModule', 'warning msg');
 
-            expect(spy).toHaveBeenCalledWith(
-                { module: 'TestModule' },
-                'warning msg'
-            );
+            expect(spy).toHaveBeenCalledWith({ module: 'TestModule' }, 'warning msg');
         });
 
         it('delegates error() to pino logger', async () => {
             const { LogService, globalLogger } = await import('./log.service');
-            const spy = vi.spyOn(globalLogger, 'error').mockImplementation(() => undefined as never);
+            const spy = vi
+                .spyOn(globalLogger, 'error')
+                .mockImplementation(() => undefined as never);
 
             await LogService.error('TestModule', 'error msg');
 
-            expect(spy).toHaveBeenCalledWith(
-                { module: 'TestModule' },
-                'error msg'
-            );
+            expect(spy).toHaveBeenCalledWith({ module: 'TestModule' }, 'error msg');
         });
 
         it('log() routes ERROR level correctly', async () => {
             const { LogService, LogLevel, globalLogger } = await import('./log.service');
-            const spy = vi.spyOn(globalLogger, 'error').mockImplementation(() => undefined as never);
+            const spy = vi
+                .spyOn(globalLogger, 'error')
+                .mockImplementation(() => undefined as never);
 
             await LogService.log(LogLevel.ERROR, 'Mod', 'err');
 

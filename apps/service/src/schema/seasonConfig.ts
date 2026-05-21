@@ -18,7 +18,7 @@ export const SeasonConfigSchema = z
                     teamId: z.string().min(1).max(64),
                     points: z.number().int().min(-100).max(100),
                     reason: z.string().min(1).max(500),
-                })
+                }),
             )
             .max(100)
             .optional(),

@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { db } from '../db';
 import type { League, Season } from '../db';
+
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useDeltaSync } from '../hooks/useDeltaSync';
-import { client } from '../api/client';
 import { gql } from 'urql';
+
+import { client } from '../api/client';
+import { db } from '../db';
+import { useDeltaSync } from '../hooks/useDeltaSync';
 
 interface LeagueContextType {
     activeLeague: League | null;
@@ -19,30 +21,30 @@ interface LeagueContextType {
 const LeagueContext = createContext<LeagueContextType | undefined>(undefined);
 
 const LIST_LEAGUES_QUERY = gql`
-  query ListLeagues {
-    leagues {
-      id
-      sourceId
-      name
-      slug
-      country
-      logo
-      updatedAt
-      configJson
-      seasons {
-        id
-        leagueId
-        year
-        updatedAt
-        configJson
-        rankingCriteria {
-          id
-          name
-          logicType
+    query ListLeagues {
+        leagues {
+            id
+            sourceId
+            name
+            slug
+            country
+            logo
+            updatedAt
+            configJson
+            seasons {
+                id
+                leagueId
+                year
+                updatedAt
+                configJson
+                rankingCriteria {
+                    id
+                    name
+                    logicType
+                }
+            }
         }
-      }
     }
-  }
 `;
 
 export function LeagueProvider({ children }: { children: React.ReactNode }) {
@@ -59,13 +61,15 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     const leagues = useMemo(() => leaguesResult || [], [leaguesResult]);
     const seasons = useMemo(() => seasonsResult || [], [seasonsResult]);
 
-    const activeSeason = useMemo(() =>
-        seasons.find(s => s.id === activeSeasonId) || null
-        , [seasons, activeSeasonId]);
+    const activeSeason = useMemo(
+        () => seasons.find((s) => s.id === activeSeasonId) || null,
+        [seasons, activeSeasonId],
+    );
 
-    const activeLeague = useMemo(() =>
-        activeSeason ? leagues.find(l => l.id === activeSeason.leagueId) || null : null
-        , [leagues, activeSeason]);
+    const activeLeague = useMemo(
+        () => (activeSeason ? leagues.find((l) => l.id === activeSeason.leagueId) || null : null),
+        [leagues, activeSeason],
+    );
 
     // 2. Bootstrap: Fetch leagues/seasons from API and store in Dexie
     useEffect(() => {
@@ -90,7 +94,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
                                 country: l.country,
                                 logo: l.logo,
                                 updatedAt: l.updatedAt,
-                                metadata: l.configJson ? JSON.parse(l.configJson) : {}
+                                metadata: l.configJson ? JSON.parse(l.configJson) : {},
                             });
                             for (const s of l.seasons) {
                                 await db.seasons.put({
@@ -99,14 +103,18 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
                                     year: s.year,
                                     updatedAt: s.updatedAt,
                                     rankingCriteria: s.rankingCriteria,
-                                    metadata: s.configJson ? JSON.parse(s.configJson) : {}
+                                    metadata: s.configJson ? JSON.parse(s.configJson) : {},
                                 });
                             }
                         }
                     });
 
                     // Set initial selection if empty
-                    if (!activeSeasonId && apiLeagues.length > 0 && apiLeagues[0].seasons.length > 0) {
+                    if (
+                        !activeSeasonId &&
+                        apiLeagues.length > 0 &&
+                        apiLeagues[0].seasons.length > 0
+                    ) {
                         const firstId = apiLeagues[0].seasons[0].id;
                         setActiveSeasonIdState(firstId);
                         localStorage.setItem('ultratable_active_season_id', firstId);
@@ -127,9 +135,12 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
             sync(activeSeason.id);
 
             // Set up a 5-minute heartbeat to poll for live fixtures
-            const intervalId = setInterval(() => {
-                sync(activeSeason.id);
-            }, 5 * 60 * 1000);
+            const intervalId = setInterval(
+                () => {
+                    sync(activeSeason.id);
+                },
+                5 * 60 * 1000,
+            );
 
             return () => clearInterval(intervalId);
         }
@@ -141,15 +152,17 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <LeagueContext.Provider value={{
-            activeLeague,
-            activeSeason,
-            availableLeagues: leagues,
-            availableSeasons: seasons,
-            setActiveSeasonId,
-            isLoading: leagues.length === 0,
-            isSyncing
-        }}>
+        <LeagueContext.Provider
+            value={{
+                activeLeague,
+                activeSeason,
+                availableLeagues: leagues,
+                availableSeasons: seasons,
+                setActiveSeasonId,
+                isLoading: leagues.length === 0,
+                isSyncing,
+            }}
+        >
             {children}
         </LeagueContext.Provider>
     );

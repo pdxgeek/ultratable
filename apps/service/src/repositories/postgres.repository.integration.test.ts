@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { beforeEach, describe, expect, it } from 'vitest';
+
 import { repository } from '.';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
 
 describe('PostgresFootballRepository - Formula & Graphics', () => {
     const testFormula = {
         id: 'test-pts',
         name: 'Test Points',
         description: 'Standard 3/1/0 points',
-        logicType: 'standard'
+        logicType: 'standard',
     };
 
     const testGraphic = {
@@ -18,14 +19,16 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
         variantName: 'default',
         blobPath: 'gfx/blobs/test-hash.png',
         mimeType: 'image/png',
-        metadata: { width: 100, height: 100 }
+        metadata: { width: 100, height: 100 },
     };
 
     beforeEach(async () => {
         expect(db, 'DATABASE_URL must be set').toBeTruthy();
         // Clean up test data
         await db.delete(schema.graphics).where(eq(schema.graphics.blobPath, testGraphic.blobPath));
-        await db.delete(schema.rankingFormulas).where(eq(schema.rankingFormulas.id, testFormula.id));
+        await db
+            .delete(schema.rankingFormulas)
+            .where(eq(schema.rankingFormulas.id, testFormula.id));
     });
 
     it('should save and retrieve ranking formulas', async () => {
@@ -35,7 +38,7 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
         expect(saved.name).toBe(testFormula.name);
 
         const all = await repository.leagues.getRankingFormulas();
-        expect(all.some(f => f.id === testFormula.id)).toBe(true);
+        expect(all.some((f) => f.id === testFormula.id)).toBe(true);
     });
 
     it('should save and retrieve graphics', async () => {
@@ -44,7 +47,10 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
         expect(saved.blobPath).toBe(testGraphic.blobPath);
         expect(saved.entityId).toBe(testGraphic.entityId);
 
-        const results = await repository.graphics.getGraphics(testGraphic.entityType, testGraphic.entityId);
+        const results = await repository.graphics.getGraphics(
+            testGraphic.entityType,
+            testGraphic.entityId,
+        );
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].blobPath).toBe(testGraphic.blobPath);
     });
@@ -58,7 +64,10 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
 
         expect(updated.mimeType).toBe('image/jpeg');
 
-        const results = await repository.graphics.getGraphics(testGraphic.entityType, testGraphic.entityId);
+        const results = await repository.graphics.getGraphics(
+            testGraphic.entityType,
+            testGraphic.entityId,
+        );
         expect(results.length).toBe(1);
     });
 
@@ -68,7 +77,10 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             const anySeason = await db.select().from(schema.seasons).limit(1);
             if (anySeason.length === 0) return;
 
-            const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
+            const league = await db
+                .select()
+                .from(schema.leagues)
+                .where(eq(schema.leagues.id, anySeason[0].leagueId));
             if (league.length === 0) return;
 
             const leagueSourceId = league[0].sourceId;
@@ -80,7 +92,7 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             const midPoint = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
             const recent = await repository.fixtures.getFixtures(leagueSourceId, season, midPoint);
 
-            recent.forEach(f => {
+            recent.forEach((f) => {
                 expect(new Date(f.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());
             });
         });
@@ -90,7 +102,10 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             const anySeason = await db.select().from(schema.seasons).limit(1);
             if (anySeason.length === 0) return;
 
-            const league = await db.select().from(schema.leagues).where(eq(schema.leagues.id, anySeason[0].leagueId));
+            const league = await db
+                .select()
+                .from(schema.leagues)
+                .where(eq(schema.leagues.id, anySeason[0].leagueId));
             if (league.length === 0) return;
 
             const leagueSourceId = league[0].sourceId;
@@ -107,7 +122,7 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             const midPoint = new Date(Date.now() - 1000 * 60 * 60);
             const recent = await repository.teams.getTeams(leagueSourceId, season, midPoint);
 
-            recent.forEach(t => {
+            recent.forEach((t) => {
                 expect(new Date(t.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());
             });
         });

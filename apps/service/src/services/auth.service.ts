@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
+import { LRUCache } from 'lru-cache';
+
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { LRUCache } from 'lru-cache';
 import { globalLogger } from './log.service';
 
 /**
@@ -44,12 +45,13 @@ export async function resolveDomainUser(authUserId: string): Promise<DomainUser 
     globalLogger.debug({ authUserId }, 'DomainUser: cache miss — querying DB');
 
     // Cache miss — query the bridge table
-    const links = await db.select({
-        id: schema.users.id,
-        name: schema.users.name,
-        email: schema.users.email,
-        roles: schema.users.roles
-    })
+    const links = await db
+        .select({
+            id: schema.users.id,
+            name: schema.users.name,
+            email: schema.users.email,
+            roles: schema.users.roles,
+        })
         .from(schema.authLinks)
         .innerJoin(schema.users, eq(schema.authLinks.domainUserId, schema.users.id))
         .where(eq(schema.authLinks.authUserId, authUserId))
@@ -65,11 +67,14 @@ export async function resolveDomainUser(authUserId: string): Promise<DomainUser 
         id: row.id,
         name: row.name,
         email: row.email,
-        roles: Array.isArray(row.roles) ? (row.roles as string[]) : ['user']
+        roles: Array.isArray(row.roles) ? (row.roles as string[]) : ['user'],
     };
 
     domainUserCache.set(authUserId, domainUser);
-    globalLogger.debug({ authUserId, domainUserId: domainUser.id, roles: domainUser.roles }, 'DomainUser: resolved and cached');
+    globalLogger.debug(
+        { authUserId, domainUserId: domainUser.id, roles: domainUser.roles },
+        'DomainUser: resolved and cached',
+    );
 
     return domainUser;
 }
@@ -86,7 +91,9 @@ export function invalidateDomainUserCache(authUserId: string): void {
  * Converts Fastify IncomingHttpHeaders → Web Standard Headers object.
  * Used by both the GraphQL context and auth endpoints.
  */
-export function toWebHeaders(fastifyHeaders: Record<string, string | string[] | undefined>): Headers {
+export function toWebHeaders(
+    fastifyHeaders: Record<string, string | string[] | undefined>,
+): Headers {
     const headers = new Headers();
     for (const [key, value] of Object.entries(fastifyHeaders)) {
         if (value !== undefined) {

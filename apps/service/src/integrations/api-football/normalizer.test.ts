@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import { Normalizer } from './normalizer';
 
 describe('Normalizer', () => {
@@ -6,7 +7,7 @@ describe('Normalizer', () => {
         it('normalizes a standard league response', () => {
             const league = Normalizer.normalizeLeague({
                 league: { id: 39, name: 'Premier League', logo: 'https://logo.png' },
-                country: { name: 'England' }
+                country: { name: 'England' },
             });
             expect(league.sourceId).toBe(39);
             expect(league.name).toBe('Premier League');
@@ -19,21 +20,21 @@ describe('Normalizer', () => {
         it('handles country as a string', () => {
             const league = Normalizer.normalizeLeague({
                 league: { id: 1, name: 'World Cup', logo: '' },
-                country: 'World'
+                country: 'World',
             });
             expect(league.country).toBe('World');
         });
 
         it('handles missing country', () => {
             const league = Normalizer.normalizeLeague({
-                league: { id: 1, name: 'Test League', logo: '' }
+                league: { id: 1, name: 'Test League', logo: '' },
             });
             expect(league.country).toBeNull();
         });
 
         it('generates slug from name with special characters', () => {
             const league = Normalizer.normalizeLeague({
-                league: { id: 1, name: 'Süper Lig!', logo: '' }
+                league: { id: 1, name: 'Süper Lig!', logo: '' },
             });
             expect(league.slug).toBe('sper-lig');
         });
@@ -41,7 +42,7 @@ describe('Normalizer', () => {
         it('respects custom sourceName', () => {
             const league = Normalizer.normalizeLeague(
                 { league: { id: 1, name: 'Test', logo: '' } },
-                'custom-source'
+                'custom-source',
             );
             expect(league.sourceName).toBe('custom-source');
         });
@@ -51,7 +52,14 @@ describe('Normalizer', () => {
         it('normalizes team with venue', () => {
             const team = Normalizer.normalizeTeam({
                 team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo.png' },
-                venue: { id: 505, name: 'Emirates', city: 'London', capacity: 60000, surface: 'grass', image: 'venue.png' }
+                venue: {
+                    id: 505,
+                    name: 'Emirates',
+                    city: 'London',
+                    capacity: 60000,
+                    surface: 'grass',
+                    image: 'venue.png',
+                },
             });
             expect(team.sourceId).toBe(42);
             expect(team.name).toBe('Arsenal');
@@ -61,7 +69,7 @@ describe('Normalizer', () => {
 
         it('handles missing venue', () => {
             const team = Normalizer.normalizeTeam({
-                team: { id: 1, name: 'Test FC', code: 'TFC', logo: '' }
+                team: { id: 1, name: 'Test FC', code: 'TFC', logo: '' },
             });
             expect(team.venueSourceId).toBeNull();
         });
@@ -70,7 +78,14 @@ describe('Normalizer', () => {
     describe('normalizeVenue', () => {
         it('normalizes venue from nested structure', () => {
             const venue = Normalizer.normalizeVenue({
-                venue: { id: 505, name: 'Emirates Stadium', city: 'London', capacity: 60000, surface: 'grass', image: 'img.png' }
+                venue: {
+                    id: 505,
+                    name: 'Emirates Stadium',
+                    city: 'London',
+                    capacity: 60000,
+                    surface: 'grass',
+                    image: 'img.png',
+                },
             });
             expect(venue.sourceId).toBe(505);
             expect(venue.name).toBe('Emirates Stadium');
@@ -81,7 +96,7 @@ describe('Normalizer', () => {
 
         it('handles missing optional venue fields', () => {
             const venue = Normalizer.normalizeVenue({
-                venue: { id: 1, name: 'Unknown', city: '', capacity: 0, surface: '', image: '' }
+                venue: { id: 1, name: 'Unknown', city: '', capacity: 0, surface: '', image: '' },
             });
             expect(venue.city).toBeNull();
             expect(venue.capacity).toBeNull();
@@ -94,7 +109,7 @@ describe('Normalizer', () => {
         it('normalizes a season with league context', () => {
             const season = Normalizer.normalizeSeason(
                 { league: { id: 39, name: 'PL', logo: '' } },
-                { year: 2024, start: '2024-08-10', end: '2025-05-25' }
+                { year: 2024, start: '2024-08-10', end: '2025-05-25' },
             );
             expect(season.year).toBe(2024);
             expect(season.startDate).toBe('2024-08-10');
@@ -106,10 +121,15 @@ describe('Normalizer', () => {
 
     describe('normalizeFixture', () => {
         const baseFixture = {
-            fixture: { id: 100, date: '2024-08-10T15:00:00+00:00', status: { short: 'FT' }, venue: { id: 505 } },
+            fixture: {
+                id: 100,
+                date: '2024-08-10T15:00:00+00:00',
+                status: { short: 'FT' },
+                venue: { id: 505 },
+            },
             goals: { home: 3, away: 1 },
             teams: { home: { id: 42 }, away: { id: 33 } },
-            league: { round: 'Regular Season - 5' }
+            league: { round: 'Regular Season - 5' },
         };
 
         it('normalizes a finished fixture', () => {
@@ -128,7 +148,7 @@ describe('Normalizer', () => {
             for (const short of ['1H', 'HT', '2H', 'ET', 'P']) {
                 const f = Normalizer.normalizeFixture({
                     ...baseFixture,
-                    fixture: { ...baseFixture.fixture, status: { short } }
+                    fixture: { ...baseFixture.fixture, status: { short } },
                 });
                 expect(f.status).toBe('live');
             }
@@ -138,7 +158,7 @@ describe('Normalizer', () => {
             for (const short of ['PST', 'CANC', 'ABD']) {
                 const f = Normalizer.normalizeFixture({
                     ...baseFixture,
-                    fixture: { ...baseFixture.fixture, status: { short } }
+                    fixture: { ...baseFixture.fixture, status: { short } },
                 });
                 expect(f.status).toBe('postponed');
             }
@@ -147,7 +167,7 @@ describe('Normalizer', () => {
         it('defaults to scheduled for unknown statuses', () => {
             const f = Normalizer.normalizeFixture({
                 ...baseFixture,
-                fixture: { ...baseFixture.fixture, status: { short: 'NS' } }
+                fixture: { ...baseFixture.fixture, status: { short: 'NS' } },
             });
             expect(f.status).toBe('scheduled');
         });
@@ -156,7 +176,7 @@ describe('Normalizer', () => {
             for (const short of ['AET', 'PEN']) {
                 const f = Normalizer.normalizeFixture({
                     ...baseFixture,
-                    fixture: { ...baseFixture.fixture, status: { short } }
+                    fixture: { ...baseFixture.fixture, status: { short } },
                 });
                 expect(f.status).toBe('played');
             }
@@ -166,7 +186,7 @@ describe('Normalizer', () => {
             for (const short of ['WO', 'AWD']) {
                 const f = Normalizer.normalizeFixture({
                     ...baseFixture,
-                    fixture: { ...baseFixture.fixture, status: { short } }
+                    fixture: { ...baseFixture.fixture, status: { short } },
                 });
                 expect(f.status).toBe('played');
             }
@@ -176,7 +196,7 @@ describe('Normalizer', () => {
             for (const short of ['SUSP', 'INT']) {
                 const f = Normalizer.normalizeFixture({
                     ...baseFixture,
-                    fixture: { ...baseFixture.fixture, status: { short } }
+                    fixture: { ...baseFixture.fixture, status: { short } },
                 });
                 expect(f.status).toBe('postponed');
             }
@@ -185,7 +205,7 @@ describe('Normalizer', () => {
         it('handles missing venue', () => {
             const f = Normalizer.normalizeFixture({
                 ...baseFixture,
-                fixture: { ...baseFixture.fixture, venue: undefined }
+                fixture: { ...baseFixture.fixture, venue: undefined },
             });
             expect(f.venueSourceId).toBeNull();
         });
@@ -193,7 +213,7 @@ describe('Normalizer', () => {
         it('handles missing round / no gameweek number', () => {
             const f = Normalizer.normalizeFixture({
                 ...baseFixture,
-                league: { round: 'Qualifying Round' }
+                league: { round: 'Qualifying Round' },
             });
             expect(f.gameweek).toBeNull();
         });
@@ -201,7 +221,7 @@ describe('Normalizer', () => {
         it('handles null goals', () => {
             const f = Normalizer.normalizeFixture({
                 ...baseFixture,
-                goals: { home: null, away: null }
+                goals: { home: null, away: null },
             });
             expect(f.homeGoals).toBeNull();
             expect(f.awayGoals).toBeNull();
@@ -210,15 +230,18 @@ describe('Normalizer', () => {
 
     describe('normalizeEvent', () => {
         it('normalizes a goal event', () => {
-            const event = Normalizer.normalizeEvent({
-                team: { id: 42 },
-                player: { id: 10, name: 'Bukayo Saka' },
-                assist: { id: 8, name: 'Martin Ødegaard' },
-                type: 'Goal',
-                detail: 'Normal Goal',
-                comments: '',
-                time: { elapsed: 23, extra: null }
-            }, 999);
+            const event = Normalizer.normalizeEvent(
+                {
+                    team: { id: 42 },
+                    player: { id: 10, name: 'Bukayo Saka' },
+                    assist: { id: 8, name: 'Martin Ødegaard' },
+                    type: 'Goal',
+                    detail: 'Normal Goal',
+                    comments: '',
+                    time: { elapsed: 23, extra: null },
+                },
+                999,
+            );
             expect(event.fixtureId).toBe(999);
             expect(event.teamId).toBe(42);
             expect(event.playerName).toBe('Bukayo Saka');
@@ -229,14 +252,17 @@ describe('Normalizer', () => {
         });
 
         it('handles event without assist', () => {
-            const event = Normalizer.normalizeEvent({
-                team: { id: 1 },
-                player: { id: 5, name: 'Test' },
-                type: 'Card',
-                detail: 'Yellow Card',
-                comments: 'Rough play',
-                time: { elapsed: 45, extra: 2 }
-            }, 100);
+            const event = Normalizer.normalizeEvent(
+                {
+                    team: { id: 1 },
+                    player: { id: 5, name: 'Test' },
+                    type: 'Card',
+                    detail: 'Yellow Card',
+                    comments: 'Rough play',
+                    time: { elapsed: 45, extra: 2 },
+                },
+                100,
+            );
             expect(event.assistName).toBeNull();
             expect(event.assistSourceId).toBeNull();
             expect(event.extraMinute).toBe(2);
@@ -247,11 +273,18 @@ describe('Normalizer', () => {
         it('normalizes player data', () => {
             const player = Normalizer.normalizePlayer({
                 player: {
-                    id: 276, name: 'Neymar', firstname: 'Neymar', lastname: 'da Silva',
-                    age: 31, nationality: 'Brazil', height: '175 cm', weight: '68 kg',
-                    injured: false, photo: 'https://photo.png'
+                    id: 276,
+                    name: 'Neymar',
+                    firstname: 'Neymar',
+                    lastname: 'da Silva',
+                    age: 31,
+                    nationality: 'Brazil',
+                    height: '175 cm',
+                    weight: '68 kg',
+                    injured: false,
+                    photo: 'https://photo.png',
                 },
-                statistics: [{ games: { rating: '7.5' } }]
+                statistics: [{ games: { rating: '7.5' } }],
             });
             expect(player.sourceId).toBe(276);
             expect(player.name).toBe('Neymar');
@@ -271,11 +304,9 @@ describe('Normalizer', () => {
                 formation: '4-3-3',
                 startXI: [
                     { player: { id: 1, name: 'Ramsdale', number: 1, pos: 'G' } },
-                    { player: { id: 2, name: 'White', number: 4, pos: 'D' } }
+                    { player: { id: 2, name: 'White', number: 4, pos: 'D' } },
                 ],
-                substitutes: [
-                    { player: { id: 3, name: 'Nketiah', number: 14, pos: 'F' } }
-                ]
+                substitutes: [{ player: { id: 3, name: 'Nketiah', number: 14, pos: 'F' } }],
             });
             expect(lineup.teamSourceId).toBe(42);
             expect(lineup.teamName).toBe('Arsenal');
@@ -289,7 +320,7 @@ describe('Normalizer', () => {
         it('handles missing coach', () => {
             const lineup = Normalizer.normalizeLineup({
                 team: { id: 1, name: 'Test', logo: '' },
-                formation: '4-4-2'
+                formation: '4-4-2',
             });
             expect(lineup.coachName).toBeNull();
             expect(lineup.coachPhoto).toBeNull();

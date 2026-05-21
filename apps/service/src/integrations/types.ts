@@ -111,9 +111,17 @@ export interface IFootballProvider {
     getCountries(): Promise<IngestedCountry[]>;
     getLeagues(country?: string): Promise<IngestedLeague[]>;
     getSeasons(leagueSourceId: number): Promise<IngestedSeason[]>;
-    getTeams(leagueSourceId: number, season: number): Promise<{ teams: IngestedTeam[], venues: IngestedVenue[] }>;
-    getFixtures(leagueSourceId: number, season: number): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
-    getFixturesByIds(sourceIds: number[]): Promise<{ fixtures: IngestedFixture[], venues: IngestedVenue[] }>;
+    getTeams(
+        leagueSourceId: number,
+        season: number,
+    ): Promise<{ teams: IngestedTeam[]; venues: IngestedVenue[] }>;
+    getFixtures(
+        leagueSourceId: number,
+        season: number,
+    ): Promise<{ fixtures: IngestedFixture[]; venues: IngestedVenue[] }>;
+    getFixturesByIds(
+        sourceIds: number[],
+    ): Promise<{ fixtures: IngestedFixture[]; venues: IngestedVenue[] }>;
     getMatchEvents(fixtureId: number): Promise<IngestedEvent[]>;
     getLineups(fixtureId: number): Promise<IngestedLineup[]>;
     getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null>;

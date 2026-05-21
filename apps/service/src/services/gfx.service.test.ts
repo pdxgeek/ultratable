@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GfxService } from './gfx.service';
+import axios from 'axios';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { supabase } from '../db';
 import { repository } from '../repositories';
-import axios from 'axios';
+import { GfxService } from './gfx.service';
 
 vi.mock('axios');
 vi.mock('../db', () => ({
@@ -10,17 +11,17 @@ vi.mock('../db', () => ({
         storage: {
             from: vi.fn(() => ({
                 list: vi.fn(),
-                upload: vi.fn()
-            }))
-        }
-    }
+                upload: vi.fn(),
+            })),
+        },
+    },
 }));
 vi.mock('../repositories', () => ({
     repository: {
         graphics: {
-            saveGraphic: vi.fn()
-        }
-    }
+            saveGraphic: vi.fn(),
+        },
+    },
 }));
 
 describe('GfxService - CAS Sideloading', () => {
@@ -35,7 +36,7 @@ describe('GfxService - CAS Sideloading', () => {
     it('should download, hash, and upload a new image', async () => {
         (axios.get as import('vitest').Mock).mockResolvedValue({
             data: testBuffer,
-            headers: { 'content-type': 'image/png' }
+            headers: { 'content-type': 'image/png' },
         });
 
         const listMock = vi.fn().mockResolvedValue({ data: [], error: null });
@@ -43,23 +44,25 @@ describe('GfxService - CAS Sideloading', () => {
 
         (supabase.storage.from as import('vitest').Mock).mockReturnValue({
             list: listMock,
-            upload: uploadMock
+            upload: uploadMock,
         });
 
         const result = await GfxService.sideload('team', 'team-123', testUrl);
 
         expect(result).toContain(testHash);
         expect(uploadMock).toHaveBeenCalled();
-        expect(repository.graphics.saveGraphic).toHaveBeenCalledWith(expect.objectContaining({
-            entityId: 'team-123',
-            blobPath: expect.stringContaining(testHash)
-        }));
+        expect(repository.graphics.saveGraphic).toHaveBeenCalledWith(
+            expect.objectContaining({
+                entityId: 'team-123',
+                blobPath: expect.stringContaining(testHash),
+            }),
+        );
     });
 
     it('should NOT upload if image already exists in storage', async () => {
         (axios.get as import('vitest').Mock).mockResolvedValue({
             data: testBuffer,
-            headers: { 'content-type': 'image/png' }
+            headers: { 'content-type': 'image/png' },
         });
 
         const listMock = vi.fn().mockResolvedValue({ data: [{ name: testHash }], error: null });
@@ -67,7 +70,7 @@ describe('GfxService - CAS Sideloading', () => {
 
         (supabase.storage.from as import('vitest').Mock).mockReturnValue({
             list: listMock,
-            upload: uploadMock
+            upload: uploadMock,
         });
 
         await GfxService.sideload('team', 'team-123', testUrl);

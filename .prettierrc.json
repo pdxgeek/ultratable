@@ -1,0 +1,28 @@
+{
+    "printWidth": 100,
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "always",
+    "endOfLine": "lf",
+    "plugins": ["@ianvs/prettier-plugin-sort-imports"],
+    "importOrder": [
+        "<TYPES>",
+        "<TYPES>^(node:)",
+        "<TYPES>^[./]",
+        "",
+        "^react$",
+        "^react/(.*)$",
+        "<THIRD_PARTY_MODULES>",
+        "",
+        "^@/(.*)$",
+        "^~/(.*)$",
+        "",
+        "^[./]",
+        "",
+        "^[./].*\\.css$"
+    ],
+    "importOrderTypeScriptVersion": "5.9.3"
+}

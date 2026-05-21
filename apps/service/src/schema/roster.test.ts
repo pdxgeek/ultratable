@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
-import { builder } from './builder';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { repository } from '../repositories';
+import { builder } from './builder';
 
 import './football'; // Ensure football schema is registered
 
@@ -10,14 +11,14 @@ vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
         insert: vi.fn(),
-    }
+    },
 }));
 
 // Mock JobRunner
 vi.mock('../workers/runner', () => ({
     JobRunner: {
-        run: vi.fn().mockImplementation((_name: string, task: () => unknown) => task())
-    }
+        run: vi.fn().mockImplementation((_name: string, task: () => unknown) => task()),
+    },
 }));
 
 // Mock the repository
@@ -42,7 +43,7 @@ vi.mock('../repositories', () => ({
         players: {
             resolvePlayerBySourceId: vi.fn(),
         },
-    }
+    },
 }));
 
 // Mock graphics service
@@ -50,7 +51,7 @@ vi.mock('../services/graphics.service', () => ({
     graphicsService: {
         resolveUrl: vi.fn().mockResolvedValue(null),
         registerFromUrl: vi.fn().mockResolvedValue(undefined),
-    }
+    },
 }));
 
 const mockTeam = {
@@ -125,11 +126,20 @@ describe('Team Roster', () => {
                         }
                     }
                 `,
-                variables: { teamId: 'team-uuid-1', seasonId: 'season-uuid-1' }
-            })
+                variables: { teamId: 'team-uuid-1', seasonId: 'season-uuid-1' },
+            }),
         });
 
-        const result = await response.json() as { data: { teamRoster: Array<{ id: string; squadNumber: number; position: string; player: { name: string } }> } };
+        const result = (await response.json()) as {
+            data: {
+                teamRoster: Array<{
+                    id: string;
+                    squadNumber: number;
+                    position: string;
+                    player: { name: string };
+                }>;
+            };
+        };
         expect(result.data.teamRoster).toHaveLength(1);
         expect(result.data.teamRoster[0].squadNumber).toBe(10);
         expect(result.data.teamRoster[0].position).toBe('Attacker');
@@ -150,11 +160,11 @@ describe('Team Roster', () => {
                             id
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
-        const result = await response.json() as { data: { teamRoster: unknown[] } };
+        const result = (await response.json()) as { data: { teamRoster: unknown[] } };
         expect(result.data.teamRoster).toHaveLength(0);
     });
 
@@ -176,11 +186,13 @@ describe('Team Roster', () => {
                             position
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
-        const result = await response.json() as { data: { teamRoster: Array<{ squadNumber: number | null; position: string | null }> } };
+        const result = (await response.json()) as {
+            data: { teamRoster: Array<{ squadNumber: number | null; position: string | null }> };
+        };
         expect(result.data.teamRoster[0].squadNumber).toBeNull();
         expect(result.data.teamRoster[0].position).toBeNull();
     });
@@ -203,11 +215,11 @@ describe('Team Roster', () => {
                             id
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
-        const result = await response.json() as { errors?: Array<{ message: string }> };
+        const result = (await response.json()) as { errors?: Array<{ message: string }> };
         // Should fail without auth
         expect(result.errors).toBeDefined();
         expect(result.errors![0].message).toContain('Unauthenticated');
@@ -239,11 +251,16 @@ describe('Team Roster', () => {
                             }
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
-        const result = await response.json() as { data?: { importSquad: Array<{ id: string; squadNumber: number; player: { name: string } }> }; errors?: Array<{ message: string }> };
+        const result = (await response.json()) as {
+            data?: {
+                importSquad: Array<{ id: string; squadNumber: number; player: { name: string } }>;
+            };
+            errors?: Array<{ message: string }>;
+        };
         expect(result.errors).toBeUndefined();
         expect(result.data!.importSquad).toHaveLength(1);
         expect(result.data!.importSquad[0].squadNumber).toBe(10);
@@ -268,11 +285,18 @@ describe('RosterEntry schema descriptions', () => {
                             description
                         }
                     }
-                }`
-            })
+                }`,
+            }),
         });
 
-        const result = await response.json() as { data: { __type: { description: string; fields: Array<{ name: string; description: string }> } } };
+        const result = (await response.json()) as {
+            data: {
+                __type: {
+                    description: string;
+                    fields: Array<{ name: string; description: string }>;
+                };
+            };
+        };
         const type = result.data.__type;
         expect(type.description).toBeTruthy();
 
@@ -300,22 +324,24 @@ describe('RosterEntry schema descriptions', () => {
                             description
                         }
                     }
-                }`
-            })
+                }`,
+            }),
         });
 
-        const result = await response.json() as {
+        const result = (await response.json()) as {
             data: {
                 query: { fields: Array<{ name: string; description: string }> };
                 mutation: { fields: Array<{ name: string; description: string }> };
-            }
+            };
         };
 
-        const teamRosterQuery = result.data.query.fields.find(f => f.name === 'teamRoster');
+        const teamRosterQuery = result.data.query.fields.find((f) => f.name === 'teamRoster');
         expect(teamRosterQuery, 'teamRoster query not found').toBeDefined();
         expect(teamRosterQuery!.description).toBeTruthy();
 
-        const importSquadMutation = result.data.mutation.fields.find(f => f.name === 'importSquad');
+        const importSquadMutation = result.data.mutation.fields.find(
+            (f) => f.name === 'importSquad',
+        );
         expect(importSquadMutation, 'importSquad mutation not found').toBeDefined();
         expect(importSquadMutation!.description).toBeTruthy();
     });

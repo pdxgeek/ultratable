@@ -1,11 +1,11 @@
-import { ConfigRepository } from './config';
-import { WorkersRepository } from './workers';
-import { LeaguesRepository } from './leagues';
-import { TeamsRepository } from './teams';
-import { FixturesRepository } from './fixtures';
 import { CatalogRepository } from './catalog';
-import { PlayersRepository } from './players';
+import { ConfigRepository } from './config';
+import { FixturesRepository } from './fixtures';
 import { GraphicsRepository } from './graphics';
+import { LeaguesRepository } from './leagues';
+import { PlayersRepository } from './players';
+import { TeamsRepository } from './teams';
+import { WorkersRepository } from './workers';
 
 /**
  * Storage-agnostic repository contract. The Postgres implementation lives in

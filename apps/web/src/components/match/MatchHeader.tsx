@@ -1,5 +1,6 @@
-import React from 'react';
 import type { MatchFixture } from './types';
+
+import React from 'react';
 
 interface MatchHeaderProps {
     fixture: MatchFixture;
@@ -37,15 +38,9 @@ const MatchHeader: React.FC<MatchHeaderProps> = ({ fixture }) => {
                         {isPlayed ? 'Full Time' : isLive ? 'Live' : 'Upcoming'}
                     </div>
                     <div className="score-display">
-                        {isPlayed || isLive ? (
-                            `${goalsHome ?? '-'} : ${goalsAway ?? '-'}`
-                        ) : (
-                            'VS'
-                        )}
+                        {isPlayed || isLive ? `${goalsHome ?? '-'} : ${goalsAway ?? '-'}` : 'VS'}
                     </div>
-                    <div className="match-date">
-                        {new Date(scheduledAt).toLocaleString()}
-                    </div>
+                    <div className="match-date">{new Date(scheduledAt).toLocaleString()}</div>
                 </div>
 
                 <div className="team-block away-team">

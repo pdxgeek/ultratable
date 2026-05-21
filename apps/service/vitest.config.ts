@@ -15,10 +15,10 @@ export default defineConfig({
                 'src/**/*.integration.test.ts',
                 'src/scripts/**',
                 'src/index.ts',
-                'src/db/schema.ts',        // Drizzle table declarations — no logic
-                'src/db/migrate.ts',        // Migration runner entrypoint
+                'src/db/schema.ts', // Drizzle table declarations — no logic
+                'src/db/migrate.ts', // Migration runner entrypoint
                 'src/integrations/types.ts', // Pure type definitions
-                'src/api/**',               // Fastify route wiring
+                'src/api/**', // Fastify route wiring
                 'src/providers/storage.provider.ts', // Interface-only file
                 // Per-domain repository contracts — interface-only, no runtime code.
                 // The implementations live in src/repositories/postgres/* and are measured.
@@ -32,11 +32,11 @@ export default defineConfig({
                 'src/repositories/shared.ts',
                 'src/repositories/teams.ts',
                 'src/repositories/workers.ts',
-                'src/workers/**',           // Job runner infrastructure
-                'src/schema/catalog.ts',    // GraphQL wiring (schema registration)
-                'src/schema/config.ts',     // GraphQL wiring (schema registration)
-                'src/schema/graphics.ts',   // GraphQL wiring (schema registration)
-                'src/schema/workers.ts',    // GraphQL wiring (schema registration)
+                'src/workers/**', // Job runner infrastructure
+                'src/schema/catalog.ts', // GraphQL wiring (schema registration)
+                'src/schema/config.ts', // GraphQL wiring (schema registration)
+                'src/schema/graphics.ts', // GraphQL wiring (schema registration)
+                'src/schema/workers.ts', // GraphQL wiring (schema registration)
             ],
         },
     },

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
-
 import type { RankingFormula } from '../leagues.types';
+
+import React, { useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListOrdered } from 'lucide-react';
 
 interface Props {
     available: RankingFormula[];
@@ -19,12 +19,18 @@ const itemIdle = 'text-slate-300 hover:bg-slate-900';
 const arrowBtn =
     'w-9 h-9 flex items-center justify-center rounded-md bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-amber-400 disabled:opacity-30 disabled:hover:bg-slate-900 disabled:hover:text-slate-300 transition-colors';
 
-export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds, setAppliedIds }) => {
+export const RankingPrioritySelector: React.FC<Props> = ({
+    available,
+    appliedIds,
+    setAppliedIds,
+}) => {
     const [availableSel, setAvailableSel] = useState<string | null>(null);
     const [appliedSel, setAppliedSel] = useState<string | null>(null);
 
     const byId = new Map(available.map((f) => [f.id, f]));
-    const appliedList = appliedIds.map((id) => byId.get(id)).filter((f): f is RankingFormula => !!f);
+    const appliedList = appliedIds
+        .map((id) => byId.get(id))
+        .filter((f): f is RankingFormula => !!f);
     const availableList = available.filter((f) => !appliedIds.includes(f.id));
 
     const addToApplied = () => {
@@ -66,7 +72,9 @@ export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds
                     <label className={labelBase}>Available</label>
                     <ul className={boxBase}>
                         {availableList.length === 0 ? (
-                            <li className="px-3 py-2 text-xs text-slate-600 italic">All formulas applied.</li>
+                            <li className="px-3 py-2 text-xs text-slate-600 italic">
+                                All formulas applied.
+                            </li>
                         ) : (
                             availableList.map((f) => (
                                 <li
@@ -84,10 +92,22 @@ export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 pt-7">
-                    <button type="button" onClick={addToApplied} disabled={!availableSel} className={arrowBtn} title="Add to applied">
+                    <button
+                        type="button"
+                        onClick={addToApplied}
+                        disabled={!availableSel}
+                        className={arrowBtn}
+                        title="Add to applied"
+                    >
                         <ChevronRight className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={removeFromApplied} disabled={!appliedSel} className={arrowBtn} title="Remove from applied">
+                    <button
+                        type="button"
+                        onClick={removeFromApplied}
+                        disabled={!appliedSel}
+                        className={arrowBtn}
+                        title="Remove from applied"
+                    >
                         <ChevronLeft className="w-4 h-4" />
                     </button>
                 </div>
@@ -96,7 +116,9 @@ export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds
                     <label className={labelBase}>Applied (in order)</label>
                     <ul className={boxBase}>
                         {appliedList.length === 0 ? (
-                            <li className="px-3 py-2 text-xs text-slate-600 italic">No criteria applied — using server fallback.</li>
+                            <li className="px-3 py-2 text-xs text-slate-600 italic">
+                                No criteria applied — using server fallback.
+                            </li>
                         ) : (
                             appliedList.map((f, i) => (
                                 <li
@@ -105,7 +127,9 @@ export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds
                                     className={`${itemBase} ${appliedSel === f.id ? itemActive : itemIdle}`}
                                     title={f.description ?? undefined}
                                 >
-                                    <span className="text-[10px] text-slate-600 mr-2">{i + 1}.</span>
+                                    <span className="text-[10px] text-slate-600 mr-2">
+                                        {i + 1}.
+                                    </span>
                                     {f.name}
                                     <span className="ml-2 text-[10px] text-slate-600">{f.id}</span>
                                 </li>
@@ -115,10 +139,22 @@ export const RankingPrioritySelector: React.FC<Props> = ({ available, appliedIds
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 pt-7">
-                    <button type="button" onClick={() => moveApplied(-1)} disabled={!appliedSel} className={arrowBtn} title="Move up">
+                    <button
+                        type="button"
+                        onClick={() => moveApplied(-1)}
+                        disabled={!appliedSel}
+                        className={arrowBtn}
+                        title="Move up"
+                    >
                         <ChevronUp className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => moveApplied(1)} disabled={!appliedSel} className={arrowBtn} title="Move down">
+                    <button
+                        type="button"
+                        onClick={() => moveApplied(1)}
+                        disabled={!appliedSel}
+                        className={arrowBtn}
+                        title="Move down"
+                    >
                         <ChevronDown className="w-4 h-4" />
                     </button>
                 </div>

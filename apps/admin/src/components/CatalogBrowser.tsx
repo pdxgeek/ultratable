@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, CheckCircle2, Download, Loader2 } from 'lucide-react';
+import { CheckCircle2, Download, Globe, Loader2 } from 'lucide-react';
 
 interface CatalogLeague {
     id: string;
@@ -41,7 +41,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     managedLeagues,
     activateLeague,
     actionLoading,
-    initializeCatalog
+    initializeCatalog,
 }) => {
     const isEmpty = countries.length === 0;
     const isInitializing = actionLoading === 'init-catalog';
@@ -55,7 +55,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                         <Globe className="w-5 h-5 text-sky-400" />
                         Catalog Browser
                     </h3>
-                    <p className="text-sm text-slate-400 mt-2">Browse the full provider registry and activate leagues for management.</p>
+                    <p className="text-sm text-slate-400 mt-2">
+                        Browse the full provider registry and activate leagues for management.
+                    </p>
                 </div>
                 {!isEmpty && (
                     <select
@@ -64,7 +66,11 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                         className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-all min-w-[200px]"
                     >
                         <option value="">Select Country...</option>
-                        {countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {countries.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.name}
+                            </option>
+                        ))}
                     </select>
                 )}
             </div>
@@ -72,8 +78,13 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
             {isEmpty ? (
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
                     <Globe className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-30" />
-                    <p className="text-sm text-slate-400 font-medium tracking-tight mb-2">Catalog is empty.</p>
-                    <p className="text-xs text-slate-500 mb-6">Pull the country and league registry from the upstream provider to get started.</p>
+                    <p className="text-sm text-slate-400 font-medium tracking-tight mb-2">
+                        Catalog is empty.
+                    </p>
+                    <p className="text-xs text-slate-500 mb-6">
+                        Pull the country and league registry from the upstream provider to get
+                        started.
+                    </p>
                     <button
                         onClick={initializeCatalog}
                         disabled={isInitializing}
@@ -83,10 +94,12 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                         {isInitializing ? 'Initializing...' : 'Initialize Catalog'}
                     </button>
                 </div>
-            ) : (selectedCountry && isFetchingCountryLeagues) ? (
+            ) : selectedCountry && isFetchingCountryLeagues ? (
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
                     <Loader2 className="w-6 h-6 animate-spin text-sky-500 mx-auto mb-4" />
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Fetching leagues...</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                        Fetching leagues...
+                    </p>
                 </div>
             ) : selectedCountry ? (
                 <div className="max-h-[420px] overflow-y-auto border border-slate-800/40 rounded-xl bg-slate-900/20 relative z-10 backdrop-blur-sm">
@@ -94,19 +107,38 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                         <thead className="sticky top-0 z-10">
                             <tr className="bg-slate-900 border-b border-slate-800/60">
                                 <th className="px-6 py-4 font-semibold text-slate-400">League</th>
-                                <th className="px-6 py-4 font-semibold text-slate-400 text-center">Type</th>
-                                <th className="px-6 py-4 font-semibold text-slate-400 text-right">Action</th>
+                                <th className="px-6 py-4 font-semibold text-slate-400 text-center">
+                                    Type
+                                </th>
+                                <th className="px-6 py-4 font-semibold text-slate-400 text-right">
+                                    Action
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/40">
-                            {catalogLeagues.map(l => {
-                                const isManaged = managedLeagues.some(ml => ml.sourceId === l.sourceId);
+                            {catalogLeagues.map((l) => {
+                                const isManaged = managedLeagues.some(
+                                    (ml) => ml.sourceId === l.sourceId,
+                                );
                                 return (
-                                    <tr key={l.id} className="hover:bg-slate-800/20 transition-colors group">
+                                    <tr
+                                        key={l.id}
+                                        className="hover:bg-slate-800/20 transition-colors group"
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                {l.logo ? <img src={l.logo} className="w-6 h-6 rounded bg-white p-0.5" alt={l.name} /> : <div className="w-6 h-6 bg-slate-800 rounded" />}
-                                                <span className="font-medium text-slate-200">{l.name}</span>
+                                                {l.logo ? (
+                                                    <img
+                                                        src={l.logo}
+                                                        className="w-6 h-6 rounded bg-white p-0.5"
+                                                        alt={l.name}
+                                                    />
+                                                ) : (
+                                                    <div className="w-6 h-6 bg-slate-800 rounded" />
+                                                )}
+                                                <span className="font-medium text-slate-200">
+                                                    {l.name}
+                                                </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -126,7 +158,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                                                     disabled={actionLoading === l.id}
                                                     className="text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-sky-500/30 transition-all disabled:opacity-30"
                                                 >
-                                                    {actionLoading === l.id ? 'Activating...' : 'Activate'}
+                                                    {actionLoading === l.id
+                                                        ? 'Activating...'
+                                                        : 'Activate'}
                                                 </button>
                                             )}
                                         </td>
@@ -139,7 +173,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
             ) : (
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10 group/empty">
                     <Globe className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-20 group-hover/empty:scale-110 group-hover/empty:text-sky-500 transition-all duration-500" />
-                    <p className="text-sm text-slate-500 font-medium tracking-tight">Select a country above to browse and activate leagues.</p>
+                    <p className="text-sm text-slate-500 font-medium tracking-tight">
+                        Select a country above to browse and activate leagues.
+                    </p>
                 </div>
             )}
         </section>
