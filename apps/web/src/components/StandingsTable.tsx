@@ -9,6 +9,14 @@ import { FixtureDropdown } from './FixtureDropdown';
 import FormColumn from './FormColumn';
 import NextMatchBadge from './NextMatchBadge';
 import TeamCell from './TeamCell';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from './ui/table';
 
 interface StandingsTableProps {
     standings: StandingsRow[];
@@ -45,11 +53,11 @@ function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
         .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 }
 
-const thBase =
-    'text-left px-3 py-3 align-top text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
-const thClickable = `${thBase} cursor-pointer select-none transition-colors hover:text-text-primary`;
-const tdBase = 'px-3 py-2 border-b border-border text-[0.8rem]';
-const colStat = 'w-[38px] text-center';
+const headBase =
+    'px-3 py-3 align-top text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
+const headSortable = `${headBase} cursor-pointer select-none transition-colors hover:text-text-primary`;
+const cellBase = 'px-3 py-2 border-b border-border text-[0.8rem]';
+const cellStat = 'w-[38px] text-center';
 
 const StandingsTable: React.FC<StandingsTableProps> = ({
     standings,
@@ -171,94 +179,94 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
             </div>
 
             <div className="bg-glass-bg backdrop-blur-md border border-glass-border rounded-lg shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-visible">
-                <table className="w-full border-separate border-spacing-0">
-                    <thead>
-                        <tr>
-                            <th
-                                className={`${thClickable} w-10 text-center`}
+                <Table className="border-separate border-spacing-0">
+                    <TableHeader>
+                        <TableRow className="hover:bg-transparent border-b-0">
+                            <TableHead
+                                className={`${headSortable} w-10 text-center`}
                                 title="Position"
                                 onClick={() => handleSort('position')}
                             >
                                 <SortHeader label="#" column="position" />
-                            </th>
-                            <th
-                                className={thClickable}
+                            </TableHead>
+                            <TableHead
+                                className={headSortable}
                                 title="Team Name"
                                 onClick={() => handleSort('team')}
                             >
                                 <SortHeader label="Team" column="team" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Played"
                                 onClick={() => handleSort('played')}
                             >
                                 <SortHeader label="P" column="played" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Won"
                                 onClick={() => handleSort('won')}
                             >
                                 <SortHeader label="W" column="won" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Drawn"
                                 onClick={() => handleSort('drawn')}
                             >
                                 <SortHeader label="D" column="drawn" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Lost"
                                 onClick={() => handleSort('lost')}
                             >
                                 <SortHeader label="L" column="lost" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Goals For"
                                 onClick={() => handleSort('goalsFor')}
                             >
                                 <SortHeader label="GF" column="goalsFor" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Goals Against"
                                 onClick={() => handleSort('goalsAgainst')}
                             >
                                 <SortHeader label="GA" column="goalsAgainst" />
-                            </th>
-                            <th
-                                className={`${thClickable} ${colStat}`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} ${cellStat}`}
                                 title="Goal Difference"
                                 onClick={() => handleSort('goalDifference')}
                             >
                                 <SortHeader label="GD" column="goalDifference" />
-                            </th>
-                            <th
-                                className={`${thClickable} w-[60px] text-left font-bold`}
+                            </TableHead>
+                            <TableHead
+                                className={`${headSortable} w-[60px] text-left font-bold`}
                                 title="Points"
                                 onClick={() => handleSort('points')}
                             >
                                 <SortHeader label="Pts" column="points" />
-                            </th>
+                            </TableHead>
                             {settings.showForm && (
-                                <th
-                                    className={`${thClickable} w-[140px]`}
+                                <TableHead
+                                    className={`${headSortable} w-[140px]`}
                                     title="Last 5 Matches (oldest → newest)"
                                     onClick={() => handleSort('form')}
                                 >
                                     <SortHeader label="Form" column="form" />
-                                </th>
+                                </TableHead>
                             )}
-                            <th className={thBase} title="Next Match">
+                            <TableHead className={headBase} title="Next Match">
                                 Next
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
                         {sortedStandings.map((row) => {
                             const teamFixtures = getTeamFixtures(row.teamId, fixtures);
                             const pastFixtures = teamFixtures
@@ -294,23 +302,35 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                             const posBorder = zoneBorderClass(zoneClass);
 
                             return (
-                                <tr key={row.teamId} className="hover:bg-white/[0.03]">
-                                    <td className={`${tdBase} w-10 text-center ${posBorder}`}>
+                                <TableRow key={row.teamId} className="hover:bg-white/[0.03]">
+                                    <TableCell className={`${cellBase} w-10 text-center ${posBorder}`}>
                                         {row.position}
-                                    </td>
-                                    <td className={tdBase}>
+                                    </TableCell>
+                                    <TableCell className={cellBase}>
                                         <TeamCell
                                             team={{ id: row.teamId, ...row.team }}
                                             showLogo={settings.showLogos}
                                         />
-                                    </td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.played}</td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.won}</td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.drawn}</td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.lost}</td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.goalsFor}</td>
-                                    <td className={`${tdBase} ${colStat}`}>{row.goalsAgainst}</td>
-                                    <td className={`${tdBase} ${colStat}`}>
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.played}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.won}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.drawn}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.lost}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.goalsFor}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
+                                        {row.goalsAgainst}
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} ${cellStat}`}>
                                         <span
                                             className={
                                                 row.goalDifference > 0
@@ -323,8 +343,8 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             {row.goalDifference > 0 ? '+' : ''}
                                             {row.goalDifference}
                                         </span>
-                                    </td>
-                                    <td className={`${tdBase} w-[60px] text-left font-bold`}>
+                                    </TableCell>
+                                    <TableCell className={`${cellBase} w-[60px] text-left font-bold`}>
                                         <span className="font-bold text-accent-blue">
                                             {row.points}
                                         </span>
@@ -342,13 +362,13 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                                     .join(',')}
                                             </span>
                                         )}
-                                    </td>
+                                    </TableCell>
                                     {settings.showForm && (
-                                        <td className={`${tdBase} w-[140px]`}>
+                                        <TableCell className={`${cellBase} w-[140px]`}>
                                             <div className="flex items-center gap-2">
                                                 <FixtureDropdown
                                                     type="past"
-                                                    align="left"
+                                                    align="start"
                                                     teamId={row.teamId}
                                                     teams={teamsMap}
                                                     fixtures={pastFixtures}
@@ -359,9 +379,9 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                                     teamsMap={teamsMap}
                                                 />
                                             </div>
-                                        </td>
+                                        </TableCell>
                                     )}
-                                    <td className={tdBase}>
+                                    <TableCell className={cellBase}>
                                         <div className="flex items-center gap-2">
                                             <NextMatchBadge
                                                 fixture={row.nextFixture}
@@ -370,18 +390,18 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                             />
                                             <FixtureDropdown
                                                 type="future"
-                                                align="right"
+                                                align="end"
                                                 teamId={row.teamId}
                                                 teams={teamsMap}
                                                 fixtures={futureFixtures}
                                             />
                                         </div>
-                                    </td>
-                                </tr>
+                                    </TableCell>
+                                </TableRow>
                             );
                         })}
-                    </tbody>
-                </table>
+                    </TableBody>
+                </Table>
                 {deductionMap.length > 0 && (
                     <div className="mt-4 px-4 py-3 bg-black/20 rounded-md border border-dashed border-border text-[0.75rem] text-text-secondary text-left">
                         <ul className="list-none flex flex-col gap-1">

@@ -57,6 +57,8 @@ npm run build   # tsc + vite build
 
 **Always use `npm run dev` (or `start:all`) instead of starting services individually.** Never use `pkill` — it leaves orphan processes and dangling sockets.
 
+Both frontends build their UI from **shadcn/ui primitives** vendored under each app's `src/components/ui/`. Before adding or restyling a popup, dropdown, dialog, table, etc., read [docs/frontend-patterns.md](docs/frontend-patterns.md) — it covers `npx shadcn add`, the theme variable contract, and vendor-vs-compose.
+
 ## Architecture
 
 UltraTable is a real-time fantasy sports platform structured as a monorepo with three apps:

@@ -143,28 +143,6 @@
     }
 }
 
-@keyframes popup-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes player-popup-in {
-    from {
-        opacity: 0;
-        transform: translateY(-6px) scale(0.97);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
 @keyframes shimmer {
     0% {
         background-position: -200% 0;

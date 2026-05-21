@@ -156,7 +156,7 @@ This is the **Safe Isolation Pattern**:
 
 You must strictly adhere to the following coding standards when working on this project:
 
-- **Library over Bespoke**: Always prefer well-tested, widely-used community libraries instead of writing custom bespoke utility code (e.g., using `winston` instead of homemade logging, or standard packages for queueing/hashing).
+- **Library over Bespoke**: Always prefer well-tested, widely-used community libraries instead of writing custom bespoke utility code (e.g., using `winston` instead of homemade logging, or standard packages for queueing/hashing). On the frontends specifically, this means **shadcn/ui primitives** for every popup, dropdown, dialog, table, etc. — never hand-roll focus traps, click-outside handlers, or popup positioning. See [docs/frontend-patterns.md](docs/frontend-patterns.md).
 - **Dependency Inversion**: Put data input and output operations behind cleanly defined interfaces. Storage and Database modules should be swappable with minimal churn elsewhere in the application.
 - **SOLID & DRY**: Follow SOLID design principles. Do not repeat code. Write functional code wherever possible.
 - **Maintainability**: Use exceptional naming conventions. Avoid creating giant code blocks or monolith files. Break complex logic into smaller, testable modules.
