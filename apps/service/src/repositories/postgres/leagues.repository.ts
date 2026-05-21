@@ -143,6 +143,10 @@ export class PostgresLeaguesRepository implements LeaguesRepository {
 
     async removeSeason(seasonId: string): Promise<boolean> {
         if (!db) return false;
+        // FK order: tables that reference seasons.id but do NOT have ON DELETE
+        // CASCADE must be cleared explicitly. team_rosters cascades; the rest
+        // here do not (would fail with `seasons_to_teams_season_id_fk` etc.).
+        await db.delete(schema.seasonsToTeams).where(eq(schema.seasonsToTeams.seasonId, seasonId));
         await db.delete(schema.standingsRows).where(eq(schema.standingsRows.seasonId, seasonId));
         await db.delete(schema.fixtures).where(eq(schema.fixtures.seasonId, seasonId));
         const result = await db.delete(schema.seasons).where(eq(schema.seasons.id, seasonId)).returning();

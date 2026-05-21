@@ -136,6 +136,49 @@ describe('auth.service', () => {
         });
     });
 
+    describe('LRU eviction under pressure', () => {
+        it('caps domain user cache at 500 entries — older entries get evicted', async () => {
+            vi.resetModules();
+            const { db } = await import('../db');
+            const { resolveDomainUser } = await import('./auth.service');
+            vi.mocked(db.select).mockReset();
+
+            // Each call resolves a unique authUserId → unique domain user, then caches it.
+            let queryIndex = 0;
+            const selectMock = vi.fn().mockImplementation(() => ({
+                from: () => ({
+                    innerJoin: () => ({
+                        where: () => {
+                            const idx = queryIndex++;
+                            return {
+                                limit: vi.fn().mockResolvedValue([
+                                    { id: `uuid-${idx}`, name: 'u', email: 'u@x', roles: ['user'] }
+                                ])
+                            };
+                        }
+                    })
+                })
+            }));
+            vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
+
+            // Resolve 501 distinct users so the LRU is forced to evict the oldest.
+            for (let i = 0; i < 501; i++) {
+                await resolveDomainUser(`auth-${i}`);
+            }
+            const callsAfterFill = vi.mocked(db.select).mock.calls.length;
+            expect(callsAfterFill).toBe(501);
+
+            // The oldest entry should have been evicted — re-resolving it triggers a fresh DB hit.
+            await resolveDomainUser('auth-0');
+            expect(vi.mocked(db.select).mock.calls.length).toBe(callsAfterFill + 1);
+
+            // The most recent entry is still cached — no new DB hit.
+            const before = vi.mocked(db.select).mock.calls.length;
+            await resolveDomainUser('auth-500');
+            expect(vi.mocked(db.select).mock.calls.length).toBe(before);
+        });
+    });
+
     describe('invalidateDomainUserCache', () => {
         it('forces re-query after invalidation', async () => {
             vi.resetModules();

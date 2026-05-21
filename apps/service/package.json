@@ -11,7 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:reset": "ts-node src/scripts/wipe_and_seed.ts",
     "test": "vitest run",
-    "test:integration": "vitest run --include='src/**/*.integration.test.ts'",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint ."
   },
@@ -47,6 +47,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.3",
+    "@vitest/coverage-v8": "^4.0.18",
     "drizzle-kit": "^0.30.2",
     "eslint": "^10.0.2",
     "globals": "^17.4.0",
