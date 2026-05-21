@@ -13,6 +13,8 @@ export interface Context {
         id: string;
         roles: string[];
     };
+    /** Better Auth's auth_user.id for the current session, when authenticated. */
+    authUserId?: string;
     loaders: Loaders;
 }
 
@@ -35,16 +37,6 @@ builder.queryType({
             description:
                 'Simple health check endpoint. Returns a confirmation string when the service is running.',
             resolve: () => 'Service is up and running!',
-        }),
-        me: t.string({
-            resolve: (parent, args, ctx) => {
-                if (!ctx.user) {
-                    throw new GraphQLError('Unauthenticated', {
-                        extensions: { http: { status: 401 } },
-                    });
-                }
-                return `Authenticated as user ${ctx.user.id} with roles ${ctx.user.roles.join(', ')}`;
-            },
         }),
     }),
 });

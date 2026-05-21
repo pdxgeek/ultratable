@@ -20,8 +20,9 @@ import { auth } from './api/auth';
 import { db } from './db';
 import * as schema from './db/schema';
 import { createLoaders } from './loaders';
+import { repository } from './repositories';
 import { builder } from './schema/builder';
-import { resolveDomainUser, toWebHeaders } from './services/auth.service';
+import { invalidateDomainUserCache, resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { globalLogger } from './services/log.service';
 import { seedRankingFormulas } from './services/seed-ranking-formulas';
 
@@ -29,6 +30,7 @@ import './schema/catalog';
 import './schema/config';
 import './schema/football';
 import './schema/graphics';
+import './schema/viewer';
 import './schema/workers';
 
 type ExecuteFn = (args: ExecutionArgs) => PromiseLike<ExecutionResult> | ExecutionResult;
@@ -173,7 +175,7 @@ const yoga = createYoga<{
             'Auth: context resolved',
         );
 
-        return { req, user, loaders: createLoaders() };
+        return { req, user, authUserId: session.user.id, loaders: createLoaders() };
     },
     // We use fastify's built-in error handling
     logging: globalLogger,
@@ -260,35 +262,16 @@ server.post('/api/auth/dev-login', async (request, reply) => {
 
     const email = `dev-${role}@ultratable.local`;
 
-    // 1. Check if the domain user exists
-    const domainUsers = await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.email, email))
-        .limit(1);
-    let devUser = domainUsers[0];
-
-    if (!devUser) {
-        globalLogger.info(`[Dev Login] Seeding missing domain user for role: ${role}...`);
-        const insertedUsers = await db
-            .insert(schema.users)
-            .values({
-                name: `Dev ${role}`,
-                email: email,
-                roles: [role],
-                emailVerified: true,
-            })
-            .returning();
-        devUser = insertedUsers[0];
-    }
-
-    // 2. Check if the auth provider user exists natively in BetterAuth
+    // Sign up the auth identity if it doesn't exist. The `user.create.after`
+    // hook in api/auth.ts handles bootstrapping the matching domain user +
+    // auth_link, so all we need to do here is force the requested role onto
+    // the linked domain row afterwards.
     const providerUsers = await db
         .select()
         .from(schema.authUsers)
         .where(eq(schema.authUsers.email, email))
         .limit(1);
-    const providerUser = providerUsers[0];
+    let providerUser = providerUsers[0];
 
     if (!providerUser) {
         globalLogger.info(`[Dev Login] Seeding missing BetterAuth credentials for: ${email}...`);
@@ -300,22 +283,12 @@ server.post('/api/auth/dev-login', async (request, reply) => {
                     name: `Dev ${role}`,
                 },
             });
-
-            // Retrieve the newly minted auth user to establish the bridge link
-            const newProviderUsers = await db
+            const [created] = await db
                 .select()
                 .from(schema.authUsers)
                 .where(eq(schema.authUsers.email, email))
                 .limit(1);
-            if (newProviderUsers[0]) {
-                await db
-                    .insert(schema.authLinks)
-                    .values({
-                        authUserId: newProviderUsers[0].id,
-                        domainUserId: devUser.id,
-                    })
-                    .onConflictDoNothing();
-            }
+            providerUser = created;
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e);
             globalLogger.error(
@@ -326,13 +299,28 @@ server.post('/api/auth/dev-login', async (request, reply) => {
         }
     }
 
+    if (!providerUser) {
+        return reply.status(500).send({ error: 'auth_user missing after sign-up' });
+    }
+
+    const domainUser = await resolveDomainUser(providerUser.id);
+    if (!domainUser) {
+        return reply.status(500).send({ error: 'auth_link missing — bootstrap hook failed' });
+    }
+
+    // Always force the requested role — the bootstrap hook seeds ["user"] by
+    // default, and re-runs of dev-login may flip an existing dev account
+    // (admin → guest, etc.).
+    const updated = await repository.users.setDomainUserRoles(domainUser.id, [role]);
+    invalidateDomainUserCache(providerUser.id);
+
     globalLogger.info(
         `[Dev Login] Seed verified for: ${email}. The client may now natively sign-in.`,
     );
 
     return reply.status(200).send({
         message: 'Dev User Seeded',
-        user: devUser,
+        user: updated ?? domainUser,
     });
 });
 

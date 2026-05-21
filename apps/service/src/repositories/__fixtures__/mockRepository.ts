@@ -22,6 +22,7 @@ import type { LeaguesRepository } from '../leagues';
 import type { PlayersRepository } from '../players';
 import type { IRepository } from '../repository';
 import type { TeamsRepository } from '../teams';
+import type { UsersRepository } from '../users';
 import type { WorkersRepository } from '../workers';
 
 import { vi } from 'vitest';
@@ -139,6 +140,15 @@ export function buildMockWorkers(overrides: Partial<WorkersRepository> = {}): Wo
     };
 }
 
+export function buildMockUsers(overrides: Partial<UsersRepository> = {}): UsersRepository {
+    return {
+        getDomainUserById: vi.fn().mockResolvedValue(null),
+        getIdentitiesForDomainUser: vi.fn().mockResolvedValue([]),
+        setDomainUserRoles: vi.fn().mockResolvedValue(null),
+        ...overrides,
+    };
+}
+
 export type RepositoryOverrides = {
     [K in keyof IRepository]?: Partial<IRepository[K]>;
 };
@@ -153,5 +163,6 @@ export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepos
         graphics: buildMockGraphics(overrides.graphics),
         config: buildMockConfig(overrides.config),
         workers: buildMockWorkers(overrides.workers),
+        users: buildMockUsers(overrides.users),
     };
 }

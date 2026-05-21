@@ -184,6 +184,13 @@ API_FOOTBALL_KEY=${vars.API_FOOTBALL_KEY}
 # ── Authentication (Better Auth) ─────────────────────────────
 BETTER_AUTH_SECRET=${vars.BETTER_AUTH_SECRET}
 BETTER_AUTH_URL=${vars.BETTER_AUTH_URL}
+
+# ── Google OAuth (optional) ──────────────────────────────────
+# Register an OAuth client at https://console.cloud.google.com/apis/credentials.
+# Authorized redirect URI: \${BETTER_AUTH_URL}/api/auth/callback/google
+# Leave blank to keep email/password as the only sign-in method.
+GOOGLE_CLIENT_ID=${vars.GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${vars.GOOGLE_CLIENT_SECRET}
 `;
 }
 
@@ -288,6 +295,8 @@ async function main() {
         API_FOOTBALL_KEY: '',
         BETTER_AUTH_SECRET: existing.BETTER_AUTH_SECRET || randomBytes(32).toString('hex'),
         BETTER_AUTH_URL: existing.BETTER_AUTH_URL || 'http://localhost:5174',
+        GOOGLE_CLIENT_ID: existing.GOOGLE_CLIENT_ID || '',
+        GOOGLE_CLIENT_SECRET: existing.GOOGLE_CLIENT_SECRET || '',
     };
 
     if (dbMode === 'supabase') {
@@ -380,6 +389,26 @@ async function main() {
         stdout.write(`  Generated a new BETTER_AUTH_SECRET (32 random bytes, hex-encoded).\n`);
     }
     vars.BETTER_AUTH_URL = await ask('BETTER_AUTH_URL', { def: vars.BETTER_AUTH_URL });
+
+    // ── Google OAuth ─────────────────────────────────────────
+    paragraph(
+        `Optional. Sign-in with Google is enabled only when both client ID and\n` +
+            `secret are present. Register the OAuth client at\n` +
+            `${c.cyan('https://console.cloud.google.com/apis/credentials')} and add\n` +
+            `${c.cyan(`${vars.BETTER_AUTH_URL}/api/auth/callback/google`)} as an\n` +
+            `authorized redirect URI. Leave blank to skip.`,
+    );
+    vars.GOOGLE_CLIENT_ID = await ask('GOOGLE_CLIENT_ID (blank to skip)', {
+        def: existing.GOOGLE_CLIENT_ID,
+    });
+    if (vars.GOOGLE_CLIENT_ID) {
+        vars.GOOGLE_CLIENT_SECRET = await ask('GOOGLE_CLIENT_SECRET', {
+            def: existing.GOOGLE_CLIENT_SECRET,
+            secret: true,
+        });
+    } else {
+        vars.GOOGLE_CLIENT_SECRET = '';
+    }
 
     // ── Write service .env ───────────────────────────────────
     header('Writing env files');

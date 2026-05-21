@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import { db } from '../db';
 import * as schema from '../db/schema';
+import { bootstrapDomainUserFromAuthUser } from '../services/auth-bootstrap';
 import { globalLogger } from '../services/log.service';
 
 const logger = globalLogger.child({ module: 'api/auth' });
@@ -34,6 +35,21 @@ if (process.env.NODE_ENV !== 'production') {
     trustedOrigins.push(...DEV_ORIGINS);
 }
 
+// Google OAuth is wired in only when both env vars are present. Leaving it
+// configured-but-empty makes Better Auth advertise the provider with broken
+// credentials, which breaks the sign-in UI; absent is the correct dev default.
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const socialProviders =
+    googleClientId && googleClientSecret
+        ? { google: { clientId: googleClientId, clientSecret: googleClientSecret } }
+        : undefined;
+if (!socialProviders && process.env.NODE_ENV === 'production') {
+    logger.warn(
+        'GOOGLE_CLIENT_ID/SECRET not set — Google sign-in is disabled in this deployment.',
+    );
+}
+
 export const auth = betterAuth({
     database: drizzleAdapter(db, {
         provider: 'pg',
@@ -47,6 +63,22 @@ export const auth = betterAuth({
     }),
     emailAndPassword: {
         enabled: true,
+    },
+    socialProviders,
+    databaseHooks: {
+        user: {
+            create: {
+                after: async (authUser) => {
+                    await bootstrapDomainUserFromAuthUser({
+                        id: authUser.id,
+                        name: authUser.name,
+                        email: authUser.email,
+                        emailVerified: authUser.emailVerified,
+                        image: authUser.image ?? null,
+                    });
+                },
+            },
+        },
     },
     baseURL: betterAuthUrl || 'http://localhost:8080',
     trustedOrigins,
