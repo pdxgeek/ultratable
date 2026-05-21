@@ -7,33 +7,29 @@ import type {
 } from 'graphql';
 import type { Context } from './schema/builder';
 
+import fastifyCookie from '@fastify/cookie';
+import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { eq } from 'drizzle-orm';
 import Fastify, { FastifyReply, FastifyRequest } from 'fastify';
 import { GraphQLError } from 'graphql';
 import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import { createYoga } from 'graphql-yoga';
 
-// Import schema definitions
 import { auth } from './api/auth';
+import { db } from './db';
+import * as schema from './db/schema';
 import { createLoaders } from './loaders';
 import { builder } from './schema/builder';
 import { resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { globalLogger } from './services/log.service';
+import { seedRankingFormulas } from './services/seed-ranking-formulas';
 
+import './schema/catalog';
 import './schema/config';
 import './schema/football';
-import './schema/workers';
-import './schema/catalog';
 import './schema/graphics';
-
-import fastifyCookie from '@fastify/cookie';
-import fastifyCors from '@fastify/cors';
-import fastifyRateLimit from '@fastify/rate-limit';
-
-// Database instances for development login overrides
-import { db } from './db';
-import * as schema from './db/schema';
-import { seedRankingFormulas } from './services/seed-ranking-formulas';
+import './schema/workers';
 
 type ExecuteFn = (args: ExecutionArgs) => PromiseLike<ExecutionResult> | ExecutionResult;
 type OnExecutePayload = {
