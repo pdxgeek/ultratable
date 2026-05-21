@@ -7,7 +7,7 @@ import { useLeague } from '../context/LeagueContext';
 import { useStandings } from '../hooks/useStandings';
 
 const StandingsView: React.FC = () => {
-    const { activeSeason, isLoading } = useLeague();
+    const { activeLeague, activeSeason, isLoading } = useLeague();
     const [filter, setFilter] = useState<StandingsFilter>('all');
     const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', {
         filter,
@@ -32,7 +32,16 @@ const StandingsView: React.FC = () => {
     return (
         <main>
             <div className="flex justify-between items-end mt-6 mb-4">
-                <h2 className="text-xl m-0">League Table</h2>
+                <h2 className="text-xl m-0 flex items-center gap-2">
+                    {activeLeague?.countryFlag && (
+                        <img
+                            src={activeLeague.countryFlag}
+                            alt={activeLeague.country ?? ''}
+                            className="w-6 h-6 rounded-full object-cover ring-1 ring-black/10 bg-white"
+                        />
+                    )}
+                    <span>{activeLeague?.name ?? 'League Table'}</span>
+                </h2>
                 {lastUpdated && (
                     <span className="text-xs text-text-muted">
                         Last synced: {new Date(lastUpdated).toLocaleTimeString()}

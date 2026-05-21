@@ -28,6 +28,7 @@ const LIST_LEAGUES_QUERY = gql`
             name
             slug
             country
+            countryFlag
             logo
             updatedAt
             configJson
@@ -92,6 +93,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
                                 name: l.name,
                                 slug: l.slug,
                                 country: l.country,
+                                countryFlag: l.countryFlag,
                                 logo: l.logo,
                                 updatedAt: l.updatedAt,
                                 metadata: l.configJson ? JSON.parse(l.configJson) : {},

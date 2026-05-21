@@ -13,6 +13,7 @@ export interface League {
     sourceId: number;
     name: string;
     country?: string;
+    countryFlag?: string;
     logo?: string;
     slug: string;
     updatedAt: string;
