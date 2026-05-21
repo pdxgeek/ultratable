@@ -21,8 +21,8 @@
         "format:check": "prettier --check .",
         "preview": "vite preview",
         "start:service": "npm run dev --prefix apps/service",
-        "start:admin": "npm run dev --prefix apps/admin",
-        "start:web": "npm run dev --prefix apps/web",
+        "start:admin": "node scripts/wait-for-port.js 8080 && npm run dev --prefix apps/admin",
+        "start:web": "node scripts/wait-for-port.js 8080 && npm run dev --prefix apps/web",
         "start:all": "node scripts/start-all.js",
         "health:check": "bash health-check.sh",
         "docker:deploy": "bash scripts/docker-deploy.sh"
