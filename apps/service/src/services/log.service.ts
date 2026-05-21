@@ -53,10 +53,13 @@ const drizzleStream = {
                 message: message,
                 context: cleanContext
             }).catch((e: Error) => {
-                console.error('[Logger] Failed to write system_log to database:', e.message);
+                // We ARE the Pino-to-DB stream — emitting through `globalLogger`
+                // would re-enter this code path and loop. Stay on raw stderr.
+                process.stderr.write(`[Logger] Failed to write system_log to database: ${e.message}\n`);
             });
         } catch (err) {
-            console.error('[Logger] Failed to parse pino message for database:', err);
+            const message = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`[Logger] Failed to parse pino message for database: ${message}\n`);
         }
     }
 };

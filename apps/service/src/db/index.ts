@@ -9,8 +9,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const dbUrl = process.env.DATABASE_URL;
 
+// Note: globalLogger imports db, so we can't use the Pino logger here without a cycle.
+// Write directly to stderr — the warning only fires when DATABASE_URL is missing,
+// at which point the logger's DB stream can't function anyway.
 if (!dbUrl) {
-    console.warn('⚠️ DATABASE_URL is not set. Database operations will fail until configured.');
+    process.stderr.write('⚠️ DATABASE_URL is not set. Database operations will fail until configured.\n');
 }
 
 // Relational DB client (Drizzle)

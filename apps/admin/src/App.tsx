@@ -24,10 +24,21 @@ interface ConfigStatus {
   supabaseAnonKeyMasked: string | null;
 }
 
+interface DomainUser {
+  id: string;
+  name?: string;
+  email?: string;
+  roles: string[];
+}
+
+interface Session {
+  user: DomainUser;
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [config, setConfig] = useState<ConfigStatus | null>(null);
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
 
   // Worker State (Lifted)

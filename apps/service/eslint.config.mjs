@@ -3,7 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-    { ignores: ['dist'] },
+    { ignores: ['dist', 'coverage'] },
     {
         files: ['**/*.ts'],
         extends: [
@@ -18,12 +18,20 @@ export default tseslint.config(
             },
         },
         rules: {
-            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-explicit-any': 'error',
             '@typescript-eslint/no-unused-vars': 'warn',
             'no-useless-assignment': 'warn',
             'prefer-const': 'warn',
             'preserve-caught-error': 'off',
-            'no-empty': 'warn'
+            'no-empty': 'warn',
+            'no-console': 'error',
         },
-    }
+    },
+    {
+        // CLI entry points and one-off scripts may use console freely.
+        files: ['src/scripts/**/*.ts', 'src/db/migrate.ts', 'run-migration.ts'],
+        rules: {
+            'no-console': 'off',
+        },
+    },
 );
