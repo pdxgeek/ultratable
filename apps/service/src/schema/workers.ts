@@ -1,7 +1,7 @@
 import { builder, requireAdmin } from './builder';
 import * as schema from '../db/schema';
 import { JobRunner } from '../workers/runner';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { GraphQLError } from 'graphql';
 
 /** Upper bound on every paginated query, regardless of the per-field default. */
@@ -106,7 +106,7 @@ builder.mutationField('runJob', (t) =>
                     if (isNaN(leagueSourceId) || isNaN(seasonYear)) {
                         throw new GraphQLError(`Invalid job name format: expected sync-fixtures-<leagueSourceId>-<seasonYear>, got "${name}"`);
                     }
-                    const syncRes = await repository.football.syncFixtures(leagueSourceId, seasonYear, reporter);
+                    const syncRes = await repository.fixtures.syncFixtures(leagueSourceId, seasonYear, reporter);
                     return {
                         processedCount: syncRes.stats.processedCount,
                         totalCount: syncRes.stats.totalCount,

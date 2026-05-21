@@ -1,6 +1,6 @@
 import { builder, requireAdmin } from './builder';
 import * as schema from '../db/schema';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { graphicsService } from '../services/graphics.service';
 import { storageProvider } from '../providers/storage';
 
@@ -34,7 +34,7 @@ builder.queryFields((t) => ({
         },
         resolve: async (_root, args, ctx) => {
             requireAdmin(ctx);
-            return repository.football.getGraphics(args.entityType, args.entityId ?? undefined);
+            return repository.graphics.getGraphics(args.entityType, args.entityId ?? undefined);
         }
     })
 }));

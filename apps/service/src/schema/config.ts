@@ -1,5 +1,5 @@
 import { builder, requireAdmin } from './builder';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { cacheService } from '../services/cache.service';
 
 const ConfigStatusRef = builder.objectRef<{

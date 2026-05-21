@@ -1,6 +1,6 @@
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { storageProvider } from '../providers/storage';
 import { eq } from 'drizzle-orm';
 
@@ -59,7 +59,7 @@ async function run() {
         // 3. Sync Catalog
         console.log('\n--- 3. Syncing Catalog ---');
         console.log('Fetching latest Countries and Leagues from provider...');
-        const syncResult = await repository.football.syncCatalogLeagues();
+        const syncResult = await repository.catalog.syncCatalogLeagues();
         console.log(`✅ Catalog sync complete. Processed ${syncResult.stats.processedCount} leagues.`);
 
         // 4. Promote League
@@ -75,12 +75,12 @@ async function run() {
             throw new Error(`League ${LEAGUE_SOURCE_ID} not found in the catalog. Was sync successful?`);
         }
 
-        const managed = await repository.football.promoteLeague(catLeague.id);
+        const managed = await repository.catalog.promoteLeague(catLeague.id);
         console.log(`✅ Promoted League: ${managed.name}`);
 
         // 4b. Refresh catalog seasons so the Season Importer has data
         console.log('Refreshing catalog seasons...');
-        await repository.football.refreshCatalogSeasons(catLeague.id);
+        await repository.catalog.refreshCatalogSeasons(catLeague.id);
         console.log('✅ Catalog seasons refreshed.');
 
         // 5. Seed Fixtures (which brings in Teams, Venues, and Graphics)
@@ -88,7 +88,7 @@ async function run() {
         const SEASON_YEAR = 2024;
         console.log(`Seeding fixtures for ${managed.name} ${SEASON_YEAR}...`);
         console.log('(This will also fetch basic teams and their graphics)');
-        const fixturesResult = await repository.football.syncFixtures(LEAGUE_SOURCE_ID, SEASON_YEAR);
+        const fixturesResult = await repository.fixtures.syncFixtures(LEAGUE_SOURCE_ID, SEASON_YEAR);
 
         console.log(`✅ Seeding Complete. Processed ${fixturesResult.stats.processedCount} fixtures.`);
 

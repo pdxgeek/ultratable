@@ -1,10 +1,10 @@
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { cacheService } from './cache.service';
 import { globalLogger } from './log.service';
 
 /**
  * Default formula rows the standings sorter relies on. IDs must match the
- * fallback in football.ts (FALLBACK_RANKING_CRITERIA) and postgres.repository.ts
+ * fallback in football.ts (FALLBACK_RANKING_CRITERIA) and repositories/postgres/shared.ts
  * (DEFAULT_RANKING_CRITERIA). logicType values must match a key in the web app's
  * FORMULA_REGISTRY (apps/web/src/logic/formulas.ts).
  */
@@ -20,7 +20,7 @@ const DEFAULT_FORMULAS = [
 export async function seedRankingFormulas(): Promise<void> {
     try {
         for (const formula of DEFAULT_FORMULAS) {
-            await repository.football.saveRankingFormula(formula);
+            await repository.leagues.saveRankingFormula(formula);
         }
         cacheService.invalidate('formulas');
         globalLogger.info({ count: DEFAULT_FORMULAS.length }, 'Seeded ranking_formulas defaults');

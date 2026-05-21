@@ -1,5 +1,5 @@
 import DataLoader from 'dataloader';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import * as schema from '../db/schema';
 
 type Team = typeof schema.teams.$inferSelect;
@@ -15,19 +15,19 @@ function byId<T extends { id: string }>(rows: T[], ids: readonly string[]): (T |
 export function createLoaders() {
     return {
         teamLoader: new DataLoader<string, Team | null>(async (ids) => {
-            const rows = await repository.football.getTeamsByIds(ids);
+            const rows = await repository.teams.getTeamsByIds(ids);
             return byId(rows, ids);
         }),
         venueLoader: new DataLoader<string, Venue | null>(async (ids) => {
-            const rows = await repository.football.getVenuesByIds(ids);
+            const rows = await repository.teams.getVenuesByIds(ids);
             return byId(rows, ids);
         }),
         seasonLoader: new DataLoader<string, Season | null>(async (ids) => {
-            const rows = await repository.football.getSeasonsByIds(ids);
+            const rows = await repository.leagues.getSeasonsByIds(ids);
             return byId(rows, ids);
         }),
         leagueLoader: new DataLoader<string, League | null>(async (ids) => {
-            const rows = await repository.football.getLeaguesByIds(ids);
+            const rows = await repository.leagues.getLeaguesByIds(ids);
             return byId(rows, ids);
         }),
     };

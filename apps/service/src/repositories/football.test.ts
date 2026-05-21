@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostgresFootballRepository } from './postgres.repository';
+import { PostgresLeaguesRepository } from './postgres/leagues.repository';
+import { PostgresTeamsRepository } from './postgres/teams.repository';
+import { ApiFootballProvider } from '../integrations/api-football';
 import { db } from '../db';
 import { cacheService } from '../services/cache.service';
 
@@ -19,11 +21,11 @@ vi.mock('../db', () => ({
     }
 }));
 
-describe('PostgresFootballRepository', () => {
-    let repo: PostgresFootballRepository;
+describe('PostgresLeaguesRepository', () => {
+    let repo: PostgresLeaguesRepository;
 
     beforeEach(() => {
-        repo = new PostgresFootballRepository();
+        repo = new PostgresLeaguesRepository(new ApiFootballProvider());
         vi.clearAllMocks();
         cacheService.clear();
         process.env.API_FOOTBALL_KEY = 'test-key';
@@ -52,6 +54,17 @@ describe('PostgresFootballRepository', () => {
 
             expect(result).toEqual([]);
         });
+    });
+});
+
+describe('PostgresTeamsRepository', () => {
+    let repo: PostgresTeamsRepository;
+
+    beforeEach(() => {
+        repo = new PostgresTeamsRepository(new ApiFootballProvider());
+        vi.clearAllMocks();
+        cacheService.clear();
+        process.env.API_FOOTBALL_KEY = 'test-key';
     });
 
     describe('syncTeams', () => {
@@ -87,7 +100,6 @@ describe('PostgresFootballRepository', () => {
             };
             mockGet.mockResolvedValue(mockResponse);
 
-            // Mock insert with cascade structure
             const insertMock = vi.fn().mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
@@ -134,7 +146,6 @@ describe('PostgresFootballRepository', () => {
                         ]
                     }
                 })
-                // getSquad calls (1 per team):
                 .mockResolvedValueOnce({ data: { response: [{ players: [{ id: 1, name: 'Saka', age: 22, number: 7, position: 'Attacker', photo: null }] }] } })
                 .mockResolvedValueOnce({ data: { response: [{ players: [{ id: 2, name: 'Rashford', age: 27, number: 10, position: 'Attacker', photo: null }] }] } });
 
@@ -150,7 +161,6 @@ describe('PostgresFootballRepository', () => {
 
             await repo.syncTeams(39, 2024);
 
-            // Verify getSquad was called for each team
             expect(mockGet).toHaveBeenCalledWith('/players/squads', { params: { team: 42 } });
             expect(mockGet).toHaveBeenCalledWith('/players/squads', { params: { team: 33 } });
         });
@@ -179,7 +189,6 @@ describe('PostgresFootballRepository', () => {
                         response: [{ team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' }, venue: { id: 505, name: 'Emirates' } }]
                     }
                 })
-                // getSquad fails
                 .mockRejectedValueOnce(new Error('API rate limit'));
 
             const insertMock = vi.fn().mockReturnValue({
