@@ -9,7 +9,7 @@ import { GraphicsRepository } from './graphics';
 
 /**
  * Storage-agnostic repository contract. The Postgres implementation lives in
- * `../postgres/`, but consumers should never name a backend in their imports —
+ * `./postgres/`, but consumers should never name a backend in their imports —
  * import the active `repository` from the package index instead.
  */
 export interface IRepository {

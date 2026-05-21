@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PostgresFixturesRepository } from './postgres/fixtures.repository';
-import type { TeamsRepository } from './interfaces';
+import type { TeamsRepository } from './teams';
 import { cacheService } from '../services/cache.service';
 import type { IFootballProvider, IngestedFixture } from '../integrations/types';
 

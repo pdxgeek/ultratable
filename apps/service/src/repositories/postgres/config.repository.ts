@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ConfigRepository } from '../interfaces';
+import { ConfigRepository } from '../config';
 
 export class PostgresConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {

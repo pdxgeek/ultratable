@@ -1,4 +1,4 @@
-import * as schema from '../../db/schema';
+import * as schema from '../db/schema';
 
 export interface WorkersRepository {
     listJobs(): Promise<Array<typeof schema.jobs.$inferSelect>>;

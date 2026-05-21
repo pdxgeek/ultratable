@@ -5,7 +5,7 @@ import { IFootballProvider } from '../../integrations/types';
 import { graphicsService } from '../../services/graphics.service';
 import { globalLogger } from '../../services/log.service';
 import { cacheService, TTL } from '../../services/cache.service';
-import { TeamsRepository } from '../interfaces';
+import { TeamsRepository } from '../teams';
 import { NOW_MS } from './shared';
 
 const logger = globalLogger.child({ module: 'PostgresTeamsRepository' });

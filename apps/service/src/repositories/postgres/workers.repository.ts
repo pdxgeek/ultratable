@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '../../db';
 import * as schema from '../../db/schema';
-import { WorkersRepository } from '../interfaces';
+import { WorkersRepository } from '../workers';
 
 export class PostgresWorkersRepository implements WorkersRepository {
     async listJobs(): Promise<Array<typeof schema.jobs.$inferSelect>> {

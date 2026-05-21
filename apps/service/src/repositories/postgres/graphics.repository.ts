@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../db';
 import * as schema from '../../db/schema';
-import { GraphicsRepository } from '../interfaces';
+import { GraphicsRepository } from '../graphics';
 
 export class PostgresGraphicsRepository implements GraphicsRepository {
     async getGraphics(entityType: string, entityId?: string): Promise<Array<typeof schema.graphics.$inferSelect>> {

@@ -1,5 +1,5 @@
-import { JobReporter } from '../../workers/runner';
-import * as schema from '../../db/schema';
+import { JobReporter } from '../workers/runner';
+import * as schema from '../db/schema';
 import { SyncResult } from './shared';
 
 // Dual-ID contract (AI_README_FIRST.MD §1): parameters that carry an external
@@ -12,6 +12,6 @@ export interface FixturesRepository {
     countFixturesInSeason(seasonId: string): Promise<number>;
     syncFixtures(leagueSourceId: number, season: number, reporter?: JobReporter): Promise<SyncResult<typeof schema.fixtures.$inferSelect>>;
 
-    getMatchEvents(fixtureId: number): Promise<import('../../integrations/types').IngestedEvent[]>;
-    getLineups(fixtureId: number): Promise<import('../../integrations/types').IngestedLineup[]>;
+    getMatchEvents(fixtureId: number): Promise<import('../integrations/types').IngestedEvent[]>;
+    getLineups(fixtureId: number): Promise<import('../integrations/types').IngestedLineup[]>;
 }

@@ -1,4 +1,4 @@
-import * as schema from '../../db/schema';
+import * as schema from '../db/schema';
 
 export interface GraphicsRepository {
     getGraphics(entityType: string, entityId?: string): Promise<Array<typeof schema.graphics.$inferSelect>>;

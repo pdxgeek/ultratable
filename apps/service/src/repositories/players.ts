@@ -1,4 +1,4 @@
-import * as schema from '../../db/schema';
+import * as schema from '../db/schema';
 
 export interface PlayersRepository {
     getPlayerById(playerId: string): Promise<typeof schema.players.$inferSelect | null>;

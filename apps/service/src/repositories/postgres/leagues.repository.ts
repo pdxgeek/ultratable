@@ -3,7 +3,8 @@ import { db } from '../../db';
 import * as schema from '../../db/schema';
 import { IFootballProvider } from '../../integrations/types';
 import { cacheService, TTL } from '../../services/cache.service';
-import { LeaguesRepository, SyncResult } from '../interfaces';
+import { LeaguesRepository } from '../leagues';
+import { SyncResult } from '../shared';
 import { DEFAULT_RANKING_CRITERIA } from './shared';
 
 export class PostgresLeaguesRepository implements LeaguesRepository {

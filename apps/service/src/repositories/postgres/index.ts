@@ -1,6 +1,6 @@
 import { IFootballProvider } from '../../integrations/types';
 import { ApiFootballProvider } from '../../integrations/api-football';
-import { IRepository } from '../interfaces';
+import { IRepository } from '../repository';
 import { PostgresConfigRepository } from './config.repository';
 import { PostgresWorkersRepository } from './workers.repository';
 import { PostgresLeaguesRepository } from './leagues.repository';

@@ -1,4 +1,4 @@
-import { IRepository } from './interfaces';
+import { IRepository } from './repository';
 import { createPostgresRepository } from './postgres';
 
 /**
@@ -8,4 +8,4 @@ import { createPostgresRepository } from './postgres';
  */
 export const repository: IRepository = createPostgresRepository();
 
-export type { IRepository } from './interfaces';
+export type { IRepository } from './repository';

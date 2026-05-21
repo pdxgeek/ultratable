@@ -1,4 +1,4 @@
-import * as schema from '../../db/schema';
+import * as schema from '../db/schema';
 import { SyncResult } from './shared';
 
 export interface CatalogRepository {

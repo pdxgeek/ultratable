@@ -4,7 +4,7 @@ import * as schema from '../../db/schema';
 import { IFootballProvider } from '../../integrations/types';
 import { graphicsService } from '../../services/graphics.service';
 import { cacheService, TTL } from '../../services/cache.service';
-import { PlayersRepository } from '../interfaces';
+import { PlayersRepository } from '../players';
 
 export class PostgresPlayersRepository implements PlayersRepository {
     constructor(private provider: IFootballProvider) {}

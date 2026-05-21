@@ -1,4 +1,4 @@
-import * as schema from '../../db/schema';
+import * as schema from '../db/schema';
 import { SyncResult } from './shared';
 
 // Dual-ID contract (AI_README_FIRST.MD §1): parameters that carry an external

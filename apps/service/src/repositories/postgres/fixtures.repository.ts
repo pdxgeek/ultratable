@@ -6,7 +6,9 @@ import { JobReporter } from '../../workers/runner';
 import { graphicsService } from '../../services/graphics.service';
 import { globalLogger } from '../../services/log.service';
 import { cacheService, TTL } from '../../services/cache.service';
-import { FixturesRepository, SyncResult, TeamsRepository } from '../interfaces';
+import { FixturesRepository } from '../fixtures';
+import { TeamsRepository } from '../teams';
+import { SyncResult } from '../shared';
 import { FIXTURE_UPSERT_SET, FixtureLookups, NOW_MS } from './shared';
 
 const logger = globalLogger.child({ module: 'PostgresFixturesRepository' });
