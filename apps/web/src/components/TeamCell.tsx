@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { cn } from '@/lib/utils';
+
 interface TeamCellProps {
     team: {
         id: string;
@@ -7,11 +9,12 @@ interface TeamCellProps {
         logo?: string;
     };
     showLogo?: boolean;
+    className?: string;
 }
 
-const TeamCell: React.FC<TeamCellProps> = ({ team, showLogo = true }) => {
+const TeamCell: React.FC<TeamCellProps> = ({ team, showLogo = true, className }) => {
     return (
-        <div className="flex items-center gap-3">
+        <div className={cn('flex items-center gap-3', className)}>
             {showLogo && team.logo && (
                 <img
                     src={team.logo}
