@@ -46,7 +46,7 @@ function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
 }
 
 const thBase =
-    'text-left px-3 py-3 text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
+    'text-left px-3 py-3 align-top text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
 const thClickable = `${thBase} cursor-pointer select-none transition-colors hover:text-text-primary`;
 const tdBase = 'px-3 py-2 border-b border-border text-[0.8rem]';
 const colStat = 'w-[38px] text-center';
@@ -112,13 +112,20 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
 
     const SortIcon = ({ column }: { column: SortKey }) => {
         if (sortConfig.key !== column)
-            return <span className="text-[0.7rem] ml-0.5 opacity-30">⇅</span>;
+            return <span className="text-[0.7rem] opacity-30 leading-none">⇅</span>;
         return (
-            <span className="text-[0.7rem] ml-0.5 text-accent-blue">
+            <span className="text-[0.7rem] text-accent-blue leading-none">
                 {sortConfig.direction === 'asc' ? '↑' : '↓'}
             </span>
         );
     };
+
+    const SortHeader = ({ label, column }: { label: string; column: SortKey }) => (
+        <span className="inline-flex flex-col items-center gap-1 leading-none">
+            <span>{label}</span>
+            <SortIcon column={column} />
+        </span>
+    );
 
     const deductionMap = useMemo(() => {
         const dMap = new Map<
@@ -172,70 +179,70 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                 title="Position"
                                 onClick={() => handleSort('position')}
                             >
-                                # <SortIcon column="position" />
+                                <SortHeader label="#" column="position" />
                             </th>
                             <th
                                 className={thClickable}
                                 title="Team Name"
                                 onClick={() => handleSort('team')}
                             >
-                                Team <SortIcon column="team" />
+                                <SortHeader label="Team" column="team" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Played"
                                 onClick={() => handleSort('played')}
                             >
-                                P <SortIcon column="played" />
+                                <SortHeader label="P" column="played" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Won"
                                 onClick={() => handleSort('won')}
                             >
-                                W <SortIcon column="won" />
+                                <SortHeader label="W" column="won" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Drawn"
                                 onClick={() => handleSort('drawn')}
                             >
-                                D <SortIcon column="drawn" />
+                                <SortHeader label="D" column="drawn" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Lost"
                                 onClick={() => handleSort('lost')}
                             >
-                                L <SortIcon column="lost" />
+                                <SortHeader label="L" column="lost" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Goals For"
                                 onClick={() => handleSort('goalsFor')}
                             >
-                                GF <SortIcon column="goalsFor" />
+                                <SortHeader label="GF" column="goalsFor" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Goals Against"
                                 onClick={() => handleSort('goalsAgainst')}
                             >
-                                GA <SortIcon column="goalsAgainst" />
+                                <SortHeader label="GA" column="goalsAgainst" />
                             </th>
                             <th
                                 className={`${thClickable} ${colStat}`}
                                 title="Goal Difference"
                                 onClick={() => handleSort('goalDifference')}
                             >
-                                GD <SortIcon column="goalDifference" />
+                                <SortHeader label="GD" column="goalDifference" />
                             </th>
                             <th
                                 className={`${thClickable} w-[60px] text-center font-bold`}
                                 title="Points"
                                 onClick={() => handleSort('points')}
                             >
-                                Pts <SortIcon column="points" />
+                                <SortHeader label="Pts" column="points" />
                             </th>
                             {settings.showForm && (
                                 <th
@@ -243,7 +250,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
                                     title="Last 5 Matches (oldest → newest)"
                                     onClick={() => handleSort('form')}
                                 >
-                                    Form <SortIcon column="form" />
+                                    <SortHeader label="Form" column="form" />
                                 </th>
                             )}
                             <th className={thBase} title="Next Match">
