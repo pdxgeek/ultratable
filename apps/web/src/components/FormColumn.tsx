@@ -1,6 +1,7 @@
 import type { Fixture, Team } from '../db';
 
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import MatchPopup from './MatchPopup';
@@ -24,6 +25,7 @@ const barColor: Record<'W' | 'D' | 'L', string> = {
 };
 
 const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => {
+    const navigate = useNavigate();
     const fixtureMap = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures]);
 
     return (
@@ -35,7 +37,10 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                 const fixture = fixtureMap.get(entry.fixtureId);
 
                 const dot = (
-                    <div className="flex flex-col items-center gap-0.5 cursor-pointer">
+                    <div
+                        className="flex flex-col items-center gap-0.5 cursor-pointer"
+                        onClick={() => navigate(`/match/${entry.fixtureId}`)}
+                    >
                         <div
                             className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${dotColor[entry.result]}`}
                             title={isLatest ? `${label} (latest)` : label}
