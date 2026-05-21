@@ -14,7 +14,7 @@ import LeaguesManagementView from './components/LeaguesManagementView';
 import { LogsView } from './components/LogsView';
 import WorkersView from './components/WorkersView';
 import { API_BASE, gqlFetch } from './lib/api';
-import { cn } from './utils';
+import { cn } from '@/lib/utils';
 
 type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers' | 'graphics' | 'logs';
 

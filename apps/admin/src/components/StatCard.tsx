@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { cn } from '../utils';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface StatCardProps {
     label: string;
@@ -12,12 +13,12 @@ interface StatCardProps {
 
 const StatCard = ({ label, value, subValue, isError, icon: Icon }: StatCardProps) => {
     return (
-        <div
+        <Card
             className={cn(
-                'p-8 rounded-2xl border transition-all duration-300',
+                'p-8 gap-0 rounded-2xl border ring-0 transition-all duration-300',
                 isError
                     ? 'border-red-500/20 bg-red-500/5'
-                    : 'bg-[#0d1117] border-slate-800/60 shadow-sm hover:border-slate-700',
+                    : 'border-slate-800/60 shadow-sm hover:border-slate-700',
             )}
         >
             <div className="flex items-center gap-4 mb-6">
@@ -46,7 +47,7 @@ const StatCard = ({ label, value, subValue, isError, icon: Icon }: StatCardProps
                     {subValue}
                 </p>
             </div>
-        </div>
+        </Card>
     );
 };
 

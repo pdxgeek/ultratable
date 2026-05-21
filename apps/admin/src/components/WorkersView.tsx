@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Activity, CheckCircle2, Globe, History, Loader2, Play, Settings } from 'lucide-react';
 
 import { gqlFetch } from '../lib/api';
-import { cn } from '../utils';
+import { cn } from '@/lib/utils';
 
 export interface Job {
     id: string;

@@ -17,16 +17,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gqlFetch } from './api';
 
 describe('gqlFetch', () => {
-    const originalFetch = global.fetch;
+    const originalFetch = globalThis.fetch;
     let fetchMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         fetchMock = vi.fn();
-        global.fetch = fetchMock as unknown as typeof global.fetch;
+        globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
     });
 
     afterEach(() => {
-        global.fetch = originalFetch;
+        globalThis.fetch = originalFetch;
         vi.restoreAllMocks();
     });
 
