@@ -63,8 +63,12 @@ const LeaguesManagementView = ({ jobs = [], executions = [] }: { jobs?: Job[], e
         setPlayoffInput={state.setPlayoffInput}
         relInput={state.relInput}
         setRelInput={state.setRelInput}
-        deductions={state.deductions}
-        setDeductions={state.setDeductions}
+        seasonConfigJson={state.seasonConfigJson}
+        setSeasonConfigJson={state.setSeasonConfigJson}
+        leagueDefaultsJson={state.leagueDefaultsJson}
+        rankingFormulas={state.rankingFormulas}
+        appliedCriteria={state.appliedCriteria}
+        setAppliedCriteria={state.setAppliedCriteria}
         helperTeamId={state.helperTeamId}
         setHelperTeamId={state.setHelperTeamId}
         configTeams={state.configTeams}
