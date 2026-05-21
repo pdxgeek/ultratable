@@ -3,6 +3,23 @@ import type { CatalogLeague, ManagedLeague, Season } from './leagues.types';
 import React from 'react';
 import { CheckCircle2, Globe, History, Loader2, Play } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+
 interface SeasonImporterProps {
     managedLeagues: ManagedLeague[];
     hasCountrySelected: boolean;
@@ -42,18 +59,21 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                     </p>
                 </div>
                 {hasCountrySelected && (
-                    <select
-                        value={selectedCatalogLeagueId}
-                        onChange={(e) => setSelectedCatalogLeagueId(e.target.value)}
-                        className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all min-w-[200px]"
+                    <Select
+                        value={selectedCatalogLeagueId || undefined}
+                        onValueChange={(v) => setSelectedCatalogLeagueId(v)}
                     >
-                        <option value="">Select League...</option>
-                        {managedLeagues.map((l) => (
-                            <option key={l.id} value={l.id}>
-                                {l.name}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger className="min-w-[200px] h-10 bg-slate-900 border-slate-700/50 text-white focus-visible:border-indigo-500 focus-visible:ring-0">
+                            <SelectValue placeholder="Select League..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {managedLeagues.map((l) => (
+                                <SelectItem key={l.id} value={l.id}>
+                                    {l.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 )}
             </div>
 
@@ -99,32 +119,35 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                             </div>
                         </div>
 
-                        <button
+                        <Button
+                            variant="outline"
                             onClick={() => refreshCatalogSeasons(selectedCatalogLeagueId)}
                             disabled={actionLoading === `${selectedCatalogLeagueId}-refresh`}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-colors border border-slate-700 disabled:opacity-50 flex items-center gap-2"
+                            className="h-9 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] uppercase tracking-wider border-slate-700 disabled:opacity-50"
                         >
                             {actionLoading === `${selectedCatalogLeagueId}-refresh` && (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                             )}
                             Fetch Catalog Seasons
-                        </button>
+                        </Button>
                     </div>
 
                     <div className="overflow-hidden border border-slate-800/40 rounded-xl bg-slate-900/20 backdrop-blur-sm">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="bg-slate-900/50 border-b border-slate-800/60">
-                                    <th className="px-6 py-4 font-semibold text-slate-400">Year</th>
-                                    <th className="px-6 py-4 font-semibold text-slate-400 text-center">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-slate-900/50 border-slate-800/60 hover:bg-slate-900/50">
+                                    <TableHead className="px-6 py-4 font-semibold text-slate-400">
+                                        Year
+                                    </TableHead>
+                                    <TableHead className="px-6 py-4 font-semibold text-slate-400 text-center">
                                         Status
-                                    </th>
-                                    <th className="px-6 py-4 font-semibold text-slate-400 text-right">
+                                    </TableHead>
+                                    <TableHead className="px-6 py-4 font-semibold text-slate-400 text-right">
                                         Action
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/40">
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody className="divide-y divide-slate-800/40">
                                 {catalogLeagueMetadata?.seasons?.map((s: Season) => {
                                     const localSeason = seasonsForCatalogLeague.find(
                                         (ls) => ls.year === s.year,
@@ -134,11 +157,11 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                                         actionLoading === `${selectedCatalogLeagueId}-${s.year}`;
 
                                     return (
-                                        <tr
+                                        <TableRow
                                             key={s.year}
-                                            className="hover:bg-slate-800/20 transition-colors group"
+                                            className="hover:bg-slate-800/20 border-0"
                                         >
-                                            <td className="px-6 py-4">
+                                            <TableCell className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <span className="font-medium text-slate-200">
                                                         {s.year} Season
@@ -149,8 +172,8 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                                                         </span>
                                                     )}
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
+                                            </TableCell>
+                                            <TableCell className="px-6 py-4 text-center">
                                                 {isImported ? (
                                                     <span className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-semibold px-2 py-1 bg-emerald-400/10 rounded-md border border-emerald-400/20">
                                                         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -161,15 +184,17 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                                                         Available
                                                     </span>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
+                                            </TableCell>
+                                            <TableCell className="px-6 py-4 text-right">
                                                 {isLoading ? (
                                                     <div className="flex items-center justify-end gap-2 text-indigo-400 text-xs font-semibold">
                                                         <Loader2 className="w-4 h-4 animate-spin" />
                                                         Processing...
                                                     </div>
                                                 ) : isImported ? (
-                                                    <button
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
                                                         onClick={() =>
                                                             removeSeason(
                                                                 selectedCatalogLeagueId,
@@ -177,31 +202,32 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                                                                 s.year,
                                                             )
                                                         }
-                                                        className="text-xs font-semibold text-red-400/70 hover:text-red-400 hover:bg-red-400/10 px-3 py-1.5 rounded-lg transition-all"
+                                                        className="h-7 text-xs font-semibold text-red-400/70 hover:text-red-400 hover:bg-red-400/10"
                                                     >
                                                         Remove
-                                                    </button>
+                                                    </Button>
                                                 ) : (
-                                                    <button
+                                                    <Button
+                                                        size="sm"
                                                         onClick={() =>
                                                             importSeason(
                                                                 selectedCatalogLeagueId,
                                                                 s.year,
                                                             )
                                                         }
-                                                        className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-1.5 rounded-lg font-bold text-xs transition-all shadow-sm"
+                                                        className="h-7 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs shadow-sm"
                                                     >
                                                         <Play className="w-3 h-3" />
                                                         Import
-                                                    </button>
+                                                    </Button>
                                                 )}
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     );
                                 })}
                                 {!catalogLeagueMetadata && (
-                                    <tr>
-                                        <td
+                                    <TableRow className="hover:bg-transparent border-0">
+                                        <TableCell
                                             colSpan={3}
                                             className="px-6 py-8 text-center text-slate-500"
                                         >
@@ -211,11 +237,11 @@ export const SeasonImporter: React.FC<SeasonImporterProps> = ({
                                                     Loading catalog data...
                                                 </span>
                                             </div>
-                                        </td>
-                                    </tr>
+                                        </TableCell>
+                                    </TableRow>
                                 )}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     </div>
                 </div>
             ) : (

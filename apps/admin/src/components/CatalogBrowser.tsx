@@ -1,6 +1,23 @@
 import React from 'react';
 import { CheckCircle2, Download, Globe, Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+
 interface CatalogLeague {
     id: string;
     sourceId: number;
@@ -60,18 +77,21 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                     </p>
                 </div>
                 {!isEmpty && (
-                    <select
-                        value={selectedCountry}
-                        onChange={(e) => setSelectedCountry(e.target.value)}
-                        className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-all min-w-[200px]"
+                    <Select
+                        value={selectedCountry || undefined}
+                        onValueChange={(v) => setSelectedCountry(v)}
                     >
-                        <option value="">Select Country...</option>
-                        {countries.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.name}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger className="min-w-[200px] h-10 bg-slate-900 border-slate-700/50 text-white focus-visible:border-sky-500 focus-visible:ring-0">
+                            <SelectValue placeholder="Select Country..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {countries.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                    {c.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 )}
             </div>
 
@@ -85,14 +105,15 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                         Pull the country and league registry from the upstream provider to get
                         started.
                     </p>
-                    <button
+                    <Button
+                        variant="outline"
                         onClick={initializeCatalog}
                         disabled={isInitializing}
-                        className="inline-flex items-center gap-2 text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 px-4 py-2 rounded-lg border border-sky-500/30 transition-all disabled:opacity-30"
+                        className="h-9 text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 border-sky-500/30 disabled:opacity-30"
                     >
                         <Download className="w-4 h-4" />
                         {isInitializing ? 'Initializing...' : 'Initialize Catalog'}
-                    </button>
+                    </Button>
                 </div>
             ) : selectedCountry && isFetchingCountryLeagues ? (
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
@@ -103,29 +124,31 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                 </div>
             ) : selectedCountry ? (
                 <div className="max-h-[420px] overflow-y-auto border border-slate-800/40 rounded-xl bg-slate-900/20 relative z-10 backdrop-blur-sm">
-                    <table className="w-full text-left text-sm">
-                        <thead className="sticky top-0 z-10">
-                            <tr className="bg-slate-900 border-b border-slate-800/60">
-                                <th className="px-6 py-4 font-semibold text-slate-400">League</th>
-                                <th className="px-6 py-4 font-semibold text-slate-400 text-center">
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10">
+                            <TableRow className="bg-slate-900 border-slate-800/60 hover:bg-slate-900">
+                                <TableHead className="px-6 py-4 font-semibold text-slate-400">
+                                    League
+                                </TableHead>
+                                <TableHead className="px-6 py-4 font-semibold text-slate-400 text-center">
                                     Type
-                                </th>
-                                <th className="px-6 py-4 font-semibold text-slate-400 text-right">
+                                </TableHead>
+                                <TableHead className="px-6 py-4 font-semibold text-slate-400 text-right">
                                     Action
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/40">
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-slate-800/40">
                             {catalogLeagues.map((l) => {
                                 const isManaged = managedLeagues.some(
                                     (ml) => ml.sourceId === l.sourceId,
                                 );
                                 return (
-                                    <tr
+                                    <TableRow
                                         key={l.id}
-                                        className="hover:bg-slate-800/20 transition-colors group"
+                                        className="hover:bg-slate-800/20 border-0"
                                     >
-                                        <td className="px-6 py-4">
+                                        <TableCell className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 {l.logo ? (
                                                     <img
@@ -140,35 +163,37 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                                                     {l.name}
                                                 </span>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4 text-center">
                                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded border border-slate-700/30 font-mono">
                                                 {l.type}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4 text-right">
                                             {isManaged ? (
                                                 <span className="text-emerald-400 text-xs font-semibold flex items-center justify-end gap-1.5">
                                                     <CheckCircle2 className="w-4 h-4" />
                                                     Active
                                                 </span>
                                             ) : (
-                                                <button
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
                                                     onClick={() => activateLeague(l.id)}
                                                     disabled={actionLoading === l.id}
-                                                    className="text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-sky-500/30 transition-all disabled:opacity-30"
+                                                    className="h-7 text-xs font-semibold text-sky-400 hover:text-white hover:bg-sky-500/10 border-sky-500/30 disabled:opacity-30"
                                                 >
                                                     {actionLoading === l.id
                                                         ? 'Activating...'
                                                         : 'Activate'}
-                                                </button>
+                                                </Button>
                                             )}
-                                        </td>
-                                    </tr>
+                                        </TableCell>
+                                    </TableRow>
                                 );
                             })}
-                        </tbody>
-                    </table>
+                        </TableBody>
+                    </Table>
                 </div>
             ) : (
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10 group/empty">

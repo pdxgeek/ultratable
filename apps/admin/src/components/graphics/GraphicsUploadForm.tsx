@@ -4,12 +4,27 @@ import type { UploadStatus } from './useGraphics';
 import React, { useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
 import { GRAPHIC_TYPES } from './types';
 import { registerOrAutoSideloadGraphic } from './useGraphics';
 
 interface Props {
     onUploaded: () => void;
 }
+
+const fieldClass =
+    'h-12 bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-600 focus-visible:border-sky-500/50 focus-visible:ring-0 font-mono';
 
 export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
     const [uploadType, setUploadType] = useState<GraphicType>('team');
@@ -38,7 +53,7 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
     };
 
     return (
-        <div className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm">
+        <Card className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl ring-0 gap-0">
             <h3 className="text-xl font-semibold text-white mb-2 flex items-center gap-3">
                 <Upload className="w-5 h-5 text-sky-400" />
                 Register Graphic
@@ -52,25 +67,34 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
 
             <form onSubmit={handleUpload} className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-400">Entity Type</label>
-                    <select
-                        className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all"
+                    <Label htmlFor="upload-type" className="text-xs font-semibold text-slate-400">
+                        Entity Type
+                    </Label>
+                    <Select
                         value={uploadType}
-                        onChange={(e) => setUploadType(e.target.value as GraphicType)}
+                        onValueChange={(v) => setUploadType(v as GraphicType)}
                     >
-                        {GRAPHIC_TYPES.map((t) => (
-                            <option key={t} value={t}>
-                                {t.charAt(0).toUpperCase() + t.slice(1)}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger id="upload-type" className={`w-full ${fieldClass}`}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {GRAPHIC_TYPES.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-400">Entity UUID</label>
-                    <input
+                    <Label htmlFor="upload-uuid" className="text-xs font-semibold text-slate-400">
+                        Entity UUID
+                    </Label>
+                    <Input
+                        id="upload-uuid"
                         type="text"
-                        className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all font-mono"
+                        className={fieldClass}
                         placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
                         value={uploadEntityId}
                         onChange={(e) => setUploadEntityId(e.target.value)}
@@ -79,22 +103,26 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                    <label className="text-xs font-semibold text-slate-400 flex justify-between">
+                    <Label
+                        htmlFor="upload-url"
+                        className="text-xs font-semibold text-slate-400 justify-between"
+                    >
                         Source Image URL
                         <span className="text-slate-500 font-normal">Optional for Auto-Fetch</span>
-                    </label>
+                    </Label>
                     <div className="flex gap-4">
-                        <input
+                        <Input
+                            id="upload-url"
                             type="url"
-                            className="flex-1 bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 transition-all font-mono"
+                            className={`flex-1 ${fieldClass}`}
                             placeholder="Leave blank to auto-fetch..."
                             value={uploadUrl}
                             onChange={(e) => setUploadUrl(e.target.value)}
                         />
-                        <button
+                        <Button
                             type="submit"
                             disabled={uploadStatus === 'loading'}
-                            className="bg-sky-500 hover:bg-sky-400 text-white px-8 py-2.5 rounded-lg font-semibold text-sm disabled:opacity-50 transition-all whitespace-nowrap"
+                            className="h-12 bg-sky-500 hover:bg-sky-400 text-white px-8 font-semibold text-sm disabled:opacity-50 whitespace-nowrap"
                         >
                             {uploadStatus === 'loading' ? (
                                 <Loader2 className="w-5 h-5 animate-spin mx-auto" />
@@ -103,7 +131,7 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
                             ) : (
                                 'Auto-Fetch'
                             )}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </form>
@@ -113,6 +141,6 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
             {uploadStatus === 'error' && (
                 <p className="text-red-400 text-xs mt-4">Failed to sideload.</p>
             )}
-        </div>
+        </Card>
     );
 };
