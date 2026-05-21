@@ -22,7 +22,9 @@ vi.mock('../services/graphics.service', () => ({
 vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
-            updateSeasonConfig: vi.fn().mockResolvedValue({ id: 'season-id', year: 2025, leagueId: 'league-id' }),
+            leagues: {
+                updateSeasonConfig: vi.fn().mockResolvedValue({ id: 'season-id', year: 2025, leagueId: 'league-id' }),
+            },
         },
     },
 }));
@@ -53,7 +55,7 @@ async function callUpdateSeasonConfig(configJson: string) {
 
 describe('updateSeasonConfig mutation', () => {
     beforeEach(() => {
-        vi.mocked(repository.football.updateSeasonConfig).mockClear();
+        vi.mocked(repository.football.leagues.updateSeasonConfig).mockClear();
     });
 
     it('accepts a valid season config and forwards it to the repository', async () => {
@@ -64,7 +66,7 @@ describe('updateSeasonConfig mutation', () => {
         });
         const result = await callUpdateSeasonConfig(valid);
         expect(result.errors).toBeUndefined();
-        expect(repository.football.updateSeasonConfig).toHaveBeenCalledWith(
+        expect(repository.football.leagues.updateSeasonConfig).toHaveBeenCalledWith(
             'season-id',
             expect.objectContaining({ promotion: [1, 2], relegation: [18, 19, 20] })
         );
@@ -75,14 +77,14 @@ describe('updateSeasonConfig mutation', () => {
         const result = await callUpdateSeasonConfig(bad);
         expect(result.errors).toBeDefined();
         expect(result.errors![0].message).toContain('Invalid season config');
-        expect(repository.football.updateSeasonConfig).not.toHaveBeenCalled();
+        expect(repository.football.leagues.updateSeasonConfig).not.toHaveBeenCalled();
     });
 
     it('rejects malformed JSON', async () => {
         const result = await callUpdateSeasonConfig('{not-json');
         expect(result.errors).toBeDefined();
         expect(result.errors![0].message).toContain('Invalid JSON');
-        expect(repository.football.updateSeasonConfig).not.toHaveBeenCalled();
+        expect(repository.football.leagues.updateSeasonConfig).not.toHaveBeenCalled();
     });
 
     it('rejects malformed deduction entries', async () => {
@@ -90,6 +92,6 @@ describe('updateSeasonConfig mutation', () => {
         const result = await callUpdateSeasonConfig(bad);
         expect(result.errors).toBeDefined();
         expect(result.errors![0].message).toContain('Invalid season config');
-        expect(repository.football.updateSeasonConfig).not.toHaveBeenCalled();
+        expect(repository.football.leagues.updateSeasonConfig).not.toHaveBeenCalled();
     });
 });

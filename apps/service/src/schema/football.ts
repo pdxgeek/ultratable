@@ -81,11 +81,11 @@ builder.objectType(LeagueRef, {
             type: [SeasonRef],
             resolve: async (parent) => {
                 // Only return seasons that have teams imported (i.e., real data)
-                const allSeasons = await repository.football.getInternalSeasons(parent.sourceId, parent.id);
+                const allSeasons = await repository.football.leagues.getInternalSeasons(parent.sourceId, parent.id);
                 const seasonIds = allSeasons.map((s) => s.id);
                 if (seasonIds.length === 0) return [];
 
-                const linkedIds = new Set(await repository.football.getSeasonIdsWithTeamLinks(seasonIds));
+                const linkedIds = new Set(await repository.football.leagues.getSeasonIdsWithTeamLinks(seasonIds));
                 return allSeasons.filter((s) => linkedIds.has(s.id));
             },
         }),
@@ -147,7 +147,7 @@ builder.objectType(TeamRef, {
                 seasonId: t.arg.string({ required: true, description: 'UUID of the season to retrieve the roster for.' }),
             },
             resolve: async (parent, { seasonId }) => {
-                return repository.football.getTeamRoster(parent.id, seasonId);
+                return repository.football.teams.getTeamRoster(parent.id, seasonId);
             },
         }),
     }),
@@ -167,16 +167,16 @@ builder.objectType(SeasonRef, {
         }),
         fixtureCount: t.int({
             description: 'Live count of fixtures in this season (computed from the database).',
-            resolve: (parent) => repository.football.countFixturesInSeason(parent.id),
+            resolve: (parent) => repository.football.fixtures.countFixturesInSeason(parent.id),
         }),
         teamCount: t.int({
             description: 'Live count of teams participating in this season (from seasons_to_teams junction).',
-            resolve: (parent) => repository.football.countTeamsInSeason(parent.id),
+            resolve: (parent) => repository.football.teams.countTeamsInSeason(parent.id),
         }),
         teams: t.field({
             description: 'All teams linked to this season via the seasons-to-teams junction table.',
             type: [TeamRef],
-            resolve: (parent) => repository.football.getTeamsBySeasonId(parent.id),
+            resolve: (parent) => repository.football.teams.getTeamsBySeasonId(parent.id),
         }),
         rankingCriteria: t.field({
             description: 'Ordered list of RankingFormula objects defining how the standings table is sorted for this season.',
@@ -184,7 +184,7 @@ builder.objectType(SeasonRef, {
             resolve: async (parent) => {
                 const metadata = parent.metadata as Record<string, unknown> | null;
                 const criteria = (metadata?.rankingCriteria as string[]) || FALLBACK_RANKING_CRITERIA;
-                const all = await repository.football.getRankingFormulas();
+                const all = await repository.football.leagues.getRankingFormulas();
                 const byId = new Map(all.map(f => [f.id, f]));
                 // Preserve the order defined in the criteria array — the repo returns formulas ORDER BY id
                 // so a naive filter would silently break tiebreaker precedence.
@@ -265,14 +265,14 @@ builder.objectType(FixtureRef, {
             description: 'Match events (goals, cards, substitutions) fetched from the upstream provider by fixture sourceId.',
             type: [MatchEventRef],
             resolve: async (parent) => {
-                return repository.football.getMatchEvents(parent.sourceId);
+                return repository.football.fixtures.getMatchEvents(parent.sourceId);
             }
         }),
         lineups: t.field({
             description: 'Team lineups (starting XI + substitutes) fetched from the upstream provider by fixture sourceId.',
             type: [LineupRef],
             resolve: async (parent) => {
-                return repository.football.getLineups(parent.sourceId);
+                return repository.football.fixtures.getLineups(parent.sourceId);
             }
         }),
     }),
@@ -383,7 +383,7 @@ builder.queryField('leagues', (t) =>
         description: 'Returns all promoted (managed) leagues with their seasons.',
         type: [LeagueRef],
         resolve: async () => {
-            return repository.football.getLeagues();
+            return repository.football.leagues.getLeagues();
         },
     })
 );
@@ -397,11 +397,11 @@ builder.queryField('seasons', (t) =>
         },
         resolve: async (_, { leagueId }) => {
             if (!leagueId) {
-                return repository.football.getAllInternalSeasons();
+                return repository.football.leagues.getAllInternalSeasons();
             }
-            const league = await repository.football.getLeagueById(leagueId);
+            const league = await repository.football.leagues.getLeagueById(leagueId);
             if (!league) return [];
-            return repository.football.getInternalSeasons(league.sourceId);
+            return repository.football.leagues.getInternalSeasons(league.sourceId);
         },
     })
 );
@@ -411,7 +411,7 @@ builder.queryField('allSeasons', (t) =>
         description: 'Returns all seasons across all leagues, regardless of team import status.',
         type: [SeasonRef],
         resolve: async () => {
-            return repository.football.getAllInternalSeasons();
+            return repository.football.leagues.getAllInternalSeasons();
         },
     })
 );
@@ -431,7 +431,7 @@ builder.queryField('rankingFormulas', (t) =>
     t.field({
         description: 'Returns all available ranking formulas that can be assigned to seasons for standings sorting.',
         type: [RankingFormulaRef],
-        resolve: () => repository.football.getRankingFormulas(),
+        resolve: () => repository.football.leagues.getRankingFormulas(),
     }),
 );
 
@@ -445,7 +445,7 @@ builder.queryField('fixtures', (t) =>
             forceRefresh: t.arg.boolean({ required: false, description: 'When true, bypasses the 5-minute live polling cooldown to immediately re-check past-due fixtures against the upstream API. The atomic lock still prevents concurrent polls.' }),
         },
         resolve: async (_, { seasonId, since, forceRefresh }) => {
-            return repository.football.getFixturesBySeasonId(seasonId, since || undefined, forceRefresh || undefined);
+            return repository.football.fixtures.getFixturesBySeasonId(seasonId, since || undefined, forceRefresh || undefined);
         },
     })
 );
@@ -459,7 +459,7 @@ builder.queryField('fixture', (t) =>
             id: t.arg.string({ required: true, description: 'UUID of the fixture to retrieve. Returns the full fixture record including nested match events and lineups when requested.' }),
         },
         resolve: async (_, { id }) => {
-            return repository.football.getFixtureById(id);
+            return repository.football.fixtures.getFixtureById(id);
         },
     })
 );
@@ -473,7 +473,7 @@ builder.queryField('venues', (t) =>
             since: t.arg({ type: 'DateTime', required: false, description: 'ISO-8601 timestamp for delta sync. When provided, only venues updated after this timestamp are returned.' }),
         },
         resolve: (_, { seasonId, since }) =>
-            repository.football.getVenuesBySeasonId(seasonId, since || undefined),
+            repository.football.teams.getVenuesBySeasonId(seasonId, since || undefined),
     })
 );
 
@@ -487,9 +487,9 @@ builder.queryField('teams', (t) =>
         },
         resolve: async (_, { seasonId, since }) => {
             if (seasonId) {
-                return repository.football.getTeamsBySeasonId(seasonId, since || undefined);
+                return repository.football.teams.getTeamsBySeasonId(seasonId, since || undefined);
             }
-            return repository.football.getAllTeams();
+            return repository.football.teams.getAllTeams();
         },
     })
 );
@@ -500,7 +500,7 @@ builder.mutationField('ingestLeagues', (t) =>
         type: [LeagueRef],
         resolve: async (_root, _args, ctx) => {
             requireAdmin(ctx);
-            const result = await repository.football.getLeagues();
+            const result = await repository.football.leagues.getLeagues();
             cacheService.invalidate('leagues');
             return result;
         },
@@ -519,7 +519,7 @@ builder.mutationField('syncFixtures', (t) =>
             requireAdmin(ctx);
             let result: Array<typeof schema.fixtures.$inferSelect> = [];
             await JobRunner.run(`sync-fixtures-${leagueSourceId}-${seasonYear}`, async () => {
-                const syncRes = await repository.football.syncFixtures(leagueSourceId, seasonYear);
+                const syncRes = await repository.football.fixtures.syncFixtures(leagueSourceId, seasonYear);
                 result = syncRes.data;
                 return {
                     processedCount: syncRes.stats.processedCount,
@@ -547,12 +547,12 @@ builder.queryField('player', (t) =>
         resolve: async (_, { id, sourceId, season }) => {
             let resolvedSourceId = sourceId;
             if (id && !resolvedSourceId) {
-                const player = await repository.football.getPlayerById(id);
+                const player = await repository.football.players.getPlayerById(id);
                 if (!player) return null;
                 resolvedSourceId = player.sourceId;
             }
             if (!resolvedSourceId) return null;
-            const data = await repository.football.getPlayerData(resolvedSourceId, season);
+            const data = await repository.football.players.getPlayerData(resolvedSourceId, season);
             if (!data) return null;
             return { ...data, metadata: data.metadata as PlayerMeta | null };
         },
@@ -575,7 +575,7 @@ builder.mutationField('saveLeagueConfig', (t) =>
             } catch {
                 throw new Error("Invalid JSON configuration");
             }
-            const updated = await repository.football.updateLeagueConfig(id, metadata);
+            const updated = await repository.football.leagues.updateLeagueConfig(id, metadata);
             cacheService.invalidate('leagues');
             return updated;
         }
@@ -604,7 +604,7 @@ builder.mutationField('saveSeasonConfig', (t) =>
                 metadata.rankingCriteria = rankingCriteria;
             }
 
-            const updated = await repository.football.updateSeasonConfig(id, metadata);
+            const updated = await repository.football.leagues.updateSeasonConfig(id, metadata);
             cacheService.invalidate('seasons');
             return updated;
         }
@@ -620,7 +620,7 @@ builder.queryField('teamRoster', (t) =>
             seasonId: t.arg.string({ required: true, description: 'UUID of the season.' }),
         },
         resolve: async (_, { teamId, seasonId }) => {
-            return repository.football.getTeamRoster(teamId, seasonId);
+            return repository.football.teams.getTeamRoster(teamId, seasonId);
         },
     })
 );
@@ -636,11 +636,11 @@ builder.mutationField('importSquad', (t) =>
         resolve: async (_, { teamId, seasonId }, ctx) => {
             requireAdmin(ctx);
             // Look up the team's sourceId for the provider call
-            const team = await repository.football.getTeamById(teamId);
+            const team = await repository.football.teams.getTeamById(teamId);
             if (!team) throw new Error(`Team not found: ${teamId}`);
-            await repository.football.importSquad(teamId, team.sourceId, seasonId);
+            await repository.football.teams.importSquad(teamId, team.sourceId, seasonId);
             // Return the full roster with player joins
-            return repository.football.getTeamRoster(teamId, seasonId);
+            return repository.football.teams.getTeamRoster(teamId, seasonId);
         },
     })
 );

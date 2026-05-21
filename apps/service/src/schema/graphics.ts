@@ -34,7 +34,7 @@ builder.queryFields((t) => ({
         },
         resolve: async (_root, args, ctx) => {
             requireAdmin(ctx);
-            return repository.football.getGraphics(args.entityType, args.entityId ?? undefined);
+            return repository.football.graphics.getGraphics(args.entityType, args.entityId ?? undefined);
         }
     })
 }));

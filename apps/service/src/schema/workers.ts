@@ -106,7 +106,7 @@ builder.mutationField('runJob', (t) =>
                     if (isNaN(leagueSourceId) || isNaN(seasonYear)) {
                         throw new GraphQLError(`Invalid job name format: expected sync-fixtures-<leagueSourceId>-<seasonYear>, got "${name}"`);
                     }
-                    const syncRes = await repository.football.syncFixtures(leagueSourceId, seasonYear, reporter);
+                    const syncRes = await repository.football.fixtures.syncFixtures(leagueSourceId, seasonYear, reporter);
                     return {
                         processedCount: syncRes.stats.processedCount,
                         totalCount: syncRes.stats.totalCount,

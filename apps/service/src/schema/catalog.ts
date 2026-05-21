@@ -53,7 +53,7 @@ builder.queryFields((t) => ({
         type: [CatalogCountryRef],
         resolve: async (_root, _args, ctx) => {
             requireAdmin(ctx);
-            return repository.football.getCatalogCountries();
+            return repository.football.catalog.getCatalogCountries();
         },
     }),
     catalogLeagues: t.field({
@@ -65,7 +65,7 @@ builder.queryFields((t) => ({
         },
         resolve: async (_, { countryId, sourceId }, ctx) => {
             requireAdmin(ctx);
-            return repository.football.getCatalogLeagues(countryId || undefined, sourceId || undefined);
+            return repository.football.catalog.getCatalogLeagues(countryId || undefined, sourceId || undefined);
         },
     }),
 }));
@@ -83,7 +83,7 @@ builder.mutationFields((t) => ({
             requireAdmin(ctx);
             let processedCount = 0;
             await JobRunner.run('sync-catalog', async () => {
-                const res = await repository.football.syncCatalogLeagues();
+                const res = await repository.football.catalog.syncCatalogLeagues();
                 processedCount = res.stats.processedCount;
                 return {
                     processedCount: res.stats.processedCount,
@@ -102,9 +102,9 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { countryId }, ctx) => {
             requireAdmin(ctx);
-            await repository.football.syncCatalogLeagues(countryId);
+            await repository.football.catalog.syncCatalogLeagues(countryId);
             cacheService.invalidate('catalog:');
-            return repository.football.getCatalogLeagues(countryId);
+            return repository.football.catalog.getCatalogLeagues(countryId);
         },
     }),
     promoteLeague: t.field({
@@ -115,7 +115,7 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { catalogId }, ctx) => {
             requireAdmin(ctx);
-            const result = await repository.football.promoteLeague(catalogId);
+            const result = await repository.football.catalog.promoteLeague(catalogId);
             cacheService.invalidate('leagues');
             return result;
         },
@@ -128,7 +128,7 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { catalogId }, ctx) => {
             requireAdmin(ctx);
-            const result = await repository.football.refreshCatalogSeasons(catalogId);
+            const result = await repository.football.catalog.refreshCatalogSeasons(catalogId);
             cacheService.invalidate('catalog:');
             return result;
         },
@@ -142,7 +142,7 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { leagueId, year }, ctx) => {
             requireAdmin(ctx);
-            const result = await repository.football.importSeason(leagueId, year);
+            const result = await repository.football.leagues.importSeason(leagueId, year);
             cacheService.invalidate('seasons');
             cacheService.invalidate('leagues');
             return result;
@@ -156,7 +156,7 @@ builder.mutationFields((t) => ({
         },
         resolve: async (_, { seasonId }, ctx) => {
             requireAdmin(ctx);
-            const result = await repository.football.removeSeason(seasonId);
+            const result = await repository.football.leagues.removeSeason(seasonId);
             cacheService.invalidate('seasons');
             cacheService.invalidate('leagues');
             cacheService.invalidate('fixtures');
@@ -190,7 +190,7 @@ builder.mutationFields((t) => ({
                     },
                 });
             }
-            const result = await repository.football.updateSeasonConfig(seasonId, parsed.data);
+            const result = await repository.football.leagues.updateSeasonConfig(seasonId, parsed.data);
             cacheService.invalidate('seasons');
             return result;
         },

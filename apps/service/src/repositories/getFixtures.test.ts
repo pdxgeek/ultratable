@@ -238,7 +238,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // Provider was called with the past-due fixture's source ID
         expect(provider.getFixturesByIds).toHaveBeenCalledWith([12345]);
@@ -299,7 +299,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // Should NOT return the stale cached data — should return fresh DB query result
         expect(result[0].status).toBe('played');
@@ -333,7 +333,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // Provider was NOT called — lock was not acquired
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -368,7 +368,7 @@ describe('getFixtures — Live Polling', () => {
             }
         });
 
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // Returns cached data, no polling
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -400,7 +400,7 @@ describe('getFixtures — Live Polling', () => {
             }
         });
 
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // No polling — season is done
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -438,7 +438,7 @@ describe('getFixtures — Live Polling', () => {
         });
 
         // Should NOT throw — error is caught internally
-        const result = await repo.getFixtures(40, 2025);
+        const result = await repo.fixtures.getFixtures(40, 2025);
 
         // Provider was called but failed
         expect(provider.getFixturesByIds).toHaveBeenCalled();
@@ -496,7 +496,7 @@ describe('getFixtures — Live Polling', () => {
             };
         });
 
-        await repo.getFixtures(40, 2025);
+        await repo.fixtures.getFixtures(40, 2025);
 
         // Should have called update twice: lock claim + season completion
         expect(mockUpdate).toHaveBeenCalledTimes(2);
@@ -537,7 +537,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        await repo.getFixtures(40, 2025);
+        await repo.fixtures.getFixtures(40, 2025);
 
         // Should have called update only ONCE: lock claim (no season completion)
         expect(mockUpdate).toHaveBeenCalledTimes(1);

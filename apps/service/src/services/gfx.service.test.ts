@@ -18,7 +18,9 @@ vi.mock('../db', () => ({
 vi.mock('../repositories/postgres.repository', () => ({
     repository: {
         football: {
-            saveGraphic: vi.fn()
+            graphics: {
+                saveGraphic: vi.fn()
+            }
         }
     }
 }));
@@ -50,7 +52,7 @@ describe('GfxService - CAS Sideloading', () => {
 
         expect(result).toContain(testHash);
         expect(uploadMock).toHaveBeenCalled();
-        expect(repository.football.saveGraphic).toHaveBeenCalledWith(expect.objectContaining({
+        expect(repository.football.graphics.saveGraphic).toHaveBeenCalledWith(expect.objectContaining({
             entityId: 'team-123',
             blobPath: expect.stringContaining(testHash)
         }));
@@ -73,6 +75,6 @@ describe('GfxService - CAS Sideloading', () => {
         await GfxService.sideload('team', 'team-123', testUrl);
 
         expect(uploadMock).not.toHaveBeenCalled();
-        expect(repository.football.saveGraphic).toHaveBeenCalled();
+        expect(repository.football.graphics.saveGraphic).toHaveBeenCalled();
     });
 });

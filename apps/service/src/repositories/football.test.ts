@@ -37,7 +37,7 @@ describe('PostgresFootballRepository', () => {
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
-            const result = await repo.getLeagues();
+            const result = await repo.leagues.getLeagues();
 
             expect(result).toEqual(mockLeagues);
         });
@@ -48,7 +48,7 @@ describe('PostgresFootballRepository', () => {
             });
             vi.mocked(db.select).mockImplementation(emptySelectMock as unknown as typeof db.select);
 
-            const result = await repo.getLeagues();
+            const result = await repo.leagues.getLeagues();
 
             expect(result).toEqual([]);
         });
@@ -96,7 +96,7 @@ describe('PostgresFootballRepository', () => {
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
-            const result = await repo.syncTeams(39, 2024);
+            const result = await repo.teams.syncTeams(39, 2024);
 
             expect(result[0].name).toBe('Arsenal');
             expect(mockGet).toHaveBeenCalledWith('/teams', expect.anything());
@@ -148,7 +148,7 @@ describe('PostgresFootballRepository', () => {
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
-            await repo.syncTeams(39, 2024);
+            await repo.teams.syncTeams(39, 2024);
 
             // Verify getSquad was called for each team
             expect(mockGet).toHaveBeenCalledWith('/players/squads', { params: { team: 42 } });
@@ -191,7 +191,7 @@ describe('PostgresFootballRepository', () => {
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
             // Should NOT throw despite squad import failure
-            const result = await repo.syncTeams(39, 2024);
+            const result = await repo.teams.syncTeams(39, 2024);
             expect(result).toBeDefined();
         });
     });

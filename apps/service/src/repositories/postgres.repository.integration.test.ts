@@ -30,35 +30,35 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
 
     it('should save and retrieve ranking formulas', async () => {
         if (!db) return;
-        const saved = await repository.football.saveRankingFormula(testFormula);
+        const saved = await repository.football.leagues.saveRankingFormula(testFormula);
         expect(saved.id).toBe(testFormula.id);
         expect(saved.name).toBe(testFormula.name);
 
-        const all = await repository.football.getRankingFormulas();
+        const all = await repository.football.leagues.getRankingFormulas();
         expect(all.some(f => f.id === testFormula.id)).toBe(true);
     });
 
     it('should save and retrieve graphics', async () => {
         if (!db) return;
-        const saved = await repository.football.saveGraphic(testGraphic);
+        const saved = await repository.football.graphics.saveGraphic(testGraphic);
         expect(saved.blobPath).toBe(testGraphic.blobPath);
         expect(saved.entityId).toBe(testGraphic.entityId);
 
-        const results = await repository.football.getGraphics(testGraphic.entityType, testGraphic.entityId);
+        const results = await repository.football.graphics.getGraphics(testGraphic.entityType, testGraphic.entityId);
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].blobPath).toBe(testGraphic.blobPath);
     });
 
     it('should upsert graphics on conflict', async () => {
         if (!db) return;
-        await repository.football.saveGraphic(testGraphic);
+        await repository.football.graphics.saveGraphic(testGraphic);
 
         const updatedGraphic = { ...testGraphic, mimeType: 'image/jpeg' };
-        const updated = await repository.football.saveGraphic(updatedGraphic);
+        const updated = await repository.football.graphics.saveGraphic(updatedGraphic);
 
         expect(updated.mimeType).toBe('image/jpeg');
 
-        const results = await repository.football.getGraphics(testGraphic.entityType, testGraphic.entityId);
+        const results = await repository.football.graphics.getGraphics(testGraphic.entityType, testGraphic.entityId);
         expect(results.length).toBe(1);
     });
 
@@ -74,11 +74,11 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             const leagueSourceId = league[0].sourceId;
             const season = anySeason[0].year;
 
-            const fixtures = await repository.football.getFixtures(leagueSourceId, season);
+            const fixtures = await repository.football.fixtures.getFixtures(leagueSourceId, season);
             if (fixtures.length === 0) return; // Skip if no data
 
             const midPoint = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
-            const recent = await repository.football.getFixtures(leagueSourceId, season, midPoint);
+            const recent = await repository.football.fixtures.getFixtures(leagueSourceId, season, midPoint);
 
             recent.forEach(f => {
                 expect(new Date(f.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());
@@ -98,14 +98,14 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
 
             let teams;
             try {
-                teams = await repository.football.getTeams(leagueSourceId, season);
+                teams = await repository.football.teams.getTeams(leagueSourceId, season);
             } catch (e) {
                 return; // Skip if league/season not found
             }
             if (!teams || teams.length === 0) return;
 
             const midPoint = new Date(Date.now() - 1000 * 60 * 60);
-            const recent = await repository.football.getTeams(leagueSourceId, season, midPoint);
+            const recent = await repository.football.teams.getTeams(leagueSourceId, season, midPoint);
 
             recent.forEach(t => {
                 expect(new Date(t.updatedAt).getTime()).toBeGreaterThan(midPoint.getTime());

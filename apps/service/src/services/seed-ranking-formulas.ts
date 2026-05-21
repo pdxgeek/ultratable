@@ -20,7 +20,7 @@ const DEFAULT_FORMULAS = [
 export async function seedRankingFormulas(): Promise<void> {
     try {
         for (const formula of DEFAULT_FORMULAS) {
-            await repository.football.saveRankingFormula(formula);
+            await repository.football.leagues.saveRankingFormula(formula);
         }
         cacheService.invalidate('formulas');
         globalLogger.info({ count: DEFAULT_FORMULAS.length }, 'Seeded ranking_formulas defaults');

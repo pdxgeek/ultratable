@@ -47,7 +47,7 @@ export class GfxService {
             }
 
             // 4. Update Graphics mapping table via repository
-            await repository.football.saveGraphic({
+            await repository.football.graphics.saveGraphic({
                 entityType,
                 entityId,
                 variantName: variant,
