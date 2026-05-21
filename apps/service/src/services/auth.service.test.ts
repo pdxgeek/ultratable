@@ -1,11 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { toWebHeaders } from './auth.service';
 
 // Mock the db module before importing resolveDomainUser
 vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
-    }
+    },
 }));
 
 describe('auth.service', () => {
@@ -13,7 +14,7 @@ describe('auth.service', () => {
         it('converts string header values', () => {
             const headers = toWebHeaders({
                 'content-type': 'application/json',
-                'authorization': 'Bearer token123'
+                authorization: 'Bearer token123',
             });
             expect(headers.get('content-type')).toBe('application/json');
             expect(headers.get('authorization')).toBe('Bearer token123');
@@ -21,7 +22,7 @@ describe('auth.service', () => {
 
         it('joins array header values', () => {
             const headers = toWebHeaders({
-                'set-cookie': ['cookie1=a', 'cookie2=b']
+                'set-cookie': ['cookie1=a', 'cookie2=b'],
             });
             expect(headers.get('set-cookie')).toBe('cookie1=a,cookie2=b');
         });
@@ -29,7 +30,7 @@ describe('auth.service', () => {
         it('ignores undefined values', () => {
             const headers = toWebHeaders({
                 'x-present': 'yes',
-                'x-missing': undefined
+                'x-missing': undefined,
             });
             expect(headers.get('x-present')).toBe('yes');
             expect(headers.get('x-missing')).toBeNull();
@@ -56,10 +57,10 @@ describe('auth.service', () => {
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([])
-                        })
-                    })
-                })
+                            limit: vi.fn().mockResolvedValue([]),
+                        }),
+                    }),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -71,15 +72,20 @@ describe('auth.service', () => {
             const { db } = await import('../db');
             const { resolveDomainUser } = await import('./auth.service');
 
-            const mockUser = { id: 'uuid-123', name: 'Dave', email: 'dave@test.com', roles: ['user', 'admin'] };
+            const mockUser = {
+                id: 'uuid-123',
+                name: 'Dave',
+                email: 'dave@test.com',
+                roles: ['user', 'admin'],
+            };
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([mockUser])
-                        })
-                    })
-                })
+                            limit: vi.fn().mockResolvedValue([mockUser]),
+                        }),
+                    }),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -88,7 +94,7 @@ describe('auth.service', () => {
                 id: 'uuid-123',
                 name: 'Dave',
                 email: 'dave@test.com',
-                roles: ['user', 'admin']
+                roles: ['user', 'admin'],
             });
         });
 
@@ -96,15 +102,20 @@ describe('auth.service', () => {
             const { db } = await import('../db');
             const { resolveDomainUser } = await import('./auth.service');
 
-            const mockUser = { id: 'uuid-123', name: 'Dave', email: 'dave@test.com', roles: 'not-an-array' };
+            const mockUser = {
+                id: 'uuid-123',
+                name: 'Dave',
+                email: 'dave@test.com',
+                roles: 'not-an-array',
+            };
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([mockUser])
-                        })
-                    })
-                })
+                            limit: vi.fn().mockResolvedValue([mockUser]),
+                        }),
+                    }),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -116,15 +127,20 @@ describe('auth.service', () => {
             const { db } = await import('../db');
             const { resolveDomainUser } = await import('./auth.service');
 
-            const mockUser = { id: 'uuid-123', name: 'Dave', email: 'dave@test.com', roles: ['user'] };
+            const mockUser = {
+                id: 'uuid-123',
+                name: 'Dave',
+                email: 'dave@test.com',
+                roles: ['user'],
+            };
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([mockUser])
-                        })
-                    })
-                })
+                            limit: vi.fn().mockResolvedValue([mockUser]),
+                        }),
+                    }),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -152,12 +168,17 @@ describe('auth.service', () => {
                             const idx = queryIndex++;
                             return {
                                 limit: vi.fn().mockResolvedValue([
-                                    { id: `uuid-${idx}`, name: 'u', email: 'u@x', roles: ['user'] }
-                                ])
+                                    {
+                                        id: `uuid-${idx}`,
+                                        name: 'u',
+                                        email: 'u@x',
+                                        roles: ['user'],
+                                    },
+                                ]),
                             };
-                        }
-                    })
-                })
+                        },
+                    }),
+                }),
             }));
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -185,15 +206,20 @@ describe('auth.service', () => {
             const { db } = await import('../db');
             const { resolveDomainUser, invalidateDomainUserCache } = await import('./auth.service');
 
-            const mockUser = { id: 'uuid-123', name: 'Dave', email: 'dave@test.com', roles: ['user'] };
+            const mockUser = {
+                id: 'uuid-123',
+                name: 'Dave',
+                email: 'dave@test.com',
+                roles: ['user'],
+            };
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([mockUser])
-                        })
-                    })
-                })
+                            limit: vi.fn().mockResolvedValue([mockUser]),
+                        }),
+                    }),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 

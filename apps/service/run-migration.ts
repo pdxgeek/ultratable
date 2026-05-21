@@ -1,6 +1,8 @@
 import 'dotenv/config';
-import postgres from 'postgres';
+
 import { readFileSync } from 'fs';
+
+import postgres from 'postgres';
 
 const sql = postgres(process.env.DATABASE_URL!);
 
@@ -19,8 +21,10 @@ async function run() {
     `);
 
     // Check what's already tracked
-    const existing = await sql.unsafe<{ hash: string }[]>(`SELECT hash FROM drizzle.__drizzle_migrations`);
-    const existingHashes = new Set(existing.map(r => r.hash));
+    const existing = await sql.unsafe<{ hash: string }[]>(
+        `SELECT hash FROM drizzle.__drizzle_migrations`,
+    );
+    const existingHashes = new Set(existing.map((r) => r.hash));
 
     let seeded = 0;
     for (const entry of journal.entries) {
@@ -32,7 +36,7 @@ async function run() {
         }
         await sql.unsafe(
             `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)`,
-            [tag, entry.when]
+            [tag, entry.when],
         );
         console.log(`  + ${tag} (seeded)`);
         seeded++;
@@ -41,4 +45,7 @@ async function run() {
     await sql.end();
 }
 
-run().catch(e => { console.error('Failed:', e.message); process.exit(1); });
+run().catch((e) => {
+    console.error('Failed:', e.message);
+    process.exit(1);
+});

@@ -1,8 +1,10 @@
-import { useRef, useCallback } from 'react';
 import type { Fixture, Team } from '../db';
+
+import { useCallback, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+
 import { usePopup } from '../context/PopupContext';
+import { db } from '../db';
 
 interface NextMatchBadgeProps {
     fixture: Fixture | null;
@@ -14,7 +16,11 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
     const { showPopup, scheduleHide, cancelHide } = usePopup();
     const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const opponentId = fixture ? (fixture.homeTeamId === teamId ? fixture.awayTeamId : fixture.homeTeamId) : null;
+    const opponentId = fixture
+        ? fixture.homeTeamId === teamId
+            ? fixture.awayTeamId
+            : fixture.homeTeamId
+        : null;
 
     const opponent = useLiveQuery(async () => {
         if (!opponentId) return null;
@@ -30,7 +36,7 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
                 showPopup({ fixture, teamsMap, anchorRect: rect });
             }, 200);
         },
-        [fixture, showPopup, teamsMap, cancelHide]
+        [fixture, showPopup, teamsMap, cancelHide],
     );
 
     const handleMouseLeave = useCallback(() => {
@@ -40,14 +46,21 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
         scheduleHide();
     }, [scheduleHide]);
 
-    if (!fixture || !opponent) return <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>;
+    if (!fixture || !opponent)
+        return <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>;
 
     const date = new Date(fixture.scheduledAt);
     const isHome = fixture.homeTeamId === teamId;
 
     return (
         <div
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+            }}
             onMouseEnter={(e) => handleMouseEnter(e.currentTarget)}
             onMouseLeave={handleMouseLeave}
         >

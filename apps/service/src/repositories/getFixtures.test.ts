@@ -4,11 +4,13 @@
  * Verifies that the poll-then-cache ordering in getFixtures correctly detects
  * and updates past-due "out of state" fixtures before serving cached data.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostgresFixturesRepository } from './postgres/fixtures.repository';
-import type { TeamsRepository } from './teams';
-import { cacheService } from '../services/cache.service';
 import type { IFootballProvider, IngestedFixture } from '../integrations/types';
+import type { TeamsRepository } from './teams';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { cacheService } from '../services/cache.service';
+import { PostgresFixturesRepository } from './postgres/fixtures.repository';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -25,7 +27,7 @@ vi.mock('../db', () => ({
         insert: (...args: unknown[]) => mockInsert(...args),
         update: (...args: unknown[]) => mockUpdate(...args),
         delete: (...args: unknown[]) => mockDelete(...args),
-    }
+    },
 }));
 
 vi.mock('../services/log.service', () => ({
@@ -40,7 +42,7 @@ vi.mock('../services/log.service', () => ({
         warn: vi.fn(),
         error: vi.fn(),
         debug: vi.fn(),
-    }
+    },
 }));
 
 vi.mock('../services/graphics.service', () => ({
@@ -129,7 +131,7 @@ function makeUpdatedApiFixture(overrides: Partial<IngestedFixture> = {}): Ingest
         homeGoals: 2,
         awayGoals: 1,
         gameweek: 35,
-        ...overrides
+        ...overrides,
     };
 }
 
@@ -146,7 +148,7 @@ function createMockProvider(overrides: Partial<IFootballProvider> = {}): IFootba
         getMatchEvents: vi.fn().mockResolvedValue([]),
         getLineups: vi.fn().mockResolvedValue([]),
         getPlayerData: vi.fn().mockResolvedValue(null),
-        ...overrides
+        ...overrides,
     };
 }
 
@@ -188,8 +190,8 @@ describe('getFixtures — Live Polling', () => {
         const provider = createMockProvider({
             getFixturesByIds: vi.fn().mockResolvedValue({
                 fixtures: [makeUpdatedApiFixture()],
-                venues: []
-            })
+                venues: [],
+            }),
         });
         repo = new PostgresFixturesRepository(provider, stubTeams);
 
@@ -207,24 +209,42 @@ describe('getFixtures — Live Polling', () => {
             selectCallCount++;
             switch (selectCallCount) {
                 case 1: // Season+League join
-                    return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
                 case 2: // Past-due fixtures
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]),
+                        }),
+                    };
                 case 3: // Venues for mapping
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
                 case 4: // Teams for mapping
                     return {
                         from: vi.fn().mockReturnValue({
                             where: vi.fn().mockResolvedValue([
                                 { id: 'hull-uuid', sourceId: 100, sourceName: 'api-football' },
                                 { id: 'ipswich-uuid', sourceId: 200, sourceName: 'api-football' },
-                            ])
-                        })
+                            ]),
+                        }),
                     };
                 case 5: // Final fixtures query
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
                 default:
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -232,16 +252,16 @@ describe('getFixtures — Live Polling', () => {
         mockUpdate.mockReturnValue({
             set: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }])
-                })
-            })
+                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }]),
+                }),
+            }),
         });
 
         // Fixture upsert
         mockInsert.mockReturnValue({
             values: vi.fn().mockReturnValue({
-                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined)
-            })
+                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+            }),
         });
 
         const result = await repo.getFixtures(40, 2025);
@@ -262,8 +282,8 @@ describe('getFixtures — Live Polling', () => {
         const provider = createMockProvider({
             getFixturesByIds: vi.fn().mockResolvedValue({
                 fixtures: [makeUpdatedApiFixture()],
-                venues: []
-            })
+                venues: [],
+            }),
         });
         repo = new PostgresFixturesRepository(provider, stubTeams);
 
@@ -275,34 +295,58 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
-                case 2: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]) }) };
-                case 3: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
-                case 4: return {
-                    from: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([
-                            { id: 'hull-uuid', sourceId: 100, sourceName: 'api-football' },
-                            { id: 'ipswich-uuid', sourceId: 200, sourceName: 'api-football' },
-                        ])
-                    })
-                };
-                case 5: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
+                case 2:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]),
+                        }),
+                    };
+                case 3:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
+                case 4:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([
+                                { id: 'hull-uuid', sourceId: 100, sourceName: 'api-football' },
+                                { id: 'ipswich-uuid', sourceId: 200, sourceName: 'api-football' },
+                            ]),
+                        }),
+                    };
+                case 5:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
         mockUpdate.mockReturnValue({
             set: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }])
-                })
-            })
+                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }]),
+                }),
+            }),
         });
 
         mockInsert.mockReturnValue({
             values: vi.fn().mockReturnValue({
-                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined)
-            })
+                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+            }),
         });
 
         const result = await repo.getFixtures(40, 2025);
@@ -323,10 +367,25 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
                 // Jump straight to final query — pastDue select is never reached
-                case 2: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                case 2:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -334,9 +393,9 @@ describe('getFixtures — Live Polling', () => {
         mockUpdate.mockReturnValue({
             set: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([])  // 0 rows = lock not claimed
-                })
-            })
+                    returning: vi.fn().mockResolvedValue([]), // 0 rows = lock not claimed
+                }),
+            }),
         });
 
         const result = await repo.getFixtures(40, 2025);
@@ -360,17 +419,21 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return {
-                    from: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue(
-                                // Season with recent lastLiveSyncAt (< 5 min ago) → polling skipped
-                                setupSeasonLookup({ lastLiveSyncAt: ONE_MINUTE_AGO })
-                            )
-                        })
-                    })
-                };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(
+                                    // Season with recent lastLiveSyncAt (< 5 min ago) → polling skipped
+                                    setupSeasonLookup({ lastLiveSyncAt: ONE_MINUTE_AGO }),
+                                ),
+                            }),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -392,17 +455,26 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return {
-                    from: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue(
-                                setupSeasonLookup({ isCompleted: true })
-                            )
-                        })
-                    })
-                };
-                case 2: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi
+                                    .fn()
+                                    .mockResolvedValue(setupSeasonLookup({ isCompleted: true })),
+                            }),
+                        }),
+                    };
+                case 2:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -419,7 +491,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('returns existing data when provider API call fails', async () => {
         const provider = createMockProvider({
-            getFixturesByIds: vi.fn().mockRejectedValue(new Error('API rate limit exceeded'))
+            getFixturesByIds: vi.fn().mockRejectedValue(new Error('API rate limit exceeded')),
         });
         repo = new PostgresFixturesRepository(provider, stubTeams);
 
@@ -427,20 +499,40 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
-                case 2: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
+                case 2:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]),
+                        }),
+                    };
                 // Final query: returns the original stale fixture (no corruption)
-                case 3: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                case 3:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PAST_DUE_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
         mockUpdate.mockReturnValue({
             set: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }])
-                })
-            })
+                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }]),
+                }),
+            }),
         });
 
         // Should NOT throw — error is caught internally
@@ -466,16 +558,40 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
                 case 2: // Past-due: none
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
                 case 3: // Future matches count: 0
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }) };
+                    return {
+                        from: vi
+                            .fn()
+                            .mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }),
+                    };
                 case 4: // Non-terminal fixtures count: 0
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }) };
+                    return {
+                        from: vi
+                            .fn()
+                            .mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }),
+                    };
                 case 5: // Final fixtures query
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -489,16 +605,16 @@ describe('getFixtures — Live Polling', () => {
                 return {
                     set: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }])
-                        })
-                    })
+                            returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }]),
+                        }),
+                    }),
                 };
             }
             // Mark season complete
             return {
                 set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined)
-                })
+                    where: vi.fn().mockResolvedValue(undefined),
+                }),
             };
         });
 
@@ -521,16 +637,40 @@ describe('getFixtures — Live Polling', () => {
         mockSelect.mockImplementation(() => {
             selectCallCount++;
             switch (selectCallCount) {
-                case 1: return { from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(setupSeasonLookup()) }) }) };
+                case 1:
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockResolvedValue(setupSeasonLookup()),
+                            }),
+                        }),
+                    };
                 case 2: // Past-due: none (previous poll just resolved them)
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
                 case 3: // Future matches count: 0 (none scheduled after 'now')
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }) };
+                    return {
+                        from: vi
+                            .fn()
+                            .mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 0 }]) }),
+                    };
                 case 4: // Non-terminal count: 13 (scheduled fixtures that just haven't become past-due yet)
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 13 }]) }) };
+                    return {
+                        from: vi
+                            .fn()
+                            .mockReturnValue({ where: vi.fn().mockResolvedValue([{ count: 13 }]) }),
+                    };
                 case 5: // Final fixtures query
-                    return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]) }) };
-                default: return { from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) };
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([PLAYED_FIXTURE]),
+                        }),
+                    };
+                default:
+                    return {
+                        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                    };
             }
         });
 
@@ -538,9 +678,9 @@ describe('getFixtures — Live Polling', () => {
         mockUpdate.mockReturnValue({
             set: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }])
-                })
-            })
+                    returning: vi.fn().mockResolvedValue([{ id: 'season-uuid' }]),
+                }),
+            }),
         });
 
         await repo.getFixtures(40, 2025);

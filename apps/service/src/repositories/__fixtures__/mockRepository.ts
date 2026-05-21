@@ -14,16 +14,17 @@
  * If a new method is added to IRepository and not added here, this file fails
  * to compile — that is intentional.
  */
-import { vi } from 'vitest';
-import type { IRepository } from '../repository';
 import type { CatalogRepository } from '../catalog';
 import type { ConfigRepository } from '../config';
 import type { FixturesRepository } from '../fixtures';
 import type { GraphicsRepository } from '../graphics';
 import type { LeaguesRepository } from '../leagues';
 import type { PlayersRepository } from '../players';
+import type { IRepository } from '../repository';
 import type { TeamsRepository } from '../teams';
 import type { WorkersRepository } from '../workers';
+
+import { vi } from 'vitest';
 
 export function buildMockLeagues(overrides: Partial<LeaguesRepository> = {}): LeaguesRepository {
     return {
@@ -35,7 +36,9 @@ export function buildMockLeagues(overrides: Partial<LeaguesRepository> = {}): Le
         getAllInternalSeasons: vi.fn().mockResolvedValue([]),
         getSeasonsByIds: vi.fn().mockResolvedValue([]),
         getSeasonIdsWithTeamLinks: vi.fn().mockResolvedValue([]),
-        syncSeasons: vi.fn().mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
+        syncSeasons: vi
+            .fn()
+            .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
         importSeason: vi.fn().mockResolvedValue(null),
         updateSeasonConfig: vi.fn().mockResolvedValue(null),
         removeSeason: vi.fn().mockResolvedValue(true),
@@ -70,7 +73,9 @@ export function buildMockFixtures(overrides: Partial<FixturesRepository> = {}): 
         getFixtureById: vi.fn().mockResolvedValue(null),
         getFixturesBySeasonId: vi.fn().mockResolvedValue([]),
         countFixturesInSeason: vi.fn().mockResolvedValue(0),
-        syncFixtures: vi.fn().mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
+        syncFixtures: vi
+            .fn()
+            .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
         getMatchEvents: vi.fn().mockResolvedValue([]),
         getLineups: vi.fn().mockResolvedValue([]),
         ...overrides,
@@ -79,8 +84,12 @@ export function buildMockFixtures(overrides: Partial<FixturesRepository> = {}): 
 
 export function buildMockCatalog(overrides: Partial<CatalogRepository> = {}): CatalogRepository {
     return {
-        syncCatalogCountries: vi.fn().mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
-        syncCatalogLeagues: vi.fn().mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
+        syncCatalogCountries: vi
+            .fn()
+            .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
+        syncCatalogLeagues: vi
+            .fn()
+            .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
         getCatalogCountries: vi.fn().mockResolvedValue([]),
         getCatalogLeagues: vi.fn().mockResolvedValue([]),
         refreshCatalogSeasons: vi.fn().mockResolvedValue(null),

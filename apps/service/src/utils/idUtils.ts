@@ -17,7 +17,7 @@ export function generateDeterministicId(seed: string): string {
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
         const char = seed.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+        hash = (hash << 5) - hash + char;
         hash = hash & hash; // Convert to 32-bit integer
     }
 

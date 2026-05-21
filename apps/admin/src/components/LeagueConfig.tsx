@@ -1,8 +1,9 @@
-import React from 'react';
-import { Database, Globe, AlertCircle, Settings } from 'lucide-react';
-
 import type { ConfigTab, ManagedLeague, RankingFormula, Season } from './leagues.types';
-import type { Job, Execution } from './WorkersView';
+import type { Execution, Job } from './WorkersView';
+
+import React from 'react';
+import { AlertCircle, Database, Globe, Settings } from 'lucide-react';
+
 import { ConfigTabs } from './league-config/ConfigTabs';
 import { RankingFormulaInputs } from './league-config/RankingFormulaInputs';
 import { RankingPrioritySelector } from './league-config/RankingPrioritySelector';
@@ -55,39 +56,59 @@ function findActiveExecution(
     executions: Execution[],
 ): Execution | null {
     if (configTab !== 'season') return null;
-    const sourceId = managedLeagues.find(l => l.id === selectedConfigLeagueId)?.sourceId;
-    const year = configSeasons.find(s => s.id === selectedConfigSeasonId)?.year;
+    const sourceId = managedLeagues.find((l) => l.id === selectedConfigLeagueId)?.sourceId;
+    const year = configSeasons.find((s) => s.id === selectedConfigSeasonId)?.year;
     if (!sourceId || !year) return null;
     const jobName = `sync-fixtures-${sourceId}-${year}`;
-    const jobId = jobs.find(j => j.name === jobName)?.id;
+    const jobId = jobs.find((j) => j.name === jobName)?.id;
     if (!jobId) return null;
-    return executions.find(ex => ex.status === 'running' && ex.jobId === jobId) || null;
+    return executions.find((ex) => ex.status === 'running' && ex.jobId === jobId) || null;
 }
 
 export const LeagueConfig: React.FC<LeagueConfigProps> = ({
     managedLeagues,
-    selectedConfigLeagueId, setSelectedConfigLeagueId,
-    setConfigTab, configTab,
+    selectedConfigLeagueId,
+    setSelectedConfigLeagueId,
+    setConfigTab,
+    configTab,
     configSeasons,
-    selectedConfigSeasonId, setSelectedConfigSeasonId,
+    selectedConfigSeasonId,
+    setSelectedConfigSeasonId,
     syncSeasonData,
     actionLoading,
-    executions, jobs,
-    promoInput, setPromoInput,
-    playoffInput, setPlayoffInput,
-    relInput, setRelInput,
-    seasonConfigJson, setSeasonConfigJson,
+    executions,
+    jobs,
+    promoInput,
+    setPromoInput,
+    playoffInput,
+    setPlayoffInput,
+    relInput,
+    setRelInput,
+    seasonConfigJson,
+    setSeasonConfigJson,
     leagueDefaultsJson,
     rankingFormulas,
-    appliedCriteria, setAppliedCriteria,
-    helperTeamId, setHelperTeamId,
+    appliedCriteria,
+    setAppliedCriteria,
+    helperTeamId,
+    setHelperTeamId,
     configTeams,
-    helperPoints, setHelperPoints,
-    helperReason, setHelperReason,
+    helperPoints,
+    setHelperPoints,
+    helperReason,
+    setHelperReason,
     saveConfig,
 }) => {
-    const selectedLeagueName = managedLeagues.find(l => l.id === selectedConfigLeagueId)?.name;
-    const activeExecution = findActiveExecution(configTab, managedLeagues, selectedConfigLeagueId, configSeasons, selectedConfigSeasonId, jobs, executions);
+    const selectedLeagueName = managedLeagues.find((l) => l.id === selectedConfigLeagueId)?.name;
+    const activeExecution = findActiveExecution(
+        configTab,
+        managedLeagues,
+        selectedConfigLeagueId,
+        configSeasons,
+        selectedConfigSeasonId,
+        jobs,
+        executions,
+    );
     const seasonSelected = configTab === 'season' && !!selectedConfigSeasonId;
 
     return (
@@ -99,15 +120,24 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                         <Database className="w-5 h-5 text-amber-500" />
                         Box 3: Configuration & Data Sync
                     </h3>
-                    <p className="text-sm text-slate-400 mt-2">Manage settings, sync fixtures, and configure standings rules.</p>
+                    <p className="text-sm text-slate-400 mt-2">
+                        Manage settings, sync fixtures, and configure standings rules.
+                    </p>
                 </div>
                 <select
                     value={selectedConfigLeagueId}
-                    onChange={(e) => { setSelectedConfigLeagueId(e.target.value); setConfigTab('league'); }}
+                    onChange={(e) => {
+                        setSelectedConfigLeagueId(e.target.value);
+                        setConfigTab('league');
+                    }}
                     className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 transition-all min-w-[200px]"
                 >
                     <option value="">Select League...</option>
-                    {managedLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {managedLeagues.map((l) => (
+                        <option key={l.id} value={l.id}>
+                            {l.name}
+                        </option>
+                    ))}
                 </select>
             </div>
 
@@ -121,7 +151,9 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                             selectedConfigSeasonId={selectedConfigSeasonId}
                             setSelectedConfigSeasonId={setSelectedConfigSeasonId}
                             onSync={() => {
-                                const s = configSeasons.find(s => s.id === selectedConfigSeasonId);
+                                const s = configSeasons.find(
+                                    (s) => s.id === selectedConfigSeasonId,
+                                );
                                 if (s) syncSeasonData(selectedConfigLeagueId, s.year);
                             }}
                             syncing={actionLoading?.startsWith('sync-') ?? false}
@@ -135,14 +167,21 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                                     <Globe className="w-5 h-5 text-amber-500" />
                                 </div>
                                 <div>
-                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 mb-1.5">League Target</h4>
-                                    <div className="text-sm font-semibold text-white px-2 py-1">{selectedLeagueName}</div>
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 mb-1.5">
+                                        League Target
+                                    </h4>
+                                    <div className="text-sm font-semibold text-white px-2 py-1">
+                                        {selectedLeagueName}
+                                    </div>
                                 </div>
                             </div>
                             <RankingFormulaInputs
-                                promoInput={promoInput} setPromoInput={setPromoInput}
-                                playoffInput={playoffInput} setPlayoffInput={setPlayoffInput}
-                                relInput={relInput} setRelInput={setRelInput}
+                                promoInput={promoInput}
+                                setPromoInput={setPromoInput}
+                                playoffInput={playoffInput}
+                                setPlayoffInput={setPlayoffInput}
+                                relInput={relInput}
+                                setRelInput={setRelInput}
                             />
                         </>
                     )}
@@ -162,9 +201,12 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                                 setConfigJson={setSeasonConfigJson}
                                 leagueDefaultsJson={leagueDefaultsJson}
                                 configTeams={configTeams}
-                                helperTeamId={helperTeamId} setHelperTeamId={setHelperTeamId}
-                                helperPoints={helperPoints} setHelperPoints={setHelperPoints}
-                                helperReason={helperReason} setHelperReason={setHelperReason}
+                                helperTeamId={helperTeamId}
+                                setHelperTeamId={setHelperTeamId}
+                                helperPoints={helperPoints}
+                                setHelperPoints={setHelperPoints}
+                                helperReason={helperReason}
+                                setHelperReason={setHelperReason}
                             />
                         </>
                     )}
@@ -187,7 +229,9 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                 <div className="py-20 text-center border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 relative z-10">
                     <Settings className="w-8 h-8 text-slate-700 mx-auto mb-4 opacity-20" />
                     <p className="text-sm text-slate-500 font-medium tracking-tight">
-                        {configSeasons.length === 0 && selectedConfigLeagueId ? "No imported seasons found for this league." : "Select a league and season to manage its settings."}
+                        {configSeasons.length === 0 && selectedConfigLeagueId
+                            ? 'No imported seasons found for this league.'
+                            : 'Select a league and season to manage its settings.'}
                     </p>
                 </div>
             )}

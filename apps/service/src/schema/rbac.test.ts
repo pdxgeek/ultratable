@@ -7,9 +7,17 @@
  *   - User (role: user): expects "Forbidden"
  *   - Admin (role: admin): expects NO auth error (may fail for other reasons)
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { createYoga } from 'graphql-yoga';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { builder } from './builder';
+
+// Import schema registrations AFTER mocks
+import './football';
+import './catalog';
+import './workers';
+import './config';
+import './graphics';
 
 // Mock ALL modules that schema files import at resolve-time
 vi.mock('../db', () => ({
@@ -56,7 +64,9 @@ vi.mock('../repositories', () => ({
             getAllInternalSeasons: vi.fn().mockResolvedValue([]),
             importSeason: vi.fn().mockResolvedValue({ id: 'mock', year: 2024, leagueId: 'mock' }),
             removeSeason: vi.fn().mockResolvedValue(true),
-            updateSeasonConfig: vi.fn().mockResolvedValue({ id: 'mock', year: 2024, leagueId: 'mock' }),
+            updateSeasonConfig: vi
+                .fn()
+                .mockResolvedValue({ id: 'mock', year: 2024, leagueId: 'mock' }),
             getRankingFormulas: vi.fn().mockResolvedValue([]),
         },
         teams: {
@@ -66,15 +76,25 @@ vi.mock('../repositories', () => ({
         },
         fixtures: {
             getFixtures: vi.fn().mockResolvedValue([]),
-            syncFixtures: vi.fn().mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
+            syncFixtures: vi
+                .fn()
+                .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
             getMatchEvents: vi.fn().mockResolvedValue([]),
             getLineups: vi.fn().mockResolvedValue([]),
         },
         catalog: {
             getCatalogCountries: vi.fn().mockResolvedValue([]),
             getCatalogLeagues: vi.fn().mockResolvedValue([]),
-            syncCatalogLeagues: vi.fn().mockResolvedValue({ stats: { processedCount: 0, apiCallsCount: 0 } }),
-            promoteLeague: vi.fn().mockResolvedValue({ id: 'mock', name: 'Mock', slug: 'mock', sourceName: 'test', sourceId: 1 }),
+            syncCatalogLeagues: vi
+                .fn()
+                .mockResolvedValue({ stats: { processedCount: 0, apiCallsCount: 0 } }),
+            promoteLeague: vi.fn().mockResolvedValue({
+                id: 'mock',
+                name: 'Mock',
+                slug: 'mock',
+                sourceName: 'test',
+                sourceId: 1,
+            }),
             refreshCatalogSeasons: vi.fn().mockResolvedValue({ id: 'mock' }),
         },
         players: {
@@ -106,13 +126,6 @@ vi.mock('../providers/storage', () => ({
         getPublicUrl: vi.fn().mockReturnValue('https://mock.storage/path'),
     },
 }));
-
-// Import schema registrations AFTER mocks
-import './football';
-import './catalog';
-import './workers';
-import './config';
-import './graphics';
 
 // ---------------------------------------------------------------------------
 // Yoga instances per role
@@ -151,25 +164,52 @@ const MUTATIONS: RbacTestCase[] = [
     // catalog.ts
     { name: 'syncCatalog', query: 'mutation { syncCatalog { success processedCount } }' },
     { name: 'promoteLeague', query: 'mutation { promoteLeague(catalogId: "test-id") { id } }' },
-    { name: 'refreshCatalogSeasons', query: 'mutation { refreshCatalogSeasons(catalogId: "test-id") { id } }' },
-    { name: 'importSeason', query: 'mutation { importSeason(leagueId: "test-id", year: 2024) { id } }' },
+    {
+        name: 'refreshCatalogSeasons',
+        query: 'mutation { refreshCatalogSeasons(catalogId: "test-id") { id } }',
+    },
+    {
+        name: 'importSeason',
+        query: 'mutation { importSeason(leagueId: "test-id", year: 2024) { id } }',
+    },
     { name: 'removeSeason', query: 'mutation { removeSeason(seasonId: "test-id") }' },
-    { name: 'updateSeasonConfig', query: 'mutation { updateSeasonConfig(seasonId: "test-id", configJson: "{}") { id } }' },
+    {
+        name: 'updateSeasonConfig',
+        query: 'mutation { updateSeasonConfig(seasonId: "test-id", configJson: "{}") { id } }',
+    },
     // football.ts
     { name: 'ingestLeagues', query: 'mutation { ingestLeagues { id } }' },
-    { name: 'syncFixtures', query: 'mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }' },
-    { name: 'saveLeagueConfig', query: 'mutation { saveLeagueConfig(id: "test-id", configJson: "{}") { id } }' },
-    { name: 'saveSeasonConfig', query: 'mutation { saveSeasonConfig(id: "test-id", configJson: "{}") { id } }' },
+    {
+        name: 'syncFixtures',
+        query: 'mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }',
+    },
+    {
+        name: 'saveLeagueConfig',
+        query: 'mutation { saveLeagueConfig(id: "test-id", configJson: "{}") { id } }',
+    },
+    {
+        name: 'saveSeasonConfig',
+        query: 'mutation { saveSeasonConfig(id: "test-id", configJson: "{}") { id } }',
+    },
     // workers.ts
     { name: 'runJob', query: 'mutation { runJob(name: "test-job") { id } }' },
     // config.ts
     { name: 'configureDatabase', query: 'mutation { configureDatabase(url: "postgres://test") }' },
     { name: 'configureApiKey', query: 'mutation { configureApiKey(key: "test-key") }' },
-    { name: 'configureSupabase', query: 'mutation { configureSupabase(url: "https://test", anonKey: "key") }' },
+    {
+        name: 'configureSupabase',
+        query: 'mutation { configureSupabase(url: "https://test", anonKey: "key") }',
+    },
     { name: 'clearCache', query: 'mutation { clearCache }' },
     // graphics.ts
-    { name: 'registerGraphic', query: 'mutation { registerGraphic(entityId: "test", entityType: "team", url: "https://img.png") }' },
-    { name: 'autoSideloadGraphic', query: 'mutation { autoSideloadGraphic(entityId: "test", entityType: "team") }' },
+    {
+        name: 'registerGraphic',
+        query: 'mutation { registerGraphic(entityId: "test", entityType: "team", url: "https://img.png") }',
+    },
+    {
+        name: 'autoSideloadGraphic',
+        query: 'mutation { autoSideloadGraphic(entityId: "test", entityType: "team") }',
+    },
 ];
 
 const ADMIN_QUERIES: RbacTestCase[] = [
@@ -219,7 +259,7 @@ describe('RBAC Security Verification', () => {
             const result = await gql(adminYoga, query);
             // Admin should never get an auth-related error
             const authErrors = (result.errors || []).filter(
-                (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden')
+                (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden'),
             );
             expect(authErrors).toHaveLength(0);
         });
@@ -248,7 +288,7 @@ describe('RBAC Security Verification', () => {
         it.each(ADMIN_QUERIES)('$name → no auth error', async ({ query }) => {
             const result = await gql(adminYoga, query);
             const authErrors = (result.errors || []).filter(
-                (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden')
+                (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden'),
             );
             expect(authErrors).toHaveLength(0);
         });

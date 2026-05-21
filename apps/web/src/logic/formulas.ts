@@ -23,7 +23,10 @@ export interface StandingsRow {
 export type ComparisonFn = (a: StandingsRow, b: StandingsRow, fixtures: Fixture[]) => number;
 
 /** Aggregates one team's stats across an arbitrary set of fixtures (used by headToHead and awayGoalsFor). */
-function aggregateForTeam(teamId: string, fixtures: Fixture[]): { points: number; goalsFor: number; goalsAgainst: number } {
+function aggregateForTeam(
+    teamId: string,
+    fixtures: Fixture[],
+): { points: number; goalsFor: number; goalsAgainst: number } {
     let points = 0;
     let goalsFor = 0;
     let goalsAgainst = 0;
@@ -52,8 +55,8 @@ export const FORMULA_REGISTRY: Record<string, ComparisonFn> = {
     wins: (a, b) => b.won - a.won,
     goalsFor: (a, b) => b.goalsFor - a.goalsFor,
     awayGoalsFor: (a, b, fixtures) => {
-        const awayA = fixtures.filter(f => f.awayTeamId === a.teamId && f.status === 'played');
-        const awayB = fixtures.filter(f => f.awayTeamId === b.teamId && f.status === 'played');
+        const awayA = fixtures.filter((f) => f.awayTeamId === a.teamId && f.status === 'played');
+        const awayB = fixtures.filter((f) => f.awayTeamId === b.teamId && f.status === 'played');
         const ga = awayA.reduce((acc, f) => acc + (f.goalsAway ?? 0), 0);
         const gb = awayB.reduce((acc, f) => acc + (f.goalsAway ?? 0), 0);
         return gb - ga;
@@ -61,10 +64,11 @@ export const FORMULA_REGISTRY: Record<string, ComparisonFn> = {
     // Head-to-head per EFL: within matches between the tied clubs, compare
     // (1) points gained, (2) goal difference, (3) goals scored.
     headToHead: (a, b, fixtures) => {
-        const h2h = fixtures.filter(f =>
-            f.status === 'played' &&
-            ((f.homeTeamId === a.teamId && f.awayTeamId === b.teamId) ||
-                (f.homeTeamId === b.teamId && f.awayTeamId === a.teamId))
+        const h2h = fixtures.filter(
+            (f) =>
+                f.status === 'played' &&
+                ((f.homeTeamId === a.teamId && f.awayTeamId === b.teamId) ||
+                    (f.homeTeamId === b.teamId && f.awayTeamId === a.teamId)),
         );
         if (h2h.length === 0) return 0;
 
@@ -76,14 +80,14 @@ export const FORMULA_REGISTRY: Record<string, ComparisonFn> = {
         const gdB = statsB.goalsFor - statsB.goalsAgainst;
         if (gdB !== gdA) return gdB - gdA;
         return statsB.goalsFor - statsA.goalsFor;
-    }
+    },
 };
 
 export function compareByCriteria(
     a: StandingsRow,
     b: StandingsRow,
     criteria: Array<{ name: string; logicType: string }>,
-    fixtures: Fixture[]
+    fixtures: Fixture[],
 ): number {
     for (const criterion of criteria) {
         const compare = FORMULA_REGISTRY[criterion.logicType];

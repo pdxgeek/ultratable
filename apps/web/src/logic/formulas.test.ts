@@ -1,17 +1,28 @@
-import { describe, it, expect } from 'vitest';
-import { FORMULA_REGISTRY, compareByCriteria } from './formulas';
-import type { StandingsRow } from './formulas';
 import type { Fixture } from '../db';
+import type { StandingsRow } from './formulas';
+
+import { describe, expect, it } from 'vitest';
+
+import { compareByCriteria, FORMULA_REGISTRY } from './formulas';
 
 function makeRow(overrides: Partial<StandingsRow> & { teamId: string }): StandingsRow {
     return {
         position: 0,
         team: { name: overrides.teamId },
-        played: 0, won: 0, drawn: 0, lost: 0,
-        goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0,
-        form: [], recentFixtures: [], nextFixture: null,
-        description: null, lastRefreshed: '',
-        ...overrides
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        points: 0,
+        form: [],
+        recentFixtures: [],
+        nextFixture: null,
+        description: null,
+        lastRefreshed: '',
+        ...overrides,
     };
 }
 
@@ -60,8 +71,28 @@ describe('FORMULA_REGISTRY', () => {
             const a = makeRow({ teamId: 'a' });
             const b = makeRow({ teamId: 'b' });
             const fixtures: Fixture[] = [
-                { id: 'f1', seasonId: 's1', homeTeamId: 'a', awayTeamId: 'b', scheduledAt: '', status: 'played', goalsHome: 2, goalsAway: 1, updatedAt: '' },
-                { id: 'f2', seasonId: 's1', homeTeamId: 'b', awayTeamId: 'a', scheduledAt: '', status: 'played', goalsHome: 1, goalsAway: 1, updatedAt: '' },
+                {
+                    id: 'f1',
+                    seasonId: 's1',
+                    homeTeamId: 'a',
+                    awayTeamId: 'b',
+                    scheduledAt: '',
+                    status: 'played',
+                    goalsHome: 2,
+                    goalsAway: 1,
+                    updatedAt: '',
+                },
+                {
+                    id: 'f2',
+                    seasonId: 's1',
+                    homeTeamId: 'b',
+                    awayTeamId: 'a',
+                    scheduledAt: '',
+                    status: 'played',
+                    goalsHome: 1,
+                    goalsAway: 1,
+                    updatedAt: '',
+                },
             ];
             // a: 3 (win) + 1 (draw) = 4, b: 0 + 1 = 1 → bPoints - aPoints = 1 - 4 = -3
             expect(FORMULA_REGISTRY.headToHead(a, b, fixtures)).toBeLessThan(0);
@@ -77,7 +108,17 @@ describe('FORMULA_REGISTRY', () => {
             const a = makeRow({ teamId: 'a' });
             const b = makeRow({ teamId: 'b' });
             const fixtures: Fixture[] = [
-                { id: 'f1', seasonId: 's1', homeTeamId: 'a', awayTeamId: 'b', scheduledAt: '', status: 'scheduled', goalsHome: 0, goalsAway: 0, updatedAt: '' },
+                {
+                    id: 'f1',
+                    seasonId: 's1',
+                    homeTeamId: 'a',
+                    awayTeamId: 'b',
+                    scheduledAt: '',
+                    status: 'scheduled',
+                    goalsHome: 0,
+                    goalsAway: 0,
+                    updatedAt: '',
+                },
             ];
             expect(FORMULA_REGISTRY.headToHead(a, b, fixtures)).toBe(0);
         });
@@ -86,7 +127,15 @@ describe('FORMULA_REGISTRY', () => {
             const a = makeRow({ teamId: 'a' });
             const b = makeRow({ teamId: 'b' });
             const fixtures: Fixture[] = [
-                { id: 'f1', seasonId: 's1', homeTeamId: 'a', awayTeamId: 'b', scheduledAt: '', status: 'played', updatedAt: '' } as Fixture,
+                {
+                    id: 'f1',
+                    seasonId: 's1',
+                    homeTeamId: 'a',
+                    awayTeamId: 'b',
+                    scheduledAt: '',
+                    status: 'played',
+                    updatedAt: '',
+                } as Fixture,
             ];
             expect(FORMULA_REGISTRY.headToHead(a, b, fixtures)).toBe(0);
         });
@@ -99,7 +148,7 @@ describe('compareByCriteria', () => {
         const b = makeRow({ teamId: 'b', points: 30, goalDifference: 10 });
         const criteria = [
             { name: 'Points', logicType: 'points' },
-            { name: 'GD', logicType: 'goalDiff' }
+            { name: 'GD', logicType: 'goalDiff' },
         ];
         // Points tied → falls through to goalDiff → b wins
         expect(compareByCriteria(a, b, criteria, [])).toBeGreaterThan(0);
@@ -118,7 +167,7 @@ describe('compareByCriteria', () => {
         const b = makeRow({ teamId: 'b', points: 20 });
         const criteria = [
             { name: 'Unknown', logicType: 'xyzzy' },
-            { name: 'Points', logicType: 'points' }
+            { name: 'Points', logicType: 'points' },
         ];
         // Should skip 'xyzzy', then use points → b wins
         expect(compareByCriteria(a, b, criteria, [])).toBeGreaterThan(0);

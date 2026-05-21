@@ -215,7 +215,9 @@
     border-radius: 6px;
     background: var(--surface-bg);
     margin-bottom: 6px;
-    transition: background 0.2s, transform 0.2s;
+    transition:
+        background 0.2s,
+        transform 0.2s;
     cursor: pointer;
 }
 

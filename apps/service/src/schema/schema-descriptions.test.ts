@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { createYoga } from 'graphql-yoga';
+import { describe, expect, it } from 'vitest';
+
 import { builder } from './builder';
 
 import './football';
@@ -26,10 +27,22 @@ async function introspect(query: string) {
 
 // Types defined by our schema that must be fully documented
 const APP_TYPES = [
-    'Venue', 'League', 'Team', 'Season', 'Fixture', 'MatchEvent',
-    'Player', 'Lineup', 'RankingFormula', 'SourceInfo',
-    'CatalogCountry', 'CatalogLeague', 'CatalogSeason',
-    'Job', 'JobExecution', 'SystemLog',
+    'Venue',
+    'League',
+    'Team',
+    'Season',
+    'Fixture',
+    'MatchEvent',
+    'Player',
+    'Lineup',
+    'RankingFormula',
+    'SourceInfo',
+    'CatalogCountry',
+    'CatalogLeague',
+    'CatalogSeason',
+    'Job',
+    'JobExecution',
+    'SystemLog',
     'Graphic',
     'SyncCatalogResult',
 ];
@@ -164,7 +177,7 @@ describe('Schema Description Coverage', () => {
         }`);
 
         const playerQuery = result.data.__schema.queryType.fields.find(
-            (f: { name: string }) => f.name === 'player'
+            (f: { name: string }) => f.name === 'player',
         );
         expect(playerQuery, 'player query should exist').toBeDefined();
 

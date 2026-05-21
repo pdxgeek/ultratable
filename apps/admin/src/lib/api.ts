@@ -12,7 +12,7 @@ export const GRAPHQL_URL = `${API_BASE}/graphql`;
  */
 export async function gqlFetch<T = Record<string, unknown>>(
     query: string,
-    variables?: Record<string, unknown>
+    variables?: Record<string, unknown>,
 ): Promise<T> {
     const response = await fetch(GRAPHQL_URL, {
         method: 'POST',

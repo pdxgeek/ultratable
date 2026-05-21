@@ -1,5 +1,6 @@
-import { useNavigate } from 'react-router-dom';
 import type { Fixture, Team } from '../db';
+
+import { useNavigate } from 'react-router-dom';
 
 interface FixtureRowProps {
     fixture: Fixture;
@@ -48,7 +49,9 @@ export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
                     src={opponent.logo}
                     alt=""
                     className="fixture-row__logo"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                    }}
                 />
             )}
             <span className="fixture-row__name">{opponent?.name ?? 'Unknown'}</span>
@@ -57,16 +60,15 @@ export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
                     {fixture.goalsHome}–{fixture.goalsAway}
                 </span>
             ) : fixture.gameweek ? (
-                <span className="fixture-row__date">
-                    GW {fixture.gameweek}
-                </span>
+                <span className="fixture-row__date">GW {fixture.gameweek}</span>
             ) : (
-                <span className="fixture-row__date">
-                    {formatDate(fixture.scheduledAt)}
-                </span>
+                <span className="fixture-row__date">{formatDate(fixture.scheduledAt)}</span>
             )}
             {resultChar && (
-                <span className={`form-dot ${resultChar}`} style={{ width: 18, height: 18, fontSize: '0.6rem' }}>
+                <span
+                    className={`form-dot ${resultChar}`}
+                    style={{ width: 18, height: 18, fontSize: '0.6rem' }}
+                >
                     {resultChar}
                 </span>
             )}

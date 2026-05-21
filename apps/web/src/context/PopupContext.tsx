@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useRef, useCallback, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { Fixture, Team } from '../db';
+
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 
 interface PopupData {
     fixture: Fixture;
@@ -35,10 +37,13 @@ export function PopupProvider({ children }: { children: ReactNode }) {
         }, 300);
     }, [cancelHide]);
 
-    const showPopup = useCallback((data: PopupData) => {
-        cancelHide();
-        setActivePopup(data);
-    }, [cancelHide]);
+    const showPopup = useCallback(
+        (data: PopupData) => {
+            cancelHide();
+            setActivePopup(data);
+        },
+        [cancelHide],
+    );
 
     const hidePopup = useCallback(() => {
         cancelHide();
@@ -46,7 +51,9 @@ export function PopupProvider({ children }: { children: ReactNode }) {
     }, [cancelHide]);
 
     return (
-        <PopupContext.Provider value={{ activePopup, showPopup, hidePopup, scheduleHide, cancelHide }}>
+        <PopupContext.Provider
+            value={{ activePopup, showPopup, hidePopup, scheduleHide, cancelHide }}
+        >
             {children}
         </PopupContext.Provider>
     );

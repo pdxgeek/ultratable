@@ -1,7 +1,9 @@
-import { useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { usePopup } from '../context/PopupContext';
 import type { Fixture, Team } from '../db';
+
+import { useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { usePopup } from '../context/PopupContext';
 
 interface FormColumnProps {
     form: Array<{ result: 'W' | 'D' | 'L'; fixtureId: string }>;
@@ -13,7 +15,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
     const { showPopup, scheduleHide, cancelHide, hidePopup } = usePopup();
     const navigate = useNavigate();
     const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const fixtureMap = useMemo(() => new Map(fixtures.map(f => [f.id, f])), [fixtures]);
+    const fixtureMap = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures]);
 
     const handleMouseEnter = useCallback(
         (fixtureId: string, el: HTMLElement) => {
@@ -26,7 +28,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                 }
             }, 200);
         },
-        [fixtureMap, showPopup, teamsMap, cancelHide]
+        [fixtureMap, showPopup, teamsMap, cancelHide],
     );
 
     const handleMouseLeave = useCallback(() => {
@@ -36,13 +38,16 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
         scheduleHide();
     }, [scheduleHide]);
 
-    const handleClick = useCallback((fixtureId: string) => {
-        if (hoverTimeoutRef.current) {
-            clearTimeout(hoverTimeoutRef.current);
-        }
-        hidePopup();
-        navigate(`/match/${fixtureId}`);
-    }, [hidePopup, navigate]);
+    const handleClick = useCallback(
+        (fixtureId: string) => {
+            if (hoverTimeoutRef.current) {
+                clearTimeout(hoverTimeoutRef.current);
+            }
+            hidePopup();
+            navigate(`/match/${fixtureId}`);
+        },
+        [hidePopup, navigate],
+    );
 
     return (
         <div style={{ display: 'flex', gap: '4px' }}>
@@ -59,9 +64,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                     {entry.result}
                 </div>
             ))}
-            {form.length === 0 && (
-                <span style={{ color: 'var(--text-muted)' }}>–</span>
-            )}
+            {form.length === 0 && <span style={{ color: 'var(--text-muted)' }}>–</span>}
         </div>
     );
 };

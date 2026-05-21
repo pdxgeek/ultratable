@@ -1,14 +1,14 @@
-import { IFootballProvider } from '../../integrations/types';
 import { ApiFootballProvider } from '../../integrations/api-football';
+import { IFootballProvider } from '../../integrations/types';
 import { IRepository } from '../repository';
-import { PostgresConfigRepository } from './config.repository';
-import { PostgresWorkersRepository } from './workers.repository';
-import { PostgresLeaguesRepository } from './leagues.repository';
-import { PostgresTeamsRepository } from './teams.repository';
-import { PostgresFixturesRepository } from './fixtures.repository';
 import { PostgresCatalogRepository } from './catalog.repository';
-import { PostgresPlayersRepository } from './players.repository';
+import { PostgresConfigRepository } from './config.repository';
+import { PostgresFixturesRepository } from './fixtures.repository';
 import { PostgresGraphicsRepository } from './graphics.repository';
+import { PostgresLeaguesRepository } from './leagues.repository';
+import { PostgresPlayersRepository } from './players.repository';
+import { PostgresTeamsRepository } from './teams.repository';
+import { PostgresWorkersRepository } from './workers.repository';
 
 export {
     PostgresConfigRepository,

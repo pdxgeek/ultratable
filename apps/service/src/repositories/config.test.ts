@@ -1,6 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostgresConfigRepository } from './postgres/config.repository';
 import fs from 'node:fs/promises';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { PostgresConfigRepository } from './postgres/config.repository';
+
 vi.mock('node:fs/promises');
 
 describe('PostgresConfigRepository', () => {
@@ -18,7 +21,8 @@ describe('PostgresConfigRepository', () => {
 
     describe('masking logic', () => {
         it('should mask database URL correctly', async () => {
-            process.env.DATABASE_URL = 'postgresql://postgres:password@db.example.com:5432/postgres';
+            process.env.DATABASE_URL =
+                'postgresql://postgres:password@db.example.com:5432/postgres';
             const masked = await repo.getDatabaseUrlMasked();
             expect(masked).toBe('postgresql://****@db.example.com:5432/postgres');
         });
@@ -51,11 +55,11 @@ describe('PostgresConfigRepository', () => {
 
             expect(fs.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining('.env'),
-                expect.stringContaining('DATABASE_URL=new_url')
+                expect.stringContaining('DATABASE_URL=new_url'),
             );
             expect(fs.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining('.env'),
-                expect.stringContaining('EXISTING=value')
+                expect.stringContaining('EXISTING=value'),
             );
         });
 

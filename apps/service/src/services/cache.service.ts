@@ -7,15 +7,16 @@
  *   - ACTIVE (5m): Frequently changing — live fixtures, player data, config
  */
 import { LRUCache } from 'lru-cache';
+
 import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'CacheService' });
 
 // TTL constants in milliseconds
 export const TTL = {
-    FROZEN: 2 * 60 * 60 * 1000,   // 2 hours
-    STABLE: 30 * 60 * 1000,        // 30 minutes
-    ACTIVE: 5 * 60 * 1000,         // 5 minutes
+    FROZEN: 2 * 60 * 60 * 1000, // 2 hours
+    STABLE: 30 * 60 * 1000, // 30 minutes
+    ACTIVE: 5 * 60 * 1000, // 5 minutes
 } as const;
 
 export type CacheTier = keyof typeof TTL;
@@ -50,10 +51,10 @@ class CacheService {
 
     constructor() {
         this.cache = new LRUCache<string, CacheValue>({
-            max: 2000,              // max entries
-            ttl: TTL.ACTIVE,        // default TTL (overridden per-entry)
-            allowStale: false,      // don't return expired entries
-            updateAgeOnGet: false,  // TTL resets from set() time, not last access
+            max: 2000, // max entries
+            ttl: TTL.ACTIVE, // default TTL (overridden per-entry)
+            allowStale: false, // don't return expired entries
+            updateAgeOnGet: false, // TTL resets from set() time, not last access
         });
 
         logger.info(`Cache initialized (max: 2000 entries)`);

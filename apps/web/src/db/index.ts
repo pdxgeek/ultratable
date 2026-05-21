@@ -1,4 +1,6 @@
-import Dexie, { type Table } from 'dexie';
+import type { Table } from 'dexie';
+
+import Dexie from 'dexie';
 
 export interface SyncState {
     key: string; // e.g., "teams:39:2024" or "fixtures:39:2024"

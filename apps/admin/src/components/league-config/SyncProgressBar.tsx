@@ -1,6 +1,6 @@
-import React from 'react';
-
 import type { Execution } from '../WorkersView';
+
+import React from 'react';
 
 interface Props {
     activeExecution: Execution | null;
@@ -14,7 +14,9 @@ export const SyncProgressBar: React.FC<Props> = ({ activeExecution }) => {
         <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-300">
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">
                 <span>Synchronizing Fixtures...</span>
-                <span className="font-mono">{activeExecution.processedCount} / {activeExecution.totalCount} ({percent}%)</span>
+                <span className="font-mono">
+                    {activeExecution.processedCount} / {activeExecution.totalCount} ({percent}%)
+                </span>
             </div>
             <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/30">
                 <div

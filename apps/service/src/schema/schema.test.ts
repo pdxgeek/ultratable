@@ -13,11 +13,12 @@
  * This guards against the failure mode from #14 (a third arg added to
  * `getFixturesBySeasonId` was missed by the loose mock).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
-import { builder } from './builder';
-import { repository } from '../repositories';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import * as schema from '../db/schema';
+import { repository } from '../repositories';
+import { builder } from './builder';
 
 import './football'; // Ensure football schema is registered
 
@@ -26,15 +27,15 @@ vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
         insert: vi.fn(),
-    }
+    },
 }));
 
 // Mock JobRunner so `syncFixtures` mutation runs its task body synchronously
 // and we can assert on the wired-up repository call.
 vi.mock('../workers/runner', () => ({
     JobRunner: {
-        run: vi.fn().mockImplementation((_name: string, task: () => Promise<unknown>) => task())
-    }
+        run: vi.fn().mockImplementation((_name: string, task: () => Promise<unknown>) => task()),
+    },
 }));
 
 // Replace the repository singleton with a *type-checked* mock. The async
@@ -54,9 +55,17 @@ describe('GraphQL Schema', () => {
 
     it('should query leagues', async () => {
         const mockLeagues = [
-            { id: '1', name: 'Premier League', slug: 'pl', sourceName: 'api-football', sourceId: 39 }
+            {
+                id: '1',
+                name: 'Premier League',
+                slug: 'pl',
+                sourceName: 'api-football',
+                sourceId: 39,
+            },
         ];
-        vi.mocked(repository.leagues.getLeagues).mockResolvedValue(mockLeagues as unknown as typeof schema.leagues.$inferSelect[]);
+        vi.mocked(repository.leagues.getLeagues).mockResolvedValue(
+            mockLeagues as unknown as (typeof schema.leagues.$inferSelect)[],
+        );
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -73,8 +82,8 @@ describe('GraphQL Schema', () => {
                             }
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
         const result = await response.json();
@@ -85,11 +94,20 @@ describe('GraphQL Schema', () => {
 
     it('should query fixtures with delta sync (since)', async () => {
         const mockFixtures = [
-            { id: '1', scheduledAt: new Date().toISOString(), status: 'scheduled', updatedAt: new Date().toISOString(), sourceName: 'api-football', sourceId: 101 }
+            {
+                id: '1',
+                scheduledAt: new Date().toISOString(),
+                status: 'scheduled',
+                updatedAt: new Date().toISOString(),
+                sourceName: 'api-football',
+                sourceId: 101,
+            },
         ];
-        vi.mocked(repository.fixtures.getFixturesBySeasonId).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
+        vi.mocked(repository.fixtures.getFixturesBySeasonId).mockResolvedValue(
+            mockFixtures as unknown as (typeof schema.fixtures.$inferSelect)[],
+        );
 
-        const since = "2026-02-21T00:00:00.000Z";
+        const since = '2026-02-21T00:00:00.000Z';
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -103,14 +121,18 @@ describe('GraphQL Schema', () => {
                         }
                     }
                 `,
-                variables: { since }
-            })
+                variables: { since },
+            }),
         });
 
         const result = await response.json();
         expect(result.data.fixtures).toHaveLength(1);
         // Third arg (forceRefresh) was added in #14 — typed mock catches if it disappears.
-        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date), undefined);
+        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith(
+            'season-uuid-1',
+            expect.any(Date),
+            undefined,
+        );
     });
 
     it('forceRefresh arg is forwarded from query to repository', async () => {
@@ -122,24 +144,28 @@ describe('GraphQL Schema', () => {
             body: JSON.stringify({
                 query: `
                     query { fixtures(seasonId: "s1", forceRefresh: true) { id } }
-                `
-            })
+                `,
+            }),
         });
 
-        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('s1', undefined, true);
+        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith(
+            's1',
+            undefined,
+            true,
+        );
     });
 
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
         vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
-            data: [{ id: 'mock-fixture' }] as unknown as typeof schema.fixtures.$inferSelect[],
-            stats: { processedCount: 1, apiCallsCount: 1 }
+            data: [{ id: 'mock-fixture' }] as unknown as (typeof schema.fixtures.$inferSelect)[],
+            stats: { processedCount: 1, apiCallsCount: 1 },
         });
 
         const adminYoga = createYoga({
             schema: builder.toSchema(),
             context: () => ({
-                user: { id: 'admin-test', roles: ['admin'] }
-            })
+                user: { id: 'admin-test', roles: ['admin'] },
+            }),
         });
 
         const response = await adminYoga.fetch('http://localhost:8080/graphql', {
@@ -152,8 +178,8 @@ describe('GraphQL Schema', () => {
                             id
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
         const result = await response.json();
@@ -165,15 +191,15 @@ describe('GraphQL Schema', () => {
         const userYoga = createYoga({
             schema: builder.toSchema(),
             maskedErrors: false,
-            context: () => ({ user: { id: 'u1', roles: ['user'] } })
+            context: () => ({ user: { id: 'u1', roles: ['user'] } }),
         });
 
         const response = await userYoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{}") { id } }`
-            })
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{}") { id } }`,
+            }),
         });
 
         const result = await response.json();
@@ -185,41 +211,45 @@ describe('GraphQL Schema', () => {
 
     it('admin can call saveLeagueConfig and the parsed JSON reaches the repository', async () => {
         vi.mocked(repository.leagues.updateLeagueConfig).mockResolvedValue({
-            id: 'league-1', name: 'Premier League', sourceId: 39
+            id: 'league-1',
+            name: 'Premier League',
+            sourceId: 39,
         } as unknown as typeof schema.leagues.$inferSelect);
 
         const adminYoga = createYoga({
             schema: builder.toSchema(),
-            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } })
+            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } }),
         });
 
         const response = await adminYoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{\\"promo\\":2}") { id name } }`
-            })
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{\\"promo\\":2}") { id name } }`,
+            }),
         });
 
         const result = await response.json();
         expect(result.errors).toBeUndefined();
         expect(result.data.saveLeagueConfig.id).toBe('league-1');
-        expect(repository.leagues.updateLeagueConfig).toHaveBeenCalledWith('league-1', { promo: 2 });
+        expect(repository.leagues.updateLeagueConfig).toHaveBeenCalledWith('league-1', {
+            promo: 2,
+        });
     });
 
     it('saveLeagueConfig rejects malformed JSON before hitting the repository', async () => {
         const adminYoga = createYoga({
             schema: builder.toSchema(),
             maskedErrors: false,
-            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } })
+            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } }),
         });
 
         const response = await adminYoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "not-json") { id } }`
-            })
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "not-json") { id } }`,
+            }),
         });
 
         const result = await response.json();
@@ -230,18 +260,28 @@ describe('GraphQL Schema', () => {
 
     it('should query season with teams and venue', async () => {
         const mockSeasons = [
-            { id: 'season-1', year: 2024, leagueId: 'league-1', updatedAt: new Date().toISOString() }
+            {
+                id: 'season-1',
+                year: 2024,
+                leagueId: 'league-1',
+                updatedAt: new Date().toISOString(),
+            },
         ];
 
-        vi.mocked(repository.leagues.getLeagueById).mockResolvedValue({ id: 'league-1', sourceId: 39 } as unknown as typeof schema.leagues.$inferSelect);
-        vi.mocked(repository.leagues.getInternalSeasons).mockResolvedValue(mockSeasons as unknown as typeof schema.seasons.$inferSelect[]);
+        vi.mocked(repository.leagues.getLeagueById).mockResolvedValue({
+            id: 'league-1',
+            sourceId: 39,
+        } as unknown as typeof schema.leagues.$inferSelect);
+        vi.mocked(repository.leagues.getInternalSeasons).mockResolvedValue(
+            mockSeasons as unknown as (typeof schema.seasons.$inferSelect)[],
+        );
         vi.mocked(repository.teams.countTeamsInSeason).mockResolvedValue(20);
-        vi.mocked(repository.teams.getTeamsBySeasonId).mockResolvedValue(
-            [{ id: 'team-1', name: 'Arsenal', venueId: 'venue-1' }] as unknown as typeof schema.teams.$inferSelect[]
-        );
-        vi.mocked(repository.teams.getVenuesByIds).mockResolvedValue(
-            [{ id: 'venue-1', name: 'Emirates Stadium' }] as unknown as typeof schema.venues.$inferSelect[]
-        );
+        vi.mocked(repository.teams.getTeamsBySeasonId).mockResolvedValue([
+            { id: 'team-1', name: 'Arsenal', venueId: 'venue-1' },
+        ] as unknown as (typeof schema.teams.$inferSelect)[]);
+        vi.mocked(repository.teams.getVenuesByIds).mockResolvedValue([
+            { id: 'venue-1', name: 'Emirates Stadium' },
+        ] as unknown as (typeof schema.venues.$inferSelect)[]);
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -261,8 +301,8 @@ describe('GraphQL Schema', () => {
                             }
                         }
                     }
-                `
-            })
+                `,
+            }),
         });
 
         const result = await response.json();
@@ -275,12 +315,12 @@ describe('GraphQL Schema', () => {
             const yoga = createYoga({
                 schema: builder.toSchema(),
                 maskedErrors: false,
-                context: () => ({ user: undefined })
+                context: () => ({ user: undefined }),
             });
             const response = await yoga.fetch('http://localhost:8080/graphql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: `{ me }` })
+                body: JSON.stringify({ query: `{ me }` }),
             });
 
             const result = await response.json();
@@ -292,14 +332,14 @@ describe('GraphQL Schema', () => {
             const yoga = createYoga({
                 schema: builder.toSchema(),
                 context: () => ({
-                    user: { id: 'user-123', roles: ['user'] }
-                })
+                    user: { id: 'user-123', roles: ['user'] },
+                }),
             });
 
             const response = await yoga.fetch('http://localhost:8080/graphql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: `{ me }` })
+                body: JSON.stringify({ query: `{ me }` }),
             });
 
             const result = await response.json();
@@ -311,14 +351,14 @@ describe('GraphQL Schema', () => {
             const yoga = createYoga({
                 schema: builder.toSchema(),
                 context: () => ({
-                    user: { id: 'admin-456', roles: ['user', 'admin'] }
-                })
+                    user: { id: 'admin-456', roles: ['user', 'admin'] },
+                }),
             });
 
             const response = await yoga.fetch('http://localhost:8080/graphql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: `{ me }` })
+                body: JSON.stringify({ query: `{ me }` }),
             });
 
             const result = await response.json();
@@ -334,7 +374,7 @@ describe('GraphQL Schema', () => {
                 { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' },
             ];
             vi.mocked(repository.teams.getVenuesBySeasonId).mockResolvedValue(
-                mockVenues as unknown as typeof schema.venues.$inferSelect[]
+                mockVenues as unknown as (typeof schema.venues.$inferSelect)[],
             );
             return mockVenues;
         };
@@ -346,8 +386,8 @@ describe('GraphQL Schema', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `query { venues(seasonId: "season-uuid-1") { id name } }`
-                })
+                    query: `query { venues(seasonId: "season-uuid-1") { id name } }`,
+                }),
             });
 
             const result = await response.json();
@@ -363,8 +403,8 @@ describe('GraphQL Schema', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     query: `query($since: DateTime) { venues(seasonId: "season-uuid-1", since: $since) { id name } }`,
-                    variables: { since: '2026-03-02T00:00:00Z' }
-                })
+                    variables: { since: '2026-03-02T00:00:00Z' },
+                }),
             });
 
             const result = await response.json();

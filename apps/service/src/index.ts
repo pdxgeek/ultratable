@@ -1,14 +1,35 @@
-
-import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
-import { createYoga } from 'graphql-yoga';
-import { builder } from './schema/builder';
-import { createLoaders } from './loaders';
-import { globalLogger } from './services/log.service';
-import { resolveDomainUser, toWebHeaders } from './services/auth.service';
-import { eq } from 'drizzle-orm';
-import { GraphQLError, type ASTNode, type ValidationContext, type ASTVisitor, type ExecutionArgs, type ExecutionResult } from 'graphql';
-import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
+import type {
+    ASTNode,
+    ASTVisitor,
+    ExecutionArgs,
+    ExecutionResult,
+    ValidationContext,
+} from 'graphql';
 import type { Context } from './schema/builder';
+
+import fastifyCookie from '@fastify/cookie';
+import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
+import { eq } from 'drizzle-orm';
+import Fastify, { FastifyReply, FastifyRequest } from 'fastify';
+import { GraphQLError } from 'graphql';
+import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
+import { createYoga } from 'graphql-yoga';
+
+import { auth } from './api/auth';
+import { db } from './db';
+import * as schema from './db/schema';
+import { createLoaders } from './loaders';
+import { builder } from './schema/builder';
+import { resolveDomainUser, toWebHeaders } from './services/auth.service';
+import { globalLogger } from './services/log.service';
+import { seedRankingFormulas } from './services/seed-ranking-formulas';
+
+import './schema/catalog';
+import './schema/config';
+import './schema/football';
+import './schema/graphics';
+import './schema/workers';
 
 type ExecuteFn = (args: ExecutionArgs) => PromiseLike<ExecutionResult> | ExecutionResult;
 type OnExecutePayload = {
@@ -16,19 +37,6 @@ type OnExecutePayload = {
     setExecuteFn: (fn: ExecuteFn) => void;
     executeFn: ExecuteFn;
 };
-
-// Import schema definitions
-import { auth } from './api/auth';
-import './schema/config';
-import './schema/football';
-import './schema/workers';
-import './schema/catalog';
-import './schema/graphics';
-
-// Database instances for development login overrides
-import { db } from './db';
-import * as schema from './db/schema';
-import { seedRankingFormulas } from './services/seed-ranking-formulas';
 
 /**
  * GraphQL Depth Limit Validation Rule
@@ -53,7 +61,7 @@ const REQUEST_TIMEOUT_MS_GUEST = 5_000;
 
 function measureDepth(node: ASTNode, depth: number): number {
     if ('selectionSet' in node && node.selectionSet) {
-        return Math.max(...node.selectionSet.selections.map(s => measureDepth(s, depth + 1)));
+        return Math.max(...node.selectionSet.selections.map((s) => measureDepth(s, depth + 1)));
     }
     return depth;
 }
@@ -65,22 +73,26 @@ function depthLimitRule(context: ValidationContext): ASTVisitor {
             if (depth > MAX_QUERY_DEPTH) {
                 context.reportError(
                     new GraphQLError(
-                        `Query depth ${depth} exceeds maximum allowed depth of ${MAX_QUERY_DEPTH}`
-                    )
+                        `Query depth ${depth} exceeds maximum allowed depth of ${MAX_QUERY_DEPTH}`,
+                    ),
                 );
             }
-        }
+        },
     };
 }
 
 const yoga = createYoga<{
-    req: FastifyRequest
-    reply: FastifyReply
+    req: FastifyRequest;
+    reply: FastifyReply;
 }>({
     schema: builder.toSchema(),
     plugins: [
         {
-            onValidate({ addValidationRule }: { addValidationRule: (rule: (ctx: ValidationContext) => ASTVisitor) => void }) {
+            onValidate({
+                addValidationRule,
+            }: {
+                addValidationRule: (rule: (ctx: ValidationContext) => ASTVisitor) => void;
+            }) {
                 addValidationRule(depthLimitRule);
             },
             onExecute({ args, setExecuteFn, executeFn }: OnExecutePayload) {
@@ -105,7 +117,7 @@ const yoga = createYoga<{
                 }
                 if (complexity > MAX_QUERY_COMPLEXITY) {
                     throw new GraphQLError(
-                        `Query complexity ${complexity} exceeds maximum allowed complexity of ${MAX_QUERY_COMPLEXITY}`
+                        `Query complexity ${complexity} exceeds maximum allowed complexity of ${MAX_QUERY_COMPLEXITY}`,
                     );
                 }
 
@@ -117,8 +129,9 @@ const yoga = createYoga<{
                     let timer: NodeJS.Timeout | undefined;
                     const timeout = new Promise<never>((_, reject) => {
                         timer = setTimeout(
-                            () => reject(new GraphQLError(`Request exceeded ${timeoutMs}ms timeout`)),
-                            timeoutMs
+                            () =>
+                                reject(new GraphQLError(`Request exceeded ${timeoutMs}ms timeout`)),
+                            timeoutMs,
                         );
                     });
                     try {
@@ -127,8 +140,8 @@ const yoga = createYoga<{
                         if (timer) clearTimeout(timer);
                     }
                 });
-            }
-        }
+            },
+        },
     ],
     context: async ({ req }) => {
         const headers = toWebHeaders(req.headers);
@@ -137,7 +150,10 @@ const yoga = createYoga<{
         try {
             session = await auth.api.getSession({ headers });
         } catch {
-            globalLogger.debug({ path: req.url }, 'Auth: malformed/expired cookie — treating as guest');
+            globalLogger.debug(
+                { path: req.url },
+                'Auth: malformed/expired cookie — treating as guest',
+            );
         }
 
         if (!session?.user?.id) {
@@ -152,21 +168,20 @@ const yoga = createYoga<{
             ? { id: domainUser.id, roles: domainUser.roles }
             : { id: session.user.id, roles: ['user'] };
 
-        globalLogger.debug({ userId: user.id, roles: user.roles, path: req.url }, 'Auth: context resolved');
+        globalLogger.debug(
+            { userId: user.id, roles: user.roles, path: req.url },
+            'Auth: context resolved',
+        );
 
         return { req, user, loaders: createLoaders() };
     },
     // We use fastify's built-in error handling
-    logging: globalLogger
-})
-
-import fastifyCors from '@fastify/cors';
-import fastifyCookie from '@fastify/cookie';
-import fastifyRateLimit from '@fastify/rate-limit';
+    logging: globalLogger,
+});
 
 const server = Fastify({
-    logger: false
-})
+    logger: false,
+});
 
 server.register(fastifyCookie);
 
@@ -180,17 +195,19 @@ server.register(fastifyRateLimit, {
 // In dev (ALLOWED_ORIGINS not set), localhost Vite ports are accepted.
 // In production, only explicitly listed origins pass.
 const DEV_ORIGINS = [
-    'http://localhost:5174', 'http://localhost:5175',
-    'http://127.0.0.1:5174', 'http://127.0.0.1:5175',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
 ];
 const allowedOrigins = new Set(
     process.env.ALLOWED_ORIGINS
-        ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-        : DEV_ORIGINS
+        ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+        : DEV_ORIGINS,
 );
 // In dev, always include the localhost origins alongside any ALLOWED_ORIGINS
 if (process.env.NODE_ENV !== 'production') {
-    DEV_ORIGINS.forEach(o => allowedOrigins.add(o));
+    DEV_ORIGINS.forEach((o) => allowedOrigins.add(o));
 }
 
 function isOriginAllowed(origin: string | undefined): boolean {
@@ -221,7 +238,7 @@ server.get('/api/auth/me', async (request, reply) => {
     const domainUser = await resolveDomainUser(session.user.id);
 
     return reply.status(200).send({
-        user: domainUser ?? { id: session.user.id, roles: ['user'] }
+        user: domainUser ?? { id: session.user.id, roles: ['user'] },
     });
 });
 
@@ -244,22 +261,33 @@ server.post('/api/auth/dev-login', async (request, reply) => {
     const email = `dev-${role}@ultratable.local`;
 
     // 1. Check if the domain user exists
-    const domainUsers = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+    const domainUsers = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.email, email))
+        .limit(1);
     let devUser = domainUsers[0];
 
     if (!devUser) {
         globalLogger.info(`[Dev Login] Seeding missing domain user for role: ${role}...`);
-        const insertedUsers = await db.insert(schema.users).values({
-            name: `Dev ${role}`,
-            email: email,
-            roles: [role],
-            emailVerified: true
-        }).returning();
+        const insertedUsers = await db
+            .insert(schema.users)
+            .values({
+                name: `Dev ${role}`,
+                email: email,
+                roles: [role],
+                emailVerified: true,
+            })
+            .returning();
         devUser = insertedUsers[0];
     }
 
     // 2. Check if the auth provider user exists natively in BetterAuth
-    const providerUsers = await db.select().from(schema.authUsers).where(eq(schema.authUsers.email, email)).limit(1);
+    const providerUsers = await db
+        .select()
+        .from(schema.authUsers)
+        .where(eq(schema.authUsers.email, email))
+        .limit(1);
     const providerUser = providerUsers[0];
 
     if (!providerUser) {
@@ -269,30 +297,42 @@ server.post('/api/auth/dev-login', async (request, reply) => {
                 body: {
                     email,
                     password: 'dev-password-123',
-                    name: `Dev ${role}`
-                }
+                    name: `Dev ${role}`,
+                },
             });
 
             // Retrieve the newly minted auth user to establish the bridge link
-            const newProviderUsers = await db.select().from(schema.authUsers).where(eq(schema.authUsers.email, email)).limit(1);
+            const newProviderUsers = await db
+                .select()
+                .from(schema.authUsers)
+                .where(eq(schema.authUsers.email, email))
+                .limit(1);
             if (newProviderUsers[0]) {
-                await db.insert(schema.authLinks).values({
-                    authUserId: newProviderUsers[0].id,
-                    domainUserId: devUser.id
-                }).onConflictDoNothing();
+                await db
+                    .insert(schema.authLinks)
+                    .values({
+                        authUserId: newProviderUsers[0].id,
+                        domainUserId: devUser.id,
+                    })
+                    .onConflictDoNothing();
             }
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e);
-            globalLogger.error({ error: message }, '[Dev Login] Error seeding BetterAuth credentials');
+            globalLogger.error(
+                { error: message },
+                '[Dev Login] Error seeding BetterAuth credentials',
+            );
             return reply.status(500).send({ error: 'Failed to seed dev auth credentials' });
         }
     }
 
-    globalLogger.info(`[Dev Login] Seed verified for: ${email}. The client may now natively sign-in.`);
+    globalLogger.info(
+        `[Dev Login] Seed verified for: ${email}. The client may now natively sign-in.`,
+    );
 
     return reply.status(200).send({
         message: 'Dev User Seeded',
-        user: devUser
+        user: devUser,
     });
 });
 
@@ -335,7 +375,7 @@ server.all('/api/auth/*', async (request, reply) => {
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         server.log.error(`Authentication Error: ${message}`);
-        reply.status(500).send({ error: "Internal authentication error" });
+        reply.status(500).send({ error: 'Internal authentication error' });
     }
 });
 
@@ -348,42 +388,42 @@ server.route({
     handler: async (req, reply) => {
         const response = await yoga.handleNodeRequestAndResponse(req, reply, {
             req,
-            reply
-        })
+            reply,
+        });
         response.headers.forEach((value, key) => {
-            reply.header(key, value)
-        })
+            reply.header(key, value);
+        });
 
-        reply.status(response.status)
-        reply.send(response.body)
-        return reply
-    }
-})
+        reply.status(response.status);
+        reply.send(response.body);
+        return reply;
+    },
+});
 
 /**
  * Graceful Shutdown Handling
  */
-const signals = ['SIGINT', 'SIGTERM']
-signals.forEach(signal => {
+const signals = ['SIGINT', 'SIGTERM'];
+signals.forEach((signal) => {
     process.on(signal, async () => {
-        server.log.info(`[Server] Received ${signal}, starting graceful shutdown...`)
-        await server.close()
-        server.log.info('[Server] Closed successfully.')
-        process.exit(0)
-    })
-})
+        server.log.info(`[Server] Received ${signal}, starting graceful shutdown...`);
+        await server.close();
+        server.log.info('[Server] Closed successfully.');
+        process.exit(0);
+    });
+});
 
 const start = async () => {
     try {
-        const host = process.env.HOST || '0.0.0.0'
-        const port = Number(process.env.PORT) || 8080
-        await server.listen({ host, port })
-        globalLogger.info({ host, port }, `🚀 Server listening on http://${host}:${port}`)
+        const host = process.env.HOST || '0.0.0.0';
+        const port = Number(process.env.PORT) || 8080;
+        await server.listen({ host, port });
+        globalLogger.info({ host, port }, `🚀 Server listening on http://${host}:${port}`);
         await seedRankingFormulas();
     } catch (err) {
-        server.log.error(err)
-        process.exit(1)
+        server.log.error(err);
+        process.exit(1);
     }
-}
+};
 
 start();

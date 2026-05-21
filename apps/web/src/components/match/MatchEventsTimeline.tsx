@@ -1,5 +1,6 @@
-import React from 'react';
 import type { MatchEvent } from './types';
+
+import React from 'react';
 
 interface MatchEventsTimelineProps {
     events: MatchEvent[];
@@ -15,8 +16,7 @@ const eventIcon = (evt: MatchEvent): string => {
 
 const SubstitutionRow: React.FC<{ sub: MatchEvent }> = ({ sub }) => (
     <div className="event-sub">
-        <span className="event-out">{sub.playerName}</span>{' '}
-        <span className="sub-icon">🔁</span>{' '}
+        <span className="event-out">{sub.playerName}</span> <span className="sub-icon">🔁</span>{' '}
         <span className="event-player">{sub.assistName}</span>
     </div>
 );
@@ -58,10 +58,15 @@ const MatchEventsTimeline: React.FC<MatchEventsTimelineProps> = ({ events, homeT
                         return (
                             <div key={i} className="timeline-event">
                                 <div className="event-time">
-                                    {evt.minute}{evt.extraMinute ? `+${evt.extraMinute}` : ''}'
+                                    {evt.minute}
+                                    {evt.extraMinute ? `+${evt.extraMinute}` : ''}'
                                 </div>
-                                <div className={`event-layout ${isHome ? 'event-layout-home' : 'event-layout-away'}`}>
-                                    <div className={`event-details ${isHome ? 'event-details-home' : 'event-details-away'}`}>
+                                <div
+                                    className={`event-layout ${isHome ? 'event-layout-home' : 'event-layout-away'}`}
+                                >
+                                    <div
+                                        className={`event-details ${isHome ? 'event-details-home' : 'event-details-away'}`}
+                                    >
                                         <EventContent evt={evt} />
                                     </div>
                                 </div>

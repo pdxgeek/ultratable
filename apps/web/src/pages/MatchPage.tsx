@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import MatchHeader from '../components/match/MatchHeader';
+import { useNavigate, useParams } from 'react-router-dom';
+
 import MatchEventsTimeline from '../components/match/MatchEventsTimeline';
+import MatchHeader from '../components/match/MatchHeader';
 import TeamLineupColumn from '../components/match/TeamLineupColumn';
 import { useMatchData } from '../hooks/useMatchData';
+
 import './MatchPage.css';
 
 const MatchPage: React.FC = () => {
@@ -18,7 +20,9 @@ const MatchPage: React.FC = () => {
     if (fetching) {
         return (
             <div className="match-page-container">
-                <button className="back-button" onClick={() => navigate('/')}>← Back</button>
+                <button className="back-button" onClick={() => navigate('/')}>
+                    ← Back
+                </button>
                 <div style={{ textAlign: 'center', padding: '60px' }}>
                     <p>Loading match details...</p>
                 </div>
@@ -29,7 +33,9 @@ const MatchPage: React.FC = () => {
     if (error || !fixture) {
         return (
             <div className="match-page-container">
-                <button className="back-button" onClick={() => navigate('/')}>← Back</button>
+                <button className="back-button" onClick={() => navigate('/')}>
+                    ← Back
+                </button>
                 <div style={{ textAlign: 'center', padding: '60px', color: 'red' }}>
                     <p>Error loading match. {error?.message}</p>
                 </div>
@@ -39,7 +45,9 @@ const MatchPage: React.FC = () => {
 
     return (
         <div className="match-page-container">
-            <button className="back-button" onClick={() => navigate('/')}>← Back to Standings</button>
+            <button className="back-button" onClick={() => navigate('/')}>
+                ← Back to Standings
+            </button>
 
             <MatchHeader fixture={fixture} />
 

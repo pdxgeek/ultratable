@@ -1,8 +1,8 @@
-import { StorageProvider } from './storage.provider';
-import { SupabaseStorageProvider } from './supabase-storage.provider';
+import { runtimeMode } from '../config/runtime-mode';
 import { MinIOStorageProvider } from './minio-storage.provider';
 import { NoopStorageProvider } from './noop-storage.provider';
-import { runtimeMode } from '../config/runtime-mode';
+import { StorageProvider } from './storage.provider';
+import { SupabaseStorageProvider } from './supabase-storage.provider';
 
 function createStorageProvider(): StorageProvider {
     if (runtimeMode === 'supabase') return new SupabaseStorageProvider();

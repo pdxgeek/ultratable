@@ -1,6 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+
 import StatCard from './StatCard';
 
 describe('StatCard', () => {
@@ -14,7 +15,7 @@ describe('StatCard', () => {
 
     it('applies error styling when isError is true', () => {
         const { container } = render(
-            <StatCard label="Status" value="Error" subValue="Connection failed" isError={true} />
+            <StatCard label="Status" value="Error" subValue="Connection failed" isError={true} />,
         );
 
         const card = container.firstElementChild;
@@ -23,7 +24,7 @@ describe('StatCard', () => {
 
     it('does not render icon when none provided', () => {
         const { container } = render(
-            <StatCard label="Count" value={0} subValue="None" isError={false} />
+            <StatCard label="Count" value={0} subValue="None" isError={false} />,
         );
 
         // The icon wrapper div should exist but have no SVG child

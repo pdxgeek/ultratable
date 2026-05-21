@@ -4,8 +4,9 @@
  * Tests for the three-tier LRU cache with state-aware TTLs,
  * prefix-based invalidation, and stats tracking.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { cacheService, TTL, fixtureTTL, seasonTTL } from './cache.service';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { cacheService, fixtureTTL, seasonTTL, TTL } from './cache.service';
 
 describe('CacheService', () => {
     beforeEach(() => {
@@ -26,7 +27,10 @@ describe('CacheService', () => {
         });
 
         it('should store and retrieve arrays', () => {
-            const leagues = [{ id: '1', name: 'Premier League' }, { id: '2', name: 'La Liga' }];
+            const leagues = [
+                { id: '1', name: 'Premier League' },
+                { id: '2', name: 'La Liga' },
+            ];
             cacheService.set('leagues', leagues, TTL.STABLE);
             expect(cacheService.get<typeof leagues>('leagues')).toHaveLength(2);
         });
@@ -139,7 +143,7 @@ describe('CacheService', () => {
 
         it('should reset stats', () => {
             cacheService.set('key', 'val', TTL.ACTIVE);
-            cacheService.get('key');  // hit
+            cacheService.get('key'); // hit
             cacheService.get('miss'); // miss
 
             cacheService.clear();

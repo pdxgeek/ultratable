@@ -1,24 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { db } from '../db';
+import { ApiFootballProvider } from '../integrations/api-football';
+import { cacheService } from '../services/cache.service';
 import { PostgresLeaguesRepository } from './postgres/leagues.repository';
 import { PostgresTeamsRepository } from './postgres/teams.repository';
-import { ApiFootballProvider } from '../integrations/api-football';
-import { db } from '../db';
-import { cacheService } from '../services/cache.service';
 
 const mockGet = vi.fn();
 vi.mock('axios', () => ({
     default: {
         create: vi.fn().mockReturnValue({
-            get: (...args: unknown[]) => mockGet(...args)
-        })
-    }
+            get: (...args: unknown[]) => mockGet(...args),
+        }),
+    },
 }));
 
 vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
         insert: vi.fn(),
-    }
+    },
 }));
 
 describe('PostgresLeaguesRepository', () => {
@@ -35,7 +36,7 @@ describe('PostgresLeaguesRepository', () => {
         it('should return existing leagues from database if available', async () => {
             const mockLeagues = [{ id: 'league-uuid', name: 'Premier League', sourceId: 1 }];
             const selectMock = vi.fn().mockReturnValue({
-                from: vi.fn().mockResolvedValue(mockLeagues)
+                from: vi.fn().mockResolvedValue(mockLeagues),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 
@@ -46,7 +47,7 @@ describe('PostgresLeaguesRepository', () => {
 
         it('should return empty array when database is empty', async () => {
             const emptySelectMock = vi.fn().mockReturnValue({
-                from: vi.fn().mockResolvedValue([])
+                from: vi.fn().mockResolvedValue([]),
             });
             vi.mocked(db.select).mockImplementation(emptySelectMock as unknown as typeof db.select);
 
@@ -75,16 +76,37 @@ describe('PostgresTeamsRepository', () => {
             const teamMock = [{ id: 'team-uuid', sourceId: 42, name: 'Arsenal' }];
 
             // Sequential calls for syncTeams + getTeams (read-only at end)
-            const m = vi.fn()
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league lookup in syncTeams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season lookup in syncTeams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) })  // venues
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) })   // teams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) })         // existing graphics
+            const m = vi
+                .fn()
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                }) // league lookup in syncTeams
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                }) // season lookup in syncTeams
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }),
+                }) // venues
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }),
+                }) // teams
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                }) // existing graphics
                 // getTeams (read-only) calls at end of syncTeams:
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) }) // league lookup in getTeams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) }) // season lookup in getTeams
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]) }) }) }); // result
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                }) // league lookup in getTeams
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                }) // season lookup in getTeams
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]),
+                        }),
+                    }),
+                }); // result
 
             vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
 
@@ -93,18 +115,18 @@ describe('PostgresTeamsRepository', () => {
                     response: [
                         {
                             team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' },
-                            venue: { id: 505, name: 'Emirates Stadium' }
-                        }
-                    ]
-                }
+                            venue: { id: 505, name: 'Emirates Stadium' },
+                        },
+                    ],
+                },
             };
             mockGet.mockResolvedValue(mockResponse);
 
             const insertMock = vi.fn().mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
-                })
+                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+                }),
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
@@ -123,16 +145,37 @@ describe('PostgresTeamsRepository', () => {
                 { id: 'team-uuid-2', sourceId: 33, sourceName: 'api-football', name: 'Man Utd' },
             ];
 
-            const m = vi.fn()
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }) // existing graphics
+            const m = vi
+                .fn()
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                }) // existing graphics
                 // getTeams calls:
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock.map(t => ({ team: t }))) }) }) });
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue(teamMock.map((t) => ({ team: t }))),
+                        }),
+                    }),
+                });
 
             vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
 
@@ -141,21 +184,61 @@ describe('PostgresTeamsRepository', () => {
                 .mockResolvedValueOnce({
                     data: {
                         response: [
-                            { team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' }, venue: { id: 505, name: 'Emirates' } },
-                            { team: { id: 33, name: 'Man Utd', code: 'MUN', logo: 'logo-url' }, venue: { id: 505, name: 'Emirates' } },
-                        ]
-                    }
+                            {
+                                team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' },
+                                venue: { id: 505, name: 'Emirates' },
+                            },
+                            {
+                                team: { id: 33, name: 'Man Utd', code: 'MUN', logo: 'logo-url' },
+                                venue: { id: 505, name: 'Emirates' },
+                            },
+                        ],
+                    },
                 })
-                .mockResolvedValueOnce({ data: { response: [{ players: [{ id: 1, name: 'Saka', age: 22, number: 7, position: 'Attacker', photo: null }] }] } })
-                .mockResolvedValueOnce({ data: { response: [{ players: [{ id: 2, name: 'Rashford', age: 27, number: 10, position: 'Attacker', photo: null }] }] } });
+                .mockResolvedValueOnce({
+                    data: {
+                        response: [
+                            {
+                                players: [
+                                    {
+                                        id: 1,
+                                        name: 'Saka',
+                                        age: 22,
+                                        number: 7,
+                                        position: 'Attacker',
+                                        photo: null,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                })
+                .mockResolvedValueOnce({
+                    data: {
+                        response: [
+                            {
+                                players: [
+                                    {
+                                        id: 2,
+                                        name: 'Rashford',
+                                        age: 27,
+                                        number: 10,
+                                        position: 'Attacker',
+                                        photo: null,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                });
 
             const insertMock = vi.fn().mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     onConflictDoUpdate: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{ id: 'player-uuid' }])
+                        returning: vi.fn().mockResolvedValue([{ id: 'player-uuid' }]),
                     }),
-                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
-                })
+                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+                }),
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
@@ -169,33 +252,61 @@ describe('PostgresTeamsRepository', () => {
             const leagueMock = [{ id: 'league-uuid', sourceId: 39 }];
             const seasonMock = [{ id: 'season-uuid' }];
             const venueMock = [{ id: 'venue-uuid', sourceId: 505, sourceName: 'api-football' }];
-            const teamMock = [{ id: 'team-uuid', sourceId: 42, sourceName: 'api-football', name: 'Arsenal' }];
+            const teamMock = [
+                { id: 'team-uuid', sourceId: 42, sourceName: 'api-football', name: 'Arsenal' },
+            ];
 
-            const m = vi.fn()
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }) })
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]) }) }) });
+            const m = vi
+                .fn()
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(venueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(teamMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(leagueMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(seasonMock) }),
+                })
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([{ team: teamMock[0] }]),
+                        }),
+                    }),
+                });
 
             vi.mocked(db.select).mockImplementation(m as unknown as typeof db.select);
 
             mockGet
                 .mockResolvedValueOnce({
                     data: {
-                        response: [{ team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' }, venue: { id: 505, name: 'Emirates' } }]
-                    }
+                        response: [
+                            {
+                                team: { id: 42, name: 'Arsenal', code: 'ARS', logo: 'logo-url' },
+                                venue: { id: 505, name: 'Emirates' },
+                            },
+                        ],
+                    },
                 })
                 .mockRejectedValueOnce(new Error('API rate limit'));
 
             const insertMock = vi.fn().mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined)
-                })
+                    onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+                }),
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 

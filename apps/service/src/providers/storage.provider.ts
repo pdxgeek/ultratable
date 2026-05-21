@@ -8,7 +8,13 @@ export interface StorageProvider {
      * @param upsert Whether to overwrite if the file exists
      * @returns The public URL of the uploaded file
      */
-    upload(bucket: string, path: string, file: Buffer | ArrayBuffer | Blob, mimeType: string, upsert?: boolean): Promise<string>;
+    upload(
+        bucket: string,
+        path: string,
+        file: Buffer | ArrayBuffer | Blob,
+        mimeType: string,
+        upsert?: boolean,
+    ): Promise<string>;
 
     /**
      * Gets the public URL for a given path in a bucket

@@ -17,12 +17,16 @@ interface Props {
 const labelBase = 'block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2';
 
 export const SeasonOverridesEditor: React.FC<Props> = ({
-    configJson, setConfigJson,
+    configJson,
+    setConfigJson,
     leagueDefaultsJson,
     configTeams,
-    helperTeamId, setHelperTeamId,
-    helperPoints, setHelperPoints,
-    helperReason, setHelperReason,
+    helperTeamId,
+    setHelperTeamId,
+    helperPoints,
+    setHelperPoints,
+    helperReason,
+    setHelperReason,
 }) => {
     const appendDeduction = () => {
         let parsed: Record<string, unknown>;
@@ -47,14 +51,21 @@ export const SeasonOverridesEditor: React.FC<Props> = ({
     };
 
     const reset = () => {
-        if (!window.confirm('Replace this season\'s overrides with the league defaults? Unsaved changes will be lost.')) return;
+        if (
+            !window.confirm(
+                "Replace this season's overrides with the league defaults? Unsaved changes will be lost.",
+            )
+        )
+            return;
         setConfigJson(leagueDefaultsJson);
     };
 
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Season Overrides (JSON)</h4>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    Season Overrides (JSON)
+                </h4>
                 <button
                     type="button"
                     onClick={reset}
@@ -76,7 +87,9 @@ export const SeasonOverridesEditor: React.FC<Props> = ({
                     >
                         <option value="">-- Choose a team --</option>
                         {configTeams.map((t) => (
-                            <option key={t.id as string} value={t.id as string}>{t.name as string}</option>
+                            <option key={t.id as string} value={t.id as string}>
+                                {t.name as string}
+                            </option>
                         ))}
                     </select>
                 </div>

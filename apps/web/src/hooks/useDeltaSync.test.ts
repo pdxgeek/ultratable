@@ -1,10 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import 'fake-indexeddb/auto';
-import { renderHook, act } from '@testing-library/react';
-import { useDeltaSync } from './useDeltaSync';
-import { db } from '../db';
-import { useClient } from 'urql';
+
 import type { Fixture } from '../db';
+
+import { act, renderHook } from '@testing-library/react';
+import { useClient } from 'urql';
+
+import { db } from '../db';
+import { useDeltaSync } from './useDeltaSync';
 
 vi.mock('urql', async (importActual) => {
     const actual = await importActual<typeof import('urql')>();
@@ -24,13 +28,13 @@ function makeFixture(overrides: Partial<Fixture> & { id: string }): Fixture {
         goalsHome: 1,
         goalsAway: 0,
         updatedAt: '2026-02-23T10:00:00Z',
-        ...overrides
+        ...overrides,
     };
 }
 
 describe('useDeltaSync', () => {
     const mockClient = {
-        query: vi.fn()
+        query: vi.fn(),
     };
 
     beforeEach(async () => {
@@ -42,14 +46,13 @@ describe('useDeltaSync', () => {
     });
 
     it('should fetch and store new teams', async () => {
-        const mockTeams = [
-            { id: 'team-1', name: 'Team One', updatedAt: '2026-02-23T11:00:00Z' }
-        ];
+        const mockTeams = [{ id: 'team-1', name: 'Team One', updatedAt: '2026-02-23T11:00:00Z' }];
 
         mockClient.query.mockReturnValue({
-            toPromise: () => Promise.resolve({
-                data: { teams: mockTeams, fixtures: [] }
-            })
+            toPromise: () =>
+                Promise.resolve({
+                    data: { teams: mockTeams, fixtures: [] },
+                }),
         });
 
         const { result } = renderHook(() => useDeltaSync());
@@ -68,13 +71,14 @@ describe('useDeltaSync', () => {
     it('should use "since" parameter from local sync state', async () => {
         await db.syncState.put({
             key: 'sync:season:season-1',
-            lastUpdatedAt: '2026-02-23T10:00:00Z'
+            lastUpdatedAt: '2026-02-23T10:00:00Z',
         });
 
         mockClient.query.mockReturnValue({
-            toPromise: () => Promise.resolve({
-                data: { teams: [], fixtures: [] }
-            })
+            toPromise: () =>
+                Promise.resolve({
+                    data: { teams: [], fixtures: [] },
+                }),
         });
 
         const { result } = renderHook(() => useDeltaSync());
@@ -87,9 +91,9 @@ describe('useDeltaSync', () => {
             expect.anything(),
             expect.objectContaining({
                 seasonId: 'season-1',
-                since: '2026-02-23T10:00:00Z'
+                since: '2026-02-23T10:00:00Z',
             }),
-            {} // no stale remediation → default request policy
+            {}, // no stale remediation → default request policy
         );
     });
 
@@ -102,29 +106,37 @@ describe('useDeltaSync', () => {
 
         it('clears watermark when past-due non-terminal fixtures exist in Dexie', async () => {
             // Seed Dexie with a watermark and a stale fixture
-            await db.syncState.put({ key: 'sync:season:season-1', lastUpdatedAt: '2026-02-23T10:00:00Z' });
-            await db.fixtures.put(makeFixture({
-                id: 'stale-fix-1',
-                status: 'scheduled',
-                scheduledAt: PAST_DATE, // past-due
-                goalsHome: null,
-                goalsAway: null,
-            }));
+            await db.syncState.put({
+                key: 'sync:season:season-1',
+                lastUpdatedAt: '2026-02-23T10:00:00Z',
+            });
+            await db.fixtures.put(
+                makeFixture({
+                    id: 'stale-fix-1',
+                    status: 'scheduled',
+                    scheduledAt: PAST_DATE, // past-due
+                    goalsHome: null,
+                    goalsAway: null,
+                }),
+            );
 
             mockClient.query.mockReturnValue({
-                toPromise: () => Promise.resolve({
-                    data: { teams: [], fixtures: [], venues: [] }
-                })
+                toPromise: () =>
+                    Promise.resolve({
+                        data: { teams: [], fixtures: [], venues: [] },
+                    }),
             });
 
             const { result } = renderHook(() => useDeltaSync());
-            await act(async () => { await result.current.sync('season-1'); });
+            await act(async () => {
+                await result.current.sync('season-1');
+            });
 
             // Watermark should have been cleared → query sent with since=null + forceRefresh=true
             expect(mockClient.query).toHaveBeenCalledWith(
                 expect.anything(),
                 expect.objectContaining({ since: null, forceRefresh: true }),
-                expect.objectContaining({ requestPolicy: 'network-only' })
+                expect.objectContaining({ requestPolicy: 'network-only' }),
             );
 
             // syncState should be deleted
@@ -133,7 +145,10 @@ describe('useDeltaSync', () => {
         });
 
         it('keeps watermark when all fixtures are in terminal state', async () => {
-            await db.syncState.put({ key: 'sync:season:season-1', lastUpdatedAt: '2026-02-23T10:00:00Z' });
+            await db.syncState.put({
+                key: 'sync:season:season-1',
+                lastUpdatedAt: '2026-02-23T10:00:00Z',
+            });
             await db.fixtures.bulkPut([
                 makeFixture({ id: 'played-1', status: 'played', scheduledAt: PAST_DATE }),
                 makeFixture({ id: 'postponed-1', status: 'postponed', scheduledAt: PAST_DATE }),
@@ -141,44 +156,65 @@ describe('useDeltaSync', () => {
             ]);
 
             mockClient.query.mockReturnValue({
-                toPromise: () => Promise.resolve({
-                    data: { teams: [], fixtures: [], venues: [] }
-                })
+                toPromise: () =>
+                    Promise.resolve({
+                        data: { teams: [], fixtures: [], venues: [] },
+                    }),
             });
 
             const { result } = renderHook(() => useDeltaSync());
-            await act(async () => { await result.current.sync('season-1'); });
+            await act(async () => {
+                await result.current.sync('season-1');
+            });
 
             // Watermark should be preserved → query sent with since value, no forceRefresh
             expect(mockClient.query).toHaveBeenCalledWith(
                 expect.anything(),
                 expect.objectContaining({ since: '2026-02-23T10:00:00Z' }),
-                {} // no stale fixtures → default request policy
+                {}, // no stale fixtures → default request policy
             );
         });
 
         it('clears watermark when mix of terminal and stale fixtures exist', async () => {
-            await db.syncState.put({ key: 'sync:season:season-1', lastUpdatedAt: '2026-02-23T10:00:00Z' });
+            await db.syncState.put({
+                key: 'sync:season:season-1',
+                lastUpdatedAt: '2026-02-23T10:00:00Z',
+            });
             await db.fixtures.bulkPut([
                 makeFixture({ id: 'played-1', status: 'played', scheduledAt: PAST_DATE }),
-                makeFixture({ id: 'stale-1', status: 'scheduled', scheduledAt: PAST_DATE, goalsHome: null, goalsAway: null }),
-                makeFixture({ id: 'future-1', status: 'scheduled', scheduledAt: FUTURE_DATE, goalsHome: null, goalsAway: null }),
+                makeFixture({
+                    id: 'stale-1',
+                    status: 'scheduled',
+                    scheduledAt: PAST_DATE,
+                    goalsHome: null,
+                    goalsAway: null,
+                }),
+                makeFixture({
+                    id: 'future-1',
+                    status: 'scheduled',
+                    scheduledAt: FUTURE_DATE,
+                    goalsHome: null,
+                    goalsAway: null,
+                }),
             ]);
 
             mockClient.query.mockReturnValue({
-                toPromise: () => Promise.resolve({
-                    data: { teams: [], fixtures: [], venues: [] }
-                })
+                toPromise: () =>
+                    Promise.resolve({
+                        data: { teams: [], fixtures: [], venues: [] },
+                    }),
             });
 
             const { result } = renderHook(() => useDeltaSync());
-            await act(async () => { await result.current.sync('season-1'); });
+            await act(async () => {
+                await result.current.sync('season-1');
+            });
 
             // One stale fixture exists → watermark cleared, forceRefresh sent
             expect(mockClient.query).toHaveBeenCalledWith(
                 expect.anything(),
                 expect.objectContaining({ since: null, forceRefresh: true }),
-                expect.objectContaining({ requestPolicy: 'network-only' })
+                expect.objectContaining({ requestPolicy: 'network-only' }),
             );
         });
 
@@ -187,27 +223,41 @@ describe('useDeltaSync', () => {
             // - Fixtures exist in Dexie
             // - But leagues and seasons tables are empty
             // - The old code chained through leagues → seasons → fixtures and got nothing
-            await db.syncState.put({ key: 'sync:season:season-1', lastUpdatedAt: '2026-02-26T21:00:00Z' });
+            await db.syncState.put({
+                key: 'sync:season:season-1',
+                lastUpdatedAt: '2026-02-26T21:00:00Z',
+            });
             // leagues and seasons are intentionally left EMPTY
             await db.fixtures.bulkPut([
-                makeFixture({ id: 'hull-fix', status: 'scheduled', scheduledAt: PAST_DATE, homeTeamId: 'hull', awayTeamId: 'ipswich', goalsHome: null, goalsAway: null }),
+                makeFixture({
+                    id: 'hull-fix',
+                    status: 'scheduled',
+                    scheduledAt: PAST_DATE,
+                    homeTeamId: 'hull',
+                    awayTeamId: 'ipswich',
+                    goalsHome: null,
+                    goalsAway: null,
+                }),
                 makeFixture({ id: 'other-fix', status: 'played', scheduledAt: PAST_DATE }),
             ]);
 
             mockClient.query.mockReturnValue({
-                toPromise: () => Promise.resolve({
-                    data: { teams: [], fixtures: [], venues: [] }
-                })
+                toPromise: () =>
+                    Promise.resolve({
+                        data: { teams: [], fixtures: [], venues: [] },
+                    }),
             });
 
             const { result } = renderHook(() => useDeltaSync());
-            await act(async () => { await result.current.sync('season-1'); });
+            await act(async () => {
+                await result.current.sync('season-1');
+            });
 
             // With the fix, stale detection works even without leagues/seasons in Dexie
             expect(mockClient.query).toHaveBeenCalledWith(
                 expect.anything(),
                 expect.objectContaining({ since: null, forceRefresh: true }),
-                expect.objectContaining({ requestPolicy: 'network-only' })
+                expect.objectContaining({ requestPolicy: 'network-only' }),
             );
         });
     });

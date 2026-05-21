@@ -1,6 +1,6 @@
-import { builder, requireAdmin } from './builder';
 import { repository } from '../repositories';
 import { cacheService } from '../services/cache.service';
+import { builder, requireAdmin } from './builder';
 
 const ConfigStatusRef = builder.objectRef<{
     isDatabaseConnected: boolean;
@@ -44,14 +44,14 @@ builder.queryField('configStatus', (t) =>
         resolve: async (_root, _args, ctx) => {
             requireAdmin(ctx);
             return {
-                isDatabaseConnected: await repository.config.getDatabaseUrlMasked() !== null,
+                isDatabaseConnected: (await repository.config.getDatabaseUrlMasked()) !== null,
                 apiFootballKeyMasked: await repository.config.getApiFootballKeyMasked(),
                 databaseUrlMasked: await repository.config.getDatabaseUrlMasked(),
                 supabaseUrlMasked: await repository.config.getSupabaseUrl(),
                 supabaseAnonKeyMasked: await repository.config.getSupabaseAnonKeyMasked(),
             };
         },
-    })
+    }),
 );
 
 builder.queryField('cacheStats', (t) =>
@@ -61,7 +61,7 @@ builder.queryField('cacheStats', (t) =>
             requireAdmin(ctx);
             return cacheService.stats();
         },
-    })
+    }),
 );
 
 builder.mutationField('clearCache', (t) =>
@@ -71,7 +71,7 @@ builder.mutationField('clearCache', (t) =>
             cacheService.clear();
             return true;
         },
-    })
+    }),
 );
 
 builder.mutationField('configureDatabase', (t) =>
@@ -83,7 +83,7 @@ builder.mutationField('configureDatabase', (t) =>
             requireAdmin(ctx);
             return repository.config.updateDatabaseUrl(url);
         },
-    })
+    }),
 );
 
 builder.mutationField('configureApiKey', (t) =>
@@ -95,7 +95,7 @@ builder.mutationField('configureApiKey', (t) =>
             requireAdmin(ctx);
             return repository.config.updateApiFootballKey(key);
         },
-    })
+    }),
 );
 
 builder.mutationField('configureSupabase', (t) =>
@@ -108,5 +108,5 @@ builder.mutationField('configureSupabase', (t) =>
             requireAdmin(ctx);
             return repository.config.updateSupabaseConfig(url, anonKey);
         },
-    })
+    }),
 );

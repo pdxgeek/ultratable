@@ -1,35 +1,34 @@
-import { useQuery } from 'urql';
-import { gql } from 'urql';
+import { gql, useQuery } from 'urql';
 
 const PLAYER_QUERY = gql`
-  query GetPlayer($sourceId: Int!, $season: Int!) {
-    player(sourceId: $sourceId, season: $season) {
-      id
-      sourceId
-      name
-      firstname
-      lastname
-      age
-      nationality
-      height
-      weight
-      injured
-      photo
-      statistics
+    query GetPlayer($sourceId: Int!, $season: Int!) {
+        player(sourceId: $sourceId, season: $season) {
+            id
+            sourceId
+            name
+            firstname
+            lastname
+            age
+            nationality
+            height
+            weight
+            injured
+            photo
+            statistics
+        }
     }
-  }
 `;
 
 export function usePlayer(sourceId: number, season: number) {
-  const [result] = useQuery({
-    query: PLAYER_QUERY,
-    variables: { sourceId, season },
-    pause: !sourceId || !season,
-  });
+    const [result] = useQuery({
+        query: PLAYER_QUERY,
+        variables: { sourceId, season },
+        pause: !sourceId || !season,
+    });
 
-  return {
-    player: result.data?.player,
-    isLoading: result.fetching,
-    error: result.error,
-  };
+    return {
+        player: result.data?.player,
+        isLoading: result.fetching,
+        error: result.error,
+    };
 }

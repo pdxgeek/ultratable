@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import type { Graphic, GraphicType } from './types';
+
+import React, { useEffect, useState } from 'react';
+
 import { gqlFetch } from '../../lib/api';
-import { GRAPHIC_TYPES, type Graphic, type GraphicType } from './types';
+import { GRAPHIC_TYPES } from './types';
 
 export type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -16,7 +19,7 @@ export function useGraphics(typeFilter: GraphicType | 'all') {
             for (const t of typesToFetch) {
                 const data = await gqlFetch<{ graphics: Graphic[] }>(
                     `query GetGraphics($type: String!) { graphics(entityType: $type) { id entityType entityId url mimeType metadata sourceUrl createdAt } }`,
-                    { type: t }
+                    { type: t },
                 );
                 if (data.graphics) allGraphics = [...allGraphics, ...data.graphics];
             }
@@ -48,9 +51,7 @@ export async function registerOrAutoSideloadGraphic(
         : `mutation RegisterGraph($entityId: String!, $entityType: String!, $url: String!) {
             registerGraphic(entityId: $entityId, entityType: $entityType, url: $url)
           }`;
-    const variables = isAuto
-        ? { entityId, entityType }
-        : { entityId, entityType, url };
+    const variables = isAuto ? { entityId, entityType } : { entityId, entityType, url };
 
     const data = await gqlFetch<Record<string, string | null>>(query, variables);
     return Boolean(data.registerGraphic || data.autoSideloadGraphic);

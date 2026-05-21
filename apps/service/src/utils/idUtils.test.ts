@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { generateId, generateDeterministicId } from './idUtils';
+import { describe, expect, it } from 'vitest';
+
+import { generateDeterministicId, generateId } from './idUtils';
 
 describe('idUtils', () => {
     describe('generateId', () => {

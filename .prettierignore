@@ -1,0 +1,24 @@
+# Dependencies & build output
+node_modules
+dist
+build
+coverage
+
+# Generated migrations
+apps/service/drizzle
+
+# Lockfiles
+package-lock.json
+
+# Logs & misc
+*.log
+.DS_Store
+
+# Third-party notices
+THIRD_PARTY_NOTICES.txt
+THIRD_PARTY_NOTICES.csv
+
+# Env files
+.env
+.env.*
+!.env.example

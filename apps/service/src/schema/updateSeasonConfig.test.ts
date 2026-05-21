@@ -1,11 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
-import { builder } from './builder';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { repository } from '../repositories';
+import { builder } from './builder';
+
+// Register schema modules AFTER mocks so they pick up the mocked repository.
+import './football';
+import './catalog';
 
 vi.mock('../db', () => ({
     db: {
-        select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        }),
     },
 }));
 
@@ -22,14 +29,12 @@ vi.mock('../services/graphics.service', () => ({
 vi.mock('../repositories', () => ({
     repository: {
         leagues: {
-            updateSeasonConfig: vi.fn().mockResolvedValue({ id: 'season-id', year: 2025, leagueId: 'league-id' }),
+            updateSeasonConfig: vi
+                .fn()
+                .mockResolvedValue({ id: 'season-id', year: 2025, leagueId: 'league-id' }),
         },
     },
 }));
-
-// Register schema modules AFTER mocks so they pick up the mocked repository.
-import './football';
-import './catalog';
 
 const yoga = createYoga({
     schema: builder.toSchema(),
@@ -66,7 +71,7 @@ describe('updateSeasonConfig mutation', () => {
         expect(result.errors).toBeUndefined();
         expect(repository.leagues.updateSeasonConfig).toHaveBeenCalledWith(
             'season-id',
-            expect.objectContaining({ promotion: [1, 2], relegation: [18, 19, 20] })
+            expect.objectContaining({ promotion: [1, 2], relegation: [18, 19, 20] }),
         );
     });
 

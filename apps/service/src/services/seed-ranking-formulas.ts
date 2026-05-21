@@ -9,12 +9,38 @@ import { globalLogger } from './log.service';
  * FORMULA_REGISTRY (apps/web/src/logic/formulas.ts).
  */
 const DEFAULT_FORMULAS = [
-    { id: 'standard_pts', name: 'Points', description: 'Total league points (3 for a win, 1 for a draw).', logicType: 'points' },
-    { id: 'goal_diff', name: 'Goal Difference', description: 'Goals scored minus goals conceded.', logicType: 'goalDiff' },
-    { id: 'goals_for', name: 'Goals For', description: 'Total goals scored across all matches.', logicType: 'goalsFor' },
-    { id: 'head_to_head', name: 'Head-to-Head', description: 'EFL head-to-head: points, then goal difference, then goals scored in matches between the tied clubs.', logicType: 'headToHead' },
+    {
+        id: 'standard_pts',
+        name: 'Points',
+        description: 'Total league points (3 for a win, 1 for a draw).',
+        logicType: 'points',
+    },
+    {
+        id: 'goal_diff',
+        name: 'Goal Difference',
+        description: 'Goals scored minus goals conceded.',
+        logicType: 'goalDiff',
+    },
+    {
+        id: 'goals_for',
+        name: 'Goals For',
+        description: 'Total goals scored across all matches.',
+        logicType: 'goalsFor',
+    },
+    {
+        id: 'head_to_head',
+        name: 'Head-to-Head',
+        description:
+            'EFL head-to-head: points, then goal difference, then goals scored in matches between the tied clubs.',
+        logicType: 'headToHead',
+    },
     { id: 'wins', name: 'Wins', description: 'Total matches won.', logicType: 'wins' },
-    { id: 'away_goals', name: 'Away Goals', description: 'Goals scored in away matches.', logicType: 'awayGoalsFor' },
+    {
+        id: 'away_goals',
+        name: 'Away Goals',
+        description: 'Goals scored in away matches.',
+        logicType: 'awayGoalsFor',
+    },
 ];
 
 export async function seedRankingFormulas(): Promise<void> {

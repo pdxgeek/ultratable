@@ -1,6 +1,7 @@
 import DataLoader from 'dataloader';
-import { repository } from '../repositories';
+
 import * as schema from '../db/schema';
+import { repository } from '../repositories';
 
 type Team = typeof schema.teams.$inferSelect;
 type Venue = typeof schema.venues.$inferSelect;

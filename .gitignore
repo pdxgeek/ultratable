@@ -15,6 +15,9 @@ dist-ssr
 # Coverage artifacts — regenerated on every `npm run test:coverage`
 coverage/
 
+# Lint output artifacts
+lint-report.json
+
 # Environment / secrets — never commit
 .env
 .env.*

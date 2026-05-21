@@ -1,9 +1,11 @@
+import crypto from 'node:crypto';
+
+import axios from 'axios';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, and, inArray, sql } from 'drizzle-orm';
-import axios from 'axios';
 import { storageProvider } from '../providers/storage';
-import crypto from 'node:crypto';
 import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'GraphicsService' });
@@ -37,18 +39,25 @@ export class GraphicsService {
     /**
      * Downloads an image, hashes it, uploads it to Supabase Storage if it doesn't exist,
      * and maps it to the given entity in the database.
-     * 
+     *
      * @param entityId The Postgres UUID of the entity (team, venue, player)
      * @param entityType The type of entity ('team', 'venue', 'player')
      * @param url The external URL to download the image from
      */
-    async registerFromUrl(entityId: string, entityType: string, url: string): Promise<string | null> {
+    async registerFromUrl(
+        entityId: string,
+        entityType: string,
+        url: string,
+    ): Promise<string | null> {
         logger.debug({ entityType, entityId, url }, 'Graphic: registering from URL');
         try {
             // Validate URL scheme to prevent SSRF (e.g., file://, internal IPs)
             const parsed = new URL(url);
             if (!['http:', 'https:'].includes(parsed.protocol)) {
-                logger.warn({ entityType, entityId, url }, `Rejected graphic URL with disallowed protocol: ${parsed.protocol}`);
+                logger.warn(
+                    { entityType, entityId, url },
+                    `Rejected graphic URL with disallowed protocol: ${parsed.protocol}`,
+                );
                 return null;
             }
 
@@ -56,7 +65,8 @@ export class GraphicsService {
             const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
             const buffer = Buffer.from(response.data);
             const contentTypeHeader = response.headers['content-type'];
-            const mimeType: string = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'image/png';
+            const mimeType: string =
+                typeof contentTypeHeader === 'string' ? contentTypeHeader : 'image/png';
 
             // 2. Hash for deduplication
             const contentId = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -64,16 +74,23 @@ export class GraphicsService {
 
             // 3. Upload to Supabase Storage
             // Using upsert: true means if another image had the exact same hash, it just overwrites it safely.
-            const publicUrl = await storageProvider.upload(this.BUCKET_NAME, blobPath, buffer, mimeType, true);
+            const publicUrl = await storageProvider.upload(
+                this.BUCKET_NAME,
+                blobPath,
+                buffer,
+                mimeType,
+                true,
+            );
 
             // 4. Map in Postgres
-            await db.insert(schema.graphics)
+            await db
+                .insert(schema.graphics)
                 .values({
                     entityType,
                     entityId,
                     sourceUrl: url,
                     blobPath,
-                    mimeType
+                    mimeType,
                 })
                 .onConflictDoUpdate({
                     target: [schema.graphics.entityType, schema.graphics.entityId],
@@ -81,8 +98,8 @@ export class GraphicsService {
                         sourceUrl: url,
                         blobPath,
                         mimeType,
-                        updatedAt: new Date()
-                    }
+                        updatedAt: new Date(),
+                    },
                 });
 
             // Bump parent's updatedAt so delta-sync clients re-fetch and pick up the registry URL.
@@ -90,7 +107,10 @@ export class GraphicsService {
 
             return publicUrl;
         } catch (error: unknown) {
-            logger.error({ entityType, entityId, url, error: (error as Error).message }, `Failed to register graphic for ${entityType} ${entityId}`);
+            logger.error(
+                { entityType, entityId, url, error: (error as Error).message },
+                `Failed to register graphic for ${entityType} ${entityId}`,
+            );
             return null;
         }
     }
@@ -103,7 +123,10 @@ export class GraphicsService {
      */
     sideload(entityId: string, entityType: string, url: string): void {
         this.registerFromUrl(entityId, entityType, url).catch((e: Error) =>
-            logger.warn({ error: e.message, entityType, entityId }, `Soft-fail on sideload for ${entityType} ${entityId}`)
+            logger.warn(
+                { error: e.message, entityType, entityId },
+                `Soft-fail on sideload for ${entityType} ${entityId}`,
+            ),
         );
     }
 
@@ -113,14 +136,21 @@ export class GraphicsService {
      * dedup logic in one place so callers don't have to roll their own.
      */
     async sideloadMissing(candidates: SideloadCandidate[]): Promise<void> {
-        const usable = candidates.filter((c): c is SideloadCandidate & { url: string } => Boolean(c.url));
+        const usable = candidates.filter((c): c is SideloadCandidate & { url: string } =>
+            Boolean(c.url),
+        );
         if (usable.length === 0) return;
 
         const existing = await db
             .select({ entityId: schema.graphics.entityId, entityType: schema.graphics.entityType })
             .from(schema.graphics)
-            .where(inArray(schema.graphics.entityId, usable.map(c => c.entityId)));
-        const existingKey = new Set(existing.map(g => `${g.entityType}:${g.entityId}`));
+            .where(
+                inArray(
+                    schema.graphics.entityId,
+                    usable.map((c) => c.entityId),
+                ),
+            );
+        const existingKey = new Set(existing.map((g) => `${g.entityType}:${g.entityId}`));
 
         for (const c of usable) {
             if (existingKey.has(`${c.entityType}:${c.entityId}`)) continue;
@@ -138,8 +168,8 @@ export class GraphicsService {
             .where(
                 and(
                     eq(schema.graphics.entityId, entityId),
-                    eq(schema.graphics.entityType, entityType)
-                )
+                    eq(schema.graphics.entityType, entityType),
+                ),
             );
 
         if (!graphic) return null;
@@ -155,23 +185,33 @@ export class GraphicsService {
 
         if (entityType === 'player') {
             [row] = await db.select().from(schema.players).where(eq(schema.players.id, entityId));
-            if (row?.sourceId) url = `https://media.api-sports.io/football/players/${row.sourceId}.png`;
+            if (row?.sourceId)
+                url = `https://media.api-sports.io/football/players/${row.sourceId}.png`;
         } else if (entityType === 'team') {
             [row] = await db.select().from(schema.teams).where(eq(schema.teams.id, entityId));
-            if (row?.sourceId) url = `https://media.api-sports.io/football/teams/${row.sourceId}.png`;
+            if (row?.sourceId)
+                url = `https://media.api-sports.io/football/teams/${row.sourceId}.png`;
         } else if (entityType === 'venue') {
             [row] = await db.select().from(schema.venues).where(eq(schema.venues.id, entityId));
-            if (row?.sourceId) url = `https://media.api-sports.io/football/venues/${row.sourceId}.png`;
+            if (row?.sourceId)
+                url = `https://media.api-sports.io/football/venues/${row.sourceId}.png`;
         } else if (entityType === 'league') {
             [row] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, entityId));
             if (!row) {
-                [row] = await db.select().from(schema.catalogLeagues).where(eq(schema.catalogLeagues.id, entityId));
+                [row] = await db
+                    .select()
+                    .from(schema.catalogLeagues)
+                    .where(eq(schema.catalogLeagues.id, entityId));
             }
-            if (row?.sourceId) url = `https://media.api-sports.io/football/leagues/${row.sourceId}.png`;
+            if (row?.sourceId)
+                url = `https://media.api-sports.io/football/leagues/${row.sourceId}.png`;
         }
 
         if (!url) {
-            logger.error({ entityType, entityId }, `Could not auto-resolve source URL for ${entityType} ${entityId}`);
+            logger.error(
+                { entityType, entityId },
+                `Could not auto-resolve source URL for ${entityType} ${entityId}`,
+            );
             return null;
         }
 

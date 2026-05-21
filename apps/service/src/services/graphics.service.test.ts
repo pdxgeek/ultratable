@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db', () => ({
     db: {
@@ -9,14 +9,14 @@ vi.mock('../db', () => ({
                 where: vi.fn().mockResolvedValue(undefined),
             })),
         })),
-    }
+    },
 }));
 
 vi.mock('../providers/storage', () => ({
     storageProvider: {
         upload: vi.fn(),
         getPublicUrl: vi.fn(),
-    }
+    },
 }));
 
 vi.mock('axios');
@@ -36,27 +36,36 @@ describe('GraphicsService', () => {
             const testBuffer = Buffer.from('image-bytes');
             (axios.get as ReturnType<typeof vi.fn>).mockResolvedValue({
                 data: testBuffer,
-                headers: { 'content-type': 'image/png' }
+                headers: { 'content-type': 'image/png' },
             });
 
-            (storageProvider.upload as ReturnType<typeof vi.fn>).mockResolvedValue('https://public-url.com/blobs/hash');
+            (storageProvider.upload as ReturnType<typeof vi.fn>).mockResolvedValue(
+                'https://public-url.com/blobs/hash',
+            );
 
             const insertMock = vi.fn().mockReturnValue({
                 values: vi.fn().mockReturnValue({
-                    onConflictDoUpdate: vi.fn().mockResolvedValue(undefined)
-                })
+                    onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                }),
             });
             vi.mocked(db.insert).mockImplementation(insertMock as unknown as typeof db.insert);
 
-            const result = await graphicsService.registerFromUrl('entity-uuid', 'team', 'https://example.com/logo.png');
+            const result = await graphicsService.registerFromUrl(
+                'entity-uuid',
+                'team',
+                'https://example.com/logo.png',
+            );
 
-            expect(axios.get).toHaveBeenCalledWith('https://example.com/logo.png', expect.objectContaining({ responseType: 'arraybuffer' }));
+            expect(axios.get).toHaveBeenCalledWith(
+                'https://example.com/logo.png',
+                expect.objectContaining({ responseType: 'arraybuffer' }),
+            );
             expect(storageProvider.upload).toHaveBeenCalledWith(
                 'graphics',
                 expect.stringContaining('blobs/'),
                 expect.any(Buffer),
                 'image/png',
-                true
+                true,
             );
             expect(db.insert).toHaveBeenCalled();
             expect(result).toBe('https://public-url.com/blobs/hash');
@@ -68,8 +77,12 @@ describe('GraphicsService', () => {
 
             (axios.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-            const result = await graphicsService.registerFromUrl('entity-uuid', 'team', 'https://bad.url/logo.png');
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            const result = await graphicsService.registerFromUrl(
+                'entity-uuid',
+                'team',
+                'https://bad.url/logo.png',
+            );
 
             expect(result).toBeNull();
             consoleSpy.mockRestore();
@@ -84,11 +97,13 @@ describe('GraphicsService', () => {
 
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ blobPath: 'blobs/abc123' }])
-                })
+                    where: vi.fn().mockResolvedValue([{ blobPath: 'blobs/abc123' }]),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
-            (storageProvider.getPublicUrl as ReturnType<typeof vi.fn>).mockReturnValue('https://pub.com/blobs/abc123');
+            (storageProvider.getPublicUrl as ReturnType<typeof vi.fn>).mockReturnValue(
+                'https://pub.com/blobs/abc123',
+            );
 
             const result = await graphicsService.resolveUrl('entity-uuid', 'team');
             expect(result).toBe('https://pub.com/blobs/abc123');
@@ -100,8 +115,8 @@ describe('GraphicsService', () => {
 
             const selectMock = vi.fn().mockReturnValue({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([])
-                })
+                    where: vi.fn().mockResolvedValue([]),
+                }),
             });
             vi.mocked(db.select).mockImplementation(selectMock as unknown as typeof db.select);
 

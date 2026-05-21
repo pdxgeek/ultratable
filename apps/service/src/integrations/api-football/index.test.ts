@@ -12,8 +12,8 @@
  *
  * We mock axios.create so we never make real network calls.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('axios');
 
@@ -29,8 +29,13 @@ function installMockAxios(): MockAxiosInstance {
 }
 
 // Build a fake axios error with an HTTP status code.
-function httpError(status: number, statusText = 'Error'): Error & { response: { status: number; statusText: string } } {
-    const err = new Error(`Request failed with status ${status}`) as Error & { response: { status: number; statusText: string } };
+function httpError(
+    status: number,
+    statusText = 'Error',
+): Error & { response: { status: number; statusText: string } } {
+    const err = new Error(`Request failed with status ${status}`) as Error & {
+        response: { status: number; statusText: string };
+    };
     err.response = { status, statusText };
     return err;
 }
@@ -48,7 +53,9 @@ describe('ApiFootballProvider — error paths', () => {
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
-            await expect(provider.getLeagues()).rejects.toMatchObject({ response: { status: 401 } });
+            await expect(provider.getLeagues()).rejects.toMatchObject({
+                response: { status: 401 },
+            });
         });
 
         it('propagates 404 Not Found from getSeasons', async () => {
@@ -57,7 +64,9 @@ describe('ApiFootballProvider — error paths', () => {
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
-            await expect(provider.getSeasons(999)).rejects.toMatchObject({ response: { status: 404 } });
+            await expect(provider.getSeasons(999)).rejects.toMatchObject({
+                response: { status: 404 },
+            });
         });
 
         it('propagates 429 Rate Limited from getFixtures', async () => {
@@ -66,7 +75,9 @@ describe('ApiFootballProvider — error paths', () => {
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
-            await expect(provider.getFixtures(39, 2024)).rejects.toMatchObject({ response: { status: 429 } });
+            await expect(provider.getFixtures(39, 2024)).rejects.toMatchObject({
+                response: { status: 429 },
+            });
         });
     });
 
@@ -77,7 +88,9 @@ describe('ApiFootballProvider — error paths', () => {
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
-            await expect(provider.getTeams(39, 2024)).rejects.toMatchObject({ response: { status: 500 } });
+            await expect(provider.getTeams(39, 2024)).rejects.toMatchObject({
+                response: { status: 500 },
+            });
         });
 
         it('propagates 503 from getMatchEvents', async () => {
@@ -86,7 +99,9 @@ describe('ApiFootballProvider — error paths', () => {
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
-            await expect(provider.getMatchEvents(100)).rejects.toMatchObject({ response: { status: 503 } });
+            await expect(provider.getMatchEvents(100)).rejects.toMatchObject({
+                response: { status: 503 },
+            });
         });
     });
 
@@ -150,14 +165,24 @@ describe('ApiFootballProvider — error paths', () => {
 
             // 25 ids → two chunks (20 + 5). First chunk fails, second succeeds.
             const baseFixture = {
-                fixture: { id: 100, date: '2024-08-10T15:00:00+00:00', status: { short: 'FT' }, venue: { id: 505 } },
+                fixture: {
+                    id: 100,
+                    date: '2024-08-10T15:00:00+00:00',
+                    status: { short: 'FT' },
+                    venue: { id: 505 },
+                },
                 goals: { home: 1, away: 0 },
                 teams: { home: { id: 42 }, away: { id: 33 } },
-                league: { round: 'Regular Season - 1' }
+                league: { round: 'Regular Season - 1' },
             };
-            instance.get
-                .mockRejectedValueOnce(httpError(500))
-                .mockResolvedValueOnce({ data: { response: [baseFixture, { ...baseFixture, fixture: { ...baseFixture.fixture, id: 101 } }] } });
+            instance.get.mockRejectedValueOnce(httpError(500)).mockResolvedValueOnce({
+                data: {
+                    response: [
+                        baseFixture,
+                        { ...baseFixture, fixture: { ...baseFixture.fixture, id: 101 } },
+                    ],
+                },
+            });
 
             const { ApiFootballProvider } = await import('./index');
             const provider = new ApiFootballProvider();
@@ -166,7 +191,7 @@ describe('ApiFootballProvider — error paths', () => {
             const result = await provider.getFixturesByIds(ids);
 
             expect(result.fixtures).toHaveLength(2);
-            expect(result.fixtures.map(f => f.sourceId)).toEqual([100, 101]);
+            expect(result.fixtures.map((f) => f.sourceId)).toEqual([100, 101]);
             expect(instance.get).toHaveBeenCalledTimes(2);
         });
 

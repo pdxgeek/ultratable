@@ -1,7 +1,7 @@
-import { spawn, exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import net from 'net';
-import { fileURLToPath } from 'url';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -16,10 +16,10 @@ const ALL_PORTS = [API_PORT, ADMIN_PORT, WEB_PORT];
 // repo path prevents us from killing an unrelated ts-node or vite the user
 // has running in another project.
 const ORPHAN_PATTERNS = [
-    'ts-node src/index.ts',     // service (nodemon's child)
-    'nodemon --watch src',       // service supervisor
-    'vite',                      // web/admin Vite dev server
-    'concurrently npm:start:',   // the supervisor that runs the three above
+    'ts-node src/index.ts', // service (nodemon's child)
+    'nodemon --watch src', // service supervisor
+    'vite', // web/admin Vite dev server
+    'concurrently npm:start:', // the supervisor that runs the three above
 ];
 
 function execP(cmd) {
@@ -73,7 +73,7 @@ async function findOrphansForThisRepo() {
             // Confirm the process belongs to this repo by checking its cwd via lsof.
             // `lsof -p PID -d cwd -F n` prints the cwd path on a line prefixed with `n`.
             const { stdout: lsofOut } = await execP(`lsof -p ${pid} -d cwd -F n 2>/dev/null`);
-            const cwdLine = lsofOut.split('\n').find(l => l.startsWith('n'));
+            const cwdLine = lsofOut.split('\n').find((l) => l.startsWith('n'));
             const cwd = cwdLine ? cwdLine.slice(1) : '';
 
             if (cwd.startsWith(REPO_ROOT)) {
@@ -95,7 +95,7 @@ async function killOrphans() {
 async function waitForPortFree(port, { attempts = 20, intervalMs = 250 } = {}) {
     for (let i = 0; i < attempts; i++) {
         if (!(await isPortInUse(port))) return true;
-        await new Promise(r => setTimeout(r, intervalMs));
+        await new Promise((r) => setTimeout(r, intervalMs));
     }
     return false;
 }
@@ -103,7 +103,7 @@ async function waitForPortFree(port, { attempts = 20, intervalMs = 250 } = {}) {
 async function run() {
     console.log('Checking if development environment is already running...');
 
-    const portStates = await Promise.all(ALL_PORTS.map(p => isPortInUse(p)));
+    const portStates = await Promise.all(ALL_PORTS.map((p) => isPortInUse(p)));
     const anyInUse = portStates.some(Boolean);
 
     // Always sweep for repo orphans — even when ports look free, a stuck
@@ -121,7 +121,7 @@ async function run() {
     // for up to 5s. macOS can hold a socket in TIME_WAIT for a few seconds
     // after kill -9 — the previous fixed 1500ms sleep wasn't always enough.
     console.log('\nWaiting for ports to settle...');
-    const settled = await Promise.all(ALL_PORTS.map(p => waitForPortFree(p)));
+    const settled = await Promise.all(ALL_PORTS.map((p) => waitForPortFree(p)));
     const stuck = ALL_PORTS.filter((_, i) => !settled[i]);
     if (stuck.length > 0) {
         console.error(`\n❌ Ports still in use after kill + 5s wait: ${stuck.join(', ')}`);
@@ -131,17 +131,21 @@ async function run() {
 
     console.log('\n✓ All dev ports free. Starting services cleanly.\n');
 
-    const child = spawn('npx', ['concurrently', '"npm:start:service"', '"npm:start:admin"', '"npm:start:web"'], {
-        stdio: 'inherit',
-        shell: true
-    });
+    const child = spawn(
+        'npx',
+        ['concurrently', '"npm:start:service"', '"npm:start:admin"', '"npm:start:web"'],
+        {
+            stdio: 'inherit',
+            shell: true,
+        },
+    );
 
     child.on('close', (code) => {
         process.exit(code);
     });
 }
 
-run().catch(err => {
+run().catch((err) => {
     console.error(err);
     process.exit(1);
 });

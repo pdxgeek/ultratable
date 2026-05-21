@@ -1,9 +1,23 @@
-import { pgTable, uuid, varchar, integer, timestamp, jsonb, pgEnum, unique, boolean, text, primaryKey, index } from 'drizzle-orm/pg-core';
+import {
+    boolean,
+    index,
+    integer,
+    jsonb,
+    pgEnum,
+    pgTable,
+    primaryKey,
+    text,
+    timestamp,
+    unique,
+    uuid,
+    varchar,
+} from 'drizzle-orm/pg-core';
 
 // Helper for UTC timestamps with millisecond precision.
 // Postgres now() returns microsecond precision, but the GraphQL DateTime scalar
 // truncates to milliseconds. Using precision: 3 prevents phantom deltas.
-const utcTimestamp = (name: string) => timestamp(name, { withTimezone: true, mode: 'date', precision: 3 });
+const utcTimestamp = (name: string) =>
+    timestamp(name, { withTimezone: true, mode: 'date', precision: 3 });
 
 export const fixtureStatusEnum = pgEnum('fixture_status', [
     'scheduled',
@@ -13,195 +27,247 @@ export const fixtureStatusEnum = pgEnum('fixture_status', [
     'live',
 ]);
 
-export const jobStatusEnum = pgEnum('job_status', [
-    'running',
-    'success',
-    'failed',
-]);
+export const jobStatusEnum = pgEnum('job_status', ['running', 'success', 'failed']);
 
 // --- Domain User Schema ---
-export const users = pgTable("user", {
-    id: uuid("id").primaryKey().defaultRandom(),
-    name: text("name").notNull(),
-    email: text("email").notNull().unique(),
-    emailVerified: boolean("email_verified").notNull().default(false),
-    image: text("image"),
+export const users = pgTable('user', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    email: text('email').notNull().unique(),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    image: text('image'),
     roles: jsonb('roles').default('["user"]').notNull(),
-    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
-    updatedAt: utcTimestamp("updated_at").defaultNow().notNull()
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
 
 // --- Better Auth Native Schema ---
-export const authUsers = pgTable("auth_user", {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
-    email: text("email").notNull().unique(),
-    emailVerified: boolean("email_verified").notNull(),
-    image: text("image"),
-    createdAt: utcTimestamp("created_at").notNull(),
-    updatedAt: utcTimestamp("updated_at").notNull()
+export const authUsers = pgTable('auth_user', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('email').notNull().unique(),
+    emailVerified: boolean('email_verified').notNull(),
+    image: text('image'),
+    createdAt: utcTimestamp('created_at').notNull(),
+    updatedAt: utcTimestamp('updated_at').notNull(),
 });
 
-export const authSessions = pgTable("auth_session", {
-    id: text("id").primaryKey(),
-    expiresAt: utcTimestamp("expires_at").notNull(),
-    token: text("token").notNull().unique(),
-    createdAt: utcTimestamp("created_at").notNull(),
-    updatedAt: utcTimestamp("updated_at").notNull(),
-    ipAddress: text("ip_address"),
-    userAgent: text("user_agent"),
-    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: 'cascade' })
+export const authSessions = pgTable('auth_session', {
+    id: text('id').primaryKey(),
+    expiresAt: utcTimestamp('expires_at').notNull(),
+    token: text('token').notNull().unique(),
+    createdAt: utcTimestamp('created_at').notNull(),
+    updatedAt: utcTimestamp('updated_at').notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    userId: text('user_id')
+        .notNull()
+        .references(() => authUsers.id, { onDelete: 'cascade' }),
 });
 
-export const authAccounts = pgTable("auth_account", {
-    id: text("id").primaryKey(),
-    accountId: text("account_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
-    accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    idToken: text("id_token"),
-    accessTokenExpiresAt: utcTimestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: utcTimestamp("refresh_token_expires_at"),
-    scope: text("scope"),
-    password: text("password"),
-    createdAt: utcTimestamp("created_at").notNull(),
-    updatedAt: utcTimestamp("updated_at").notNull()
+export const authAccounts = pgTable('auth_account', {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    userId: text('user_id')
+        .notNull()
+        .references(() => authUsers.id, { onDelete: 'cascade' }),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: utcTimestamp('access_token_expires_at'),
+    refreshTokenExpiresAt: utcTimestamp('refresh_token_expires_at'),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: utcTimestamp('created_at').notNull(),
+    updatedAt: utcTimestamp('updated_at').notNull(),
 });
 
-export const authVerifications = pgTable("auth_verification", {
-    id: text("id").primaryKey(),
-    identifier: text("identifier").notNull(),
-    value: text("value").notNull(),
-    expiresAt: utcTimestamp("expires_at").notNull(),
-    createdAt: utcTimestamp("created_at"),
-    updatedAt: utcTimestamp("updated_at")
+export const authVerifications = pgTable('auth_verification', {
+    id: text('id').primaryKey(),
+    identifier: text('identifier').notNull(),
+    value: text('value').notNull(),
+    expiresAt: utcTimestamp('expires_at').notNull(),
+    createdAt: utcTimestamp('created_at'),
+    updatedAt: utcTimestamp('updated_at'),
 });
 
-export const authLinks = pgTable("auth_link", {
-    authUserId: text("auth_user_id").references(() => authUsers.id, { onDelete: 'cascade' }).notNull(),
-    domainUserId: uuid("domain_user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    linkedAt: utcTimestamp("linked_at").defaultNow().notNull()
-}, (table) => ({
-    pk: unique().on(table.authUserId, table.domainUserId)
-}));
+export const authLinks = pgTable(
+    'auth_link',
+    {
+        authUserId: text('auth_user_id')
+            .references(() => authUsers.id, { onDelete: 'cascade' })
+            .notNull(),
+        domainUserId: uuid('domain_user_id')
+            .references(() => users.id, { onDelete: 'cascade' })
+            .notNull(),
+        linkedAt: utcTimestamp('linked_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        pk: unique().on(table.authUserId, table.domainUserId),
+    }),
+);
 // --------------------------
 
-export const catalogCountries = pgTable('catalog_countries', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 255 }).notNull(),
-    code: varchar('code', { length: 10 }),
-    flag: varchar('flag', { length: 500 }),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.name),
-}));
+export const catalogCountries = pgTable(
+    'catalog_countries',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        code: varchar('code', { length: 10 }),
+        flag: varchar('flag', { length: 500 }),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.name),
+    }),
+);
 
-export const catalogLeagues = pgTable('catalog_leagues', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    countryId: uuid('country_id').references(() => catalogCountries.id).notNull(),
-    name: varchar('name', { length: 255 }).notNull(),
-    type: varchar('type', { length: 50 }),
-    logo: varchar('logo', { length: 500 }),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    metadata: jsonb('metadata'),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const catalogLeagues = pgTable(
+    'catalog_leagues',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        countryId: uuid('country_id')
+            .references(() => catalogCountries.id)
+            .notNull(),
+        name: varchar('name', { length: 255 }).notNull(),
+        type: varchar('type', { length: 50 }),
+        logo: varchar('logo', { length: 500 }),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        metadata: jsonb('metadata'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
-export const leagues = pgTable('leagues', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 255 }).notNull(),
-    slug: varchar('slug', { length: 255 }).unique().notNull(),
-    country: varchar('country', { length: 100 }),
-    logo: varchar('logo', { length: 500 }),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    metadata: jsonb('metadata'),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const leagues = pgTable(
+    'leagues',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        slug: varchar('slug', { length: 255 }).unique().notNull(),
+        country: varchar('country', { length: 100 }),
+        logo: varchar('logo', { length: 500 }),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        metadata: jsonb('metadata'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
-export const venues = pgTable('venues', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 255 }).notNull(),
-    city: varchar('city', { length: 255 }),
-    capacity: integer('capacity'),
-    surface: varchar('surface', { length: 100 }),
-    image: varchar('image', { length: 500 }),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const venues = pgTable(
+    'venues',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        city: varchar('city', { length: 255 }),
+        capacity: integer('capacity'),
+        surface: varchar('surface', { length: 100 }),
+        image: varchar('image', { length: 500 }),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
-export const teams = pgTable('teams', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 255 }).notNull(),
-    shortName: varchar('short_name', { length: 100 }),
-    tla: varchar('tla', { length: 10 }), // e.g. "ARS", "CHE"
-    logo: varchar('logo', { length: 500 }),
-    venueId: uuid('venue_id').references(() => venues.id),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    metadata: jsonb('metadata'), // provider specific extras
-    rawResponse: jsonb('raw_response'),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const teams = pgTable(
+    'teams',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        shortName: varchar('short_name', { length: 100 }),
+        tla: varchar('tla', { length: 10 }), // e.g. "ARS", "CHE"
+        logo: varchar('logo', { length: 500 }),
+        venueId: uuid('venue_id').references(() => venues.id),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        metadata: jsonb('metadata'), // provider specific extras
+        rawResponse: jsonb('raw_response'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
-export const seasons = pgTable('seasons', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    leagueId: uuid('league_id').references(() => leagues.id).notNull(),
-    year: integer('year').notNull(),
-    startDate: utcTimestamp('start_date'),
-    endDate: utcTimestamp('end_date'),
-    metadata: jsonb('metadata'),
-    isCompleted: boolean('is_completed').default(false).notNull(),
-    lastLiveSyncAt: utcTimestamp('last_live_sync_at'),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.leagueId, table.year),
-}));
+export const seasons = pgTable(
+    'seasons',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        leagueId: uuid('league_id')
+            .references(() => leagues.id)
+            .notNull(),
+        year: integer('year').notNull(),
+        startDate: utcTimestamp('start_date'),
+        endDate: utcTimestamp('end_date'),
+        metadata: jsonb('metadata'),
+        isCompleted: boolean('is_completed').default(false).notNull(),
+        lastLiveSyncAt: utcTimestamp('last_live_sync_at'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.leagueId, table.year),
+    }),
+);
 
-export const fixtures = pgTable('fixtures', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    leagueId: uuid('league_id').references(() => leagues.id).notNull(),
-    seasonId: uuid('season_id').references(() => seasons.id).notNull(),
-    homeTeamId: uuid('home_team_id').references(() => teams.id).notNull(),
-    awayTeamId: uuid('away_team_id').references(() => teams.id).notNull(),
-    venueId: uuid('venue_id').references(() => venues.id),
-    status: fixtureStatusEnum('status').default('scheduled').notNull(),
-    scheduledAt: utcTimestamp('scheduled_at').notNull(),
-    homeGoals: integer('home_goals'),
-    awayGoals: integer('away_goals'),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    gameweek: integer('gameweek'),
-    metadata: jsonb('metadata'), // events_summary, referee, weather, etc.
-    rawResponse: jsonb('raw_response'), // original API signal
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const fixtures = pgTable(
+    'fixtures',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        leagueId: uuid('league_id')
+            .references(() => leagues.id)
+            .notNull(),
+        seasonId: uuid('season_id')
+            .references(() => seasons.id)
+            .notNull(),
+        homeTeamId: uuid('home_team_id')
+            .references(() => teams.id)
+            .notNull(),
+        awayTeamId: uuid('away_team_id')
+            .references(() => teams.id)
+            .notNull(),
+        venueId: uuid('venue_id').references(() => venues.id),
+        status: fixtureStatusEnum('status').default('scheduled').notNull(),
+        scheduledAt: utcTimestamp('scheduled_at').notNull(),
+        homeGoals: integer('home_goals'),
+        awayGoals: integer('away_goals'),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        gameweek: integer('gameweek'),
+        metadata: jsonb('metadata'), // events_summary, referee, weather, etc.
+        rawResponse: jsonb('raw_response'), // original API signal
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
 export const standingsRows = pgTable('standings_rows', {
     id: varchar('id').primaryKey(), // leagueId-season-teamId
-    seasonId: uuid('season_id').references(() => seasons.id).notNull(),
-    teamId: uuid('team_id').references(() => teams.id).notNull(),
+    seasonId: uuid('season_id')
+        .references(() => seasons.id)
+        .notNull(),
+    teamId: uuid('team_id')
+        .references(() => teams.id)
+        .notNull(),
     position: integer('position').notNull(),
     played: integer('played').default(0).notNull(),
     won: integer('won').default(0).notNull(),
@@ -216,13 +282,21 @@ export const standingsRows = pgTable('standings_rows', {
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
 
-export const seasonsToTeams = pgTable('seasons_to_teams', {
-    seasonId: uuid('season_id').references(() => seasons.id).notNull(),
-    teamId: uuid('team_id').references(() => teams.id).notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.seasonId, table.teamId),
-}));
+export const seasonsToTeams = pgTable(
+    'seasons_to_teams',
+    {
+        seasonId: uuid('season_id')
+            .references(() => seasons.id)
+            .notNull(),
+        teamId: uuid('team_id')
+            .references(() => teams.id)
+            .notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.seasonId, table.teamId),
+    }),
+);
 
 export const jobs = pgTable('jobs', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -236,7 +310,9 @@ export const jobs = pgTable('jobs', {
 
 export const jobExecutions = pgTable('job_executions', {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').references(() => jobs.id).notNull(),
+    jobId: uuid('job_id')
+        .references(() => jobs.id)
+        .notNull(),
     status: jobStatusEnum('status').default('running').notNull(),
     startedAt: utcTimestamp('started_at').defaultNow().notNull(),
     finishedAt: utcTimestamp('finished_at'),
@@ -266,51 +342,75 @@ export const rankingFormulas = pgTable('ranking_formulas', {
     updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
 });
 
-export const players = pgTable('players', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 255 }).notNull(),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    metadata: jsonb('metadata'),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.sourceName, table.sourceId),
-}));
+export const players = pgTable(
+    'players',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        metadata: jsonb('metadata'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+    }),
+);
 
-export const teamRosters = pgTable('team_rosters', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }).notNull(),
-    playerId: uuid('player_id').references(() => players.id, { onDelete: 'cascade' }).notNull(),
-    seasonId: uuid('season_id').references(() => seasons.id, { onDelete: 'cascade' }).notNull(),
-    metadata: jsonb('metadata'), // { squadNumber, position, startedAt, endedAt, registered, ... }
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.teamId, table.playerId, table.seasonId),
-}));
+export const teamRosters = pgTable(
+    'team_rosters',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        teamId: uuid('team_id')
+            .references(() => teams.id, { onDelete: 'cascade' })
+            .notNull(),
+        playerId: uuid('player_id')
+            .references(() => players.id, { onDelete: 'cascade' })
+            .notNull(),
+        seasonId: uuid('season_id')
+            .references(() => seasons.id, { onDelete: 'cascade' })
+            .notNull(),
+        metadata: jsonb('metadata'), // { squadNumber, position, startedAt, endedAt, registered, ... }
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.teamId, table.playerId, table.seasonId),
+    }),
+);
 
-export const playerSourceMappings = pgTable('player_source_mappings', {
-    playerId: uuid('player_id').references(() => players.id, { onDelete: 'cascade' }).notNull(),
-    sourceName: varchar('source_name', { length: 50 }).notNull(),
-    sourceId: integer('source_id').notNull(),
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    pk: primaryKey({ columns: [table.sourceName, table.sourceId] }),
-    playerIdx: index('psm_player_id_idx').on(table.playerId),
-}));
+export const playerSourceMappings = pgTable(
+    'player_source_mappings',
+    {
+        playerId: uuid('player_id')
+            .references(() => players.id, { onDelete: 'cascade' })
+            .notNull(),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.sourceName, table.sourceId] }),
+        playerIdx: index('psm_player_id_idx').on(table.playerId),
+    }),
+);
 
-export const graphics = pgTable('graphics', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    entityType: varchar('entity_type', { length: 50 }).notNull(), // "team", "league", "player", "venue"
-    entityId: uuid('entity_id').notNull(),
-    sourceUrl: varchar('source_url', { length: 2048 }),
-    blobPath: varchar('blob_path', { length: 500 }).notNull(), // The deterministic path: gfx/blobs/{hash}.png
-    mimeType: varchar('mime_type', { length: 100 }).default('image/png').notNull(),
-    metadata: jsonb('metadata'), // dimensions, alt text, etc.
-    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
-    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.entityType, table.entityId),
-}));
+export const graphics = pgTable(
+    'graphics',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        entityType: varchar('entity_type', { length: 50 }).notNull(), // "team", "league", "player", "venue"
+        entityId: uuid('entity_id').notNull(),
+        sourceUrl: varchar('source_url', { length: 2048 }),
+        blobPath: varchar('blob_path', { length: 500 }).notNull(), // The deterministic path: gfx/blobs/{hash}.png
+        mimeType: varchar('mime_type', { length: 100 }).default('image/png').notNull(),
+        metadata: jsonb('metadata'), // dimensions, alt text, etc.
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.entityType, table.entityId),
+    }),
+);

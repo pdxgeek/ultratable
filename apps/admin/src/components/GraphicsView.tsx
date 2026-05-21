@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import type { Graphic, GraphicType } from './graphics/types';
+
+import React, { useMemo, useState } from 'react';
 
 import { GraphicDetailModal } from './graphics/GraphicDetailModal';
 import { GraphicsGallery } from './graphics/GraphicsGallery';
 import { GraphicsUploadForm } from './graphics/GraphicsUploadForm';
 import { useGraphics } from './graphics/useGraphics';
-import type { Graphic, GraphicType } from './graphics/types';
 
 export const GraphicsView: React.FC = () => {
     const [search, setSearch] = useState('');
@@ -14,7 +15,7 @@ export const GraphicsView: React.FC = () => {
     const { graphics, loading, refetch } = useGraphics(typeFilter);
 
     const filteredGraphics = useMemo(
-        () => graphics.filter(g => g.entityId.toLowerCase().includes(search.toLowerCase())),
+        () => graphics.filter((g) => g.entityId.toLowerCase().includes(search.toLowerCase())),
         [graphics, search],
     );
 
@@ -33,7 +34,10 @@ export const GraphicsView: React.FC = () => {
             />
 
             {selectedGraphic && (
-                <GraphicDetailModal graphic={selectedGraphic} onClose={() => setSelectedGraphic(null)} />
+                <GraphicDetailModal
+                    graphic={selectedGraphic}
+                    onClose={() => setSelectedGraphic(null)}
+                />
             )}
         </div>
     );
