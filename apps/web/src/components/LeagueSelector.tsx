@@ -29,7 +29,7 @@ const LeagueSelector: React.FC = () => {
                 <SelectTrigger className="h-9 px-3 text-[0.9rem] font-semibold">
                     <SelectValue placeholder="Select Season" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[1100]">
                     {availableLeagues.map((league) => {
                         const seasons = availableSeasons
                             .filter((s) => s.leagueId === league.id)
