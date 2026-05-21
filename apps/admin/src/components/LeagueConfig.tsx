@@ -4,6 +4,15 @@ import type { Execution, Job } from './WorkersView';
 import React from 'react';
 import { AlertCircle, Database, Globe, Settings } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
 import { ConfigTabs } from './league-config/ConfigTabs';
 import { RankingFormulaInputs } from './league-config/RankingFormulaInputs';
 import { RankingPrioritySelector } from './league-config/RankingPrioritySelector';
@@ -124,21 +133,24 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                         Manage settings, sync fixtures, and configure standings rules.
                     </p>
                 </div>
-                <select
-                    value={selectedConfigLeagueId}
-                    onChange={(e) => {
-                        setSelectedConfigLeagueId(e.target.value);
+                <Select
+                    value={selectedConfigLeagueId || undefined}
+                    onValueChange={(v) => {
+                        setSelectedConfigLeagueId(v);
                         setConfigTab('league');
                     }}
-                    className="bg-slate-900 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 transition-all min-w-[200px]"
                 >
-                    <option value="">Select League...</option>
-                    {managedLeagues.map((l) => (
-                        <option key={l.id} value={l.id}>
-                            {l.name}
-                        </option>
-                    ))}
-                </select>
+                    <SelectTrigger className="min-w-[200px] h-10 bg-slate-900 border-slate-700/50 text-white focus-visible:border-amber-500 focus-visible:ring-0">
+                        <SelectValue placeholder="Select League..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {managedLeagues.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>
+                                {l.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             {selectedConfigLeagueId ? (
@@ -216,13 +228,13 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
                             <AlertCircle className="w-4 h-4" />
                             Changes affect standings compile immediately.
                         </div>
-                        <button
+                        <Button
                             onClick={saveConfig}
                             disabled={actionLoading === 'save-config'}
-                            className="bg-amber-500 hover:bg-amber-400 text-black px-8 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_4px_12px_rgba(245,158,11,0.2)] disabled:opacity-50"
+                            className="h-10 bg-amber-500 hover:bg-amber-400 text-black px-8 font-bold text-sm shadow-[0_4px_12px_rgba(245,158,11,0.2)] disabled:opacity-50"
                         >
                             {actionLoading === 'save-config' ? 'Saving...' : 'Apply Configuration'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             ) : (

@@ -3,21 +3,24 @@ import type { RankingFormula } from '../leagues.types';
 import React, { useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListOrdered } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+
 interface Props {
     available: RankingFormula[];
     appliedIds: string[];
     setAppliedIds: (ids: string[]) => void;
 }
 
-const labelBase = 'block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 pl-1';
-const boxBase =
+const labelClass = 'text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1';
+const listClass =
     'w-full h-64 bg-slate-950 border border-slate-800 rounded-lg overflow-y-auto focus:outline-none focus:border-amber-500 transition-all';
 const itemBase =
     'px-3 py-2 text-sm font-mono cursor-pointer select-none transition-colors border-b border-slate-900/80 last:border-b-0';
 const itemActive = 'bg-amber-500/15 text-amber-300';
 const itemIdle = 'text-slate-300 hover:bg-slate-900';
-const arrowBtn =
-    'w-9 h-9 flex items-center justify-center rounded-md bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-amber-400 disabled:opacity-30 disabled:hover:bg-slate-900 disabled:hover:text-slate-300 transition-colors';
+const arrowClass =
+    'size-9 bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-amber-400 disabled:opacity-30';
 
 export const RankingPrioritySelector: React.FC<Props> = ({
     available,
@@ -68,9 +71,9 @@ export const RankingPrioritySelector: React.FC<Props> = ({
             </div>
 
             <div className="grid grid-cols-[1fr_auto_1fr_auto] gap-3 items-stretch">
-                <div>
-                    <label className={labelBase}>Available</label>
-                    <ul className={boxBase}>
+                <div className="space-y-2">
+                    <Label className={labelClass}>Available</Label>
+                    <ul className={listClass}>
                         {availableList.length === 0 ? (
                             <li className="px-3 py-2 text-xs text-slate-600 italic">
                                 All formulas applied.
@@ -92,29 +95,33 @@ export const RankingPrioritySelector: React.FC<Props> = ({
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 pt-7">
-                    <button
+                    <Button
                         type="button"
+                        size="icon"
+                        variant="outline"
                         onClick={addToApplied}
                         disabled={!availableSel}
-                        className={arrowBtn}
+                        className={arrowClass}
                         title="Add to applied"
                     >
                         <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="button"
+                        size="icon"
+                        variant="outline"
                         onClick={removeFromApplied}
                         disabled={!appliedSel}
-                        className={arrowBtn}
+                        className={arrowClass}
                         title="Remove from applied"
                     >
                         <ChevronLeft className="w-4 h-4" />
-                    </button>
+                    </Button>
                 </div>
 
-                <div>
-                    <label className={labelBase}>Applied (in order)</label>
-                    <ul className={boxBase}>
+                <div className="space-y-2">
+                    <Label className={labelClass}>Applied (in order)</Label>
+                    <ul className={listClass}>
                         {appliedList.length === 0 ? (
                             <li className="px-3 py-2 text-xs text-slate-600 italic">
                                 No criteria applied — using server fallback.
@@ -139,24 +146,28 @@ export const RankingPrioritySelector: React.FC<Props> = ({
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 pt-7">
-                    <button
+                    <Button
                         type="button"
+                        size="icon"
+                        variant="outline"
                         onClick={() => moveApplied(-1)}
                         disabled={!appliedSel}
-                        className={arrowBtn}
+                        className={arrowClass}
                         title="Move up"
                     >
                         <ChevronUp className="w-4 h-4" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="button"
+                        size="icon"
+                        variant="outline"
                         onClick={() => moveApplied(1)}
                         disabled={!appliedSel}
-                        className={arrowBtn}
+                        className={arrowClass}
                         title="Move down"
                     >
                         <ChevronDown className="w-4 h-4" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>
