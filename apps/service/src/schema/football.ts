@@ -124,6 +124,19 @@ builder.objectType(LeagueRef, {
             description:
                 'Country the league operates in (e.g. "England"). Null for international competitions.',
         }),
+        countryFlag: t.string({
+            nullable: true,
+            description:
+                'Public URL to the country flag image, joined from the catalog by country name. Null when no flag is available (e.g. international competitions).',
+            resolve: async (parent) => {
+                if (!parent.country) return null;
+                const countries = await repository.catalog.getCatalogCountries();
+                const match = countries.find(
+                    (c) => c.sourceName === parent.sourceName && c.name === parent.country,
+                );
+                return match?.flag ?? null;
+            },
+        }),
         logo: t.string({
             description:
                 'Public URL to the league logo. Resolved from graphics registry, then upstream.',

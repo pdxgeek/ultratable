@@ -14,12 +14,12 @@ const MatchHeader: React.FC<MatchHeaderProps> = ({ fixture }) => {
     return (
         <div className="bg-bg-accent rounded-xl overflow-hidden mb-[30px] shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
             {venue && (
-                <div className="relative h-[140px] w-full">
+                <div className="relative h-[300px] w-full">
                     {venue.image ? (
                         <img
                             src={venue.image}
                             alt={venue.name}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover object-center"
                         />
                     ) : (
                         <div className="w-full h-full bg-[linear-gradient(45deg,#1a1a2e,#16213e)]" />
