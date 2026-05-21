@@ -71,7 +71,7 @@ export function FixtureDropdown({
 
             {expanded && (
                 <div
-                    className={`absolute z-[100] bg-bg-primary border border-border rounded-md shadow-[0_12px_40px_rgba(0,0,0,0.5)] p-2 min-w-[280px] max-h-[400px] overflow-y-auto text-left ${positionClass} ${alignClass[align]}`}
+                    className={`scrollbar-themed absolute z-[100] bg-bg-primary border border-border rounded-md shadow-[0_12px_40px_rgba(0,0,0,0.5)] p-2 min-w-[280px] max-h-[400px] overflow-y-auto text-left ${positionClass} ${alignClass[align]}`}
                 >
                     <div>
                         <div className="text-[0.7rem] font-bold uppercase text-text-muted pb-1.5 mb-1.5 border-b border-border tracking-wider">

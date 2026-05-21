@@ -67,6 +67,27 @@
     }
 }
 
+@layer components {
+    .scrollbar-themed {
+        scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+        scrollbar-width: thin;
+    }
+    .scrollbar-themed::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    .scrollbar-themed::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .scrollbar-themed::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+    }
+    .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.25);
+    }
+}
+
 @keyframes popup-fade-in {
     from {
         opacity: 0;
