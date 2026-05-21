@@ -19,7 +19,7 @@ const TeamCell: React.FC<TeamCellProps> = ({ team, showLogo = true }) => {
                     className="w-6 h-6 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
                 />
             )}
-            <span className="font-semibold text-text-primary">{team.name}</span>
+            <span className="font-semibold text-text-primary whitespace-nowrap">{team.name}</span>
         </div>
     );
 };

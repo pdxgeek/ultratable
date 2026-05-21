@@ -53,7 +53,7 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
 
     return (
         <div
-            className="flex items-center gap-2 text-sm cursor-pointer"
+            className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap"
             onMouseEnter={(e) => handleMouseEnter(e.currentTarget)}
             onMouseLeave={handleMouseLeave}
         >
@@ -62,7 +62,7 @@ const NextMatchBadge: React.FC<NextMatchBadgeProps> = ({ fixture, teamId, teamsM
                 <img
                     src={opponent.logo}
                     alt={opponent.name}
-                    className="w-4 h-4 object-contain"
+                    className="w-4 h-4 object-contain shrink-0"
                 />
             )}
             <span className="font-medium">{opponent.shortName || opponent.name}</span>
