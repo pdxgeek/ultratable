@@ -1,3 +1,18 @@
+/**
+ * GraphQL schema integration tests.
+ *
+ * These tests boot the real Pothos schema + a `yoga` HTTP wrapper and exercise
+ * queries/mutations. The repository is replaced by a *type-checked* mock
+ * (see `repositories/__fixtures__/mockRepository.ts`) so that:
+ *
+ *   - Adding a method to IRepository fails compilation here, not at runtime.
+ *   - Per-test overrides use `vi.mocked(repository.x.y).mockResolvedValue(...)`
+ *     which preserves the real method signature — passing wrong-shaped args
+ *     to mockResolvedValue is a compile error.
+ *
+ * This guards against the failure mode from #14 (a third arg added to
+ * `getFixturesBySeasonId` was missed by the loose mock).
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
@@ -6,7 +21,7 @@ import * as schema from '../db/schema';
 
 import './football'; // Ensure football schema is registered
 
-// Mock the database
+// Mock the database (Drizzle calls inside un-stubbed code paths must not crash).
 vi.mock('../db', () => ({
     db: {
         select: vi.fn(),
@@ -14,36 +29,21 @@ vi.mock('../db', () => ({
     }
 }));
 
-// Mock JobRunner
+// Mock JobRunner so `syncFixtures` mutation runs its task body synchronously
+// and we can assert on the wired-up repository call.
 vi.mock('../workers/runner', () => ({
     JobRunner: {
-        run: vi.fn().mockImplementation((name, task) => task())
+        run: vi.fn().mockImplementation((_name: string, task: () => Promise<unknown>) => task())
     }
 }));
 
-// Mock the repository
-vi.mock('../repositories', () => ({
-    repository: {
-        leagues: {
-            getLeagues: vi.fn(),
-            getLeagueById: vi.fn(),
-            getInternalSeasons: vi.fn(),
-            getAllInternalSeasons: vi.fn(),
-        },
-        teams: {
-            getTeamsBySeasonId: vi.fn(),
-            getVenuesByIds: vi.fn(),
-            getVenuesBySeasonId: vi.fn(),
-            countTeamsInSeason: vi.fn(),
-        },
-        fixtures: {
-            getFixtures: vi.fn(),
-            getFixturesBySeasonId: vi.fn(),
-            syncFixtures: vi.fn(),
-            countFixturesInSeason: vi.fn(),
-        },
-    }
-}));
+// Replace the repository singleton with a *type-checked* mock. The async
+// factory lets us import the helper through Vite's TS resolver (require()
+// from a hoisted block can't resolve `.ts` files).
+vi.mock('../repositories', async () => {
+    const { buildMockRepository } = await import('../repositories/__fixtures__/mockRepository');
+    return { repository: buildMockRepository() };
+});
 
 describe('GraphQL Schema', () => {
     const yoga = createYoga({ schema: builder.toSchema() });
@@ -109,17 +109,32 @@ describe('GraphQL Schema', () => {
 
         const result = await response.json();
         expect(result.data.fixtures).toHaveLength(1);
+        // Third arg (forceRefresh) was added in #14 — typed mock catches if it disappears.
         expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date), undefined);
     });
 
+    it('forceRefresh arg is forwarded from query to repository', async () => {
+        vi.mocked(repository.fixtures.getFixturesBySeasonId).mockResolvedValue([]);
+
+        await yoga.fetch('http://localhost:8080/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `
+                    query { fixtures(seasonId: "s1", forceRefresh: true) { id } }
+                `
+            })
+        });
+
+        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('s1', undefined, true);
+    });
+
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
-        // This test verifies the mutation wiring
         vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
             data: [{ id: 'mock-fixture' }] as unknown as typeof schema.fixtures.$inferSelect[],
             stats: { processedCount: 1, apiCallsCount: 1 }
         });
 
-        // Mutations now require admin — create a yoga instance with admin context
         const adminYoga = createYoga({
             schema: builder.toSchema(),
             context: () => ({
@@ -144,6 +159,73 @@ describe('GraphQL Schema', () => {
         const result = await response.json();
         expect(result.data.syncFixtures).toBeDefined();
         expect(repository.fixtures.syncFixtures).toHaveBeenCalled();
+    });
+
+    it('non-admin cannot call admin-gated mutations (saveLeagueConfig)', async () => {
+        const userYoga = createYoga({
+            schema: builder.toSchema(),
+            maskedErrors: false,
+            context: () => ({ user: { id: 'u1', roles: ['user'] } })
+        });
+
+        const response = await userYoga.fetch('http://localhost:8080/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{}") { id } }`
+            })
+        });
+
+        const result = await response.json();
+        expect(result.errors).toBeDefined();
+        expect(result.errors[0].message.toLowerCase()).toMatch(/forbidden|admin|unauthor/);
+        // The mutation must not have been forwarded to the repository.
+        expect(repository.leagues.updateLeagueConfig).not.toHaveBeenCalled();
+    });
+
+    it('admin can call saveLeagueConfig and the parsed JSON reaches the repository', async () => {
+        vi.mocked(repository.leagues.updateLeagueConfig).mockResolvedValue({
+            id: 'league-1', name: 'Premier League', sourceId: 39
+        } as unknown as typeof schema.leagues.$inferSelect);
+
+        const adminYoga = createYoga({
+            schema: builder.toSchema(),
+            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } })
+        });
+
+        const response = await adminYoga.fetch('http://localhost:8080/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "{\\"promo\\":2}") { id name } }`
+            })
+        });
+
+        const result = await response.json();
+        expect(result.errors).toBeUndefined();
+        expect(result.data.saveLeagueConfig.id).toBe('league-1');
+        expect(repository.leagues.updateLeagueConfig).toHaveBeenCalledWith('league-1', { promo: 2 });
+    });
+
+    it('saveLeagueConfig rejects malformed JSON before hitting the repository', async () => {
+        const adminYoga = createYoga({
+            schema: builder.toSchema(),
+            maskedErrors: false,
+            context: () => ({ user: { id: 'admin-1', roles: ['admin'] } })
+        });
+
+        const response = await adminYoga.fetch('http://localhost:8080/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `mutation { saveLeagueConfig(id: "league-1", configJson: "not-json") { id } }`
+            })
+        });
+
+        const result = await response.json();
+        expect(result.errors).toBeDefined();
+        expect(result.errors[0].message).toMatch(/Invalid JSON/);
+        expect(repository.leagues.updateLeagueConfig).not.toHaveBeenCalled();
     });
 
     it('should query season with teams and venue', async () => {
@@ -183,8 +265,6 @@ describe('GraphQL Schema', () => {
             })
         });
 
-        // Note: For full integration testing we need a real DB or more complex mocks
-        // Since we mock the repository results, this mainly tests GraphQL wiring
         const result = await response.json();
         expect(result.data.seasons).toHaveLength(1);
         expect(result.data.seasons[0].year).toBe(2024);
@@ -209,7 +289,6 @@ describe('GraphQL Schema', () => {
         });
 
         it('should allow authenticated users and expose their basic role', async () => {
-            // Mock a yoga context that forces a user payload
             const yoga = createYoga({
                 schema: builder.toSchema(),
                 context: () => ({

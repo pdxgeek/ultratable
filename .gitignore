@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Coverage artifacts — regenerated on every `npm run test:coverage`
+coverage/
+
 # Environment / secrets — never commit
 .env
 .env.*

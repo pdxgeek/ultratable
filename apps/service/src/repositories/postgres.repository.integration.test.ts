@@ -22,7 +22,7 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
     };
 
     beforeEach(async () => {
-        if (!db) return;
+        expect(db, 'DATABASE_URL must be set').toBeTruthy();
         // Clean up test data
         await db.delete(schema.graphics).where(eq(schema.graphics.blobPath, testGraphic.blobPath));
         await db.delete(schema.rankingFormulas).where(eq(schema.rankingFormulas.id, testFormula.id));

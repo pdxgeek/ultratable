@@ -254,3 +254,71 @@ describe('TTL constants', () => {
         expect(TTL.ACTIVE).toBe(5 * 60 * 1000);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Raw API cache vs Domain cache isolation (AI_README_FIRST.MD §3)
+//
+// Raw API cache keys:   [endpoint]_[remoteId]_[season]    e.g. fixtures_40_2025
+// Domain cache keys:    domain_[type]_[internalId]        e.g. domain_fixtures_<uuid>
+//
+// These conventions must never overlap. A league deletion (new UUID on re-add)
+// must wipe the domain cache slice but leave the raw API cache intact — we
+// still want to skip the upstream call for the same provider+season.
+// ---------------------------------------------------------------------------
+describe('raw vs domain cache key isolation', () => {
+    beforeEach(() => cacheService.clear());
+
+    it('prefix invalidation of domain entries leaves raw API entries alone', () => {
+        cacheService.set('fixtures_40_2025', ['raw1'], TTL.FROZEN);
+        cacheService.set('domain_fixtures_uuid-A', ['mapped1'], TTL.STABLE);
+        cacheService.set('domain_fixtures_uuid-B', ['mapped2'], TTL.STABLE);
+
+        cacheService.invalidate('domain_fixtures');
+
+        expect(cacheService.get('domain_fixtures_uuid-A')).toBeUndefined();
+        expect(cacheService.get('domain_fixtures_uuid-B')).toBeUndefined();
+        expect(cacheService.get('fixtures_40_2025')).toEqual(['raw1']);
+    });
+
+    it('simulated league delete + recreate: raw cache survives, domain cache is fresh per UUID', () => {
+        // Initial state: league had UUID-OLD; both raw and domain caches populated.
+        cacheService.set('fixtures_40_2025', [{ sourceId: 1 }], TTL.FROZEN); // raw — keyed by provider
+        cacheService.set('domain_fixtures_UUID-OLD', [{ id: 'a' }], TTL.STABLE);
+
+        // League is deleted — only the domain slice for that UUID is invalidated.
+        cacheService.invalidate('domain_fixtures_UUID-OLD');
+
+        // League is re-added — gets UUID-NEW. Domain cache for UUID-NEW is naturally empty.
+        expect(cacheService.get('domain_fixtures_UUID-NEW')).toBeUndefined();
+        // Raw cache for the upstream provider data is still warm — no extra API call.
+        expect(cacheService.get('fixtures_40_2025')).toEqual([{ sourceId: 1 }]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// LRU eviction under pressure
+//
+// The LRU cache has max=2000. Writing more than that should evict
+// least-recently-used entries, not block writes or grow unbounded.
+// ---------------------------------------------------------------------------
+describe('LRU eviction under pressure', () => {
+    beforeEach(() => cacheService.clear());
+
+    it('caps size at maxSize (2000) when more entries are written', () => {
+        for (let i = 0; i < 2500; i++) {
+            cacheService.set(`k${i}`, i, TTL.STABLE);
+        }
+        const stats = cacheService.stats();
+        expect(stats.size).toBeLessThanOrEqual(2000);
+        expect(stats.size).toBeGreaterThan(0);
+    });
+
+    it('evicts the oldest entries first when capacity is exceeded', () => {
+        for (let i = 0; i < 2500; i++) {
+            cacheService.set(`k${i}`, i, TTL.STABLE);
+        }
+        // The first 500 keys should have been evicted; the most recent must remain.
+        expect(cacheService.get('k0')).toBeUndefined();
+        expect(cacheService.get('k2499')).toBe(2499);
+    });
+});
