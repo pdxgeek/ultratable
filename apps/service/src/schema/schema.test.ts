@@ -17,6 +17,7 @@ import { createYoga } from 'graphql-yoga';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as schema from '../db/schema';
+import { createLoaders } from '../loaders';
 import { repository } from '../repositories';
 import { builder } from './builder';
 
@@ -47,7 +48,14 @@ vi.mock('../repositories', async () => {
 });
 
 describe('GraphQL Schema', () => {
-    const yoga = createYoga({ schema: builder.toSchema() });
+    // Wire DataLoaders into the request context so nested resolvers (Team.venue,
+    // Fixture.homeTeam, etc.) don't crash with "Cannot read properties of
+    // undefined (reading 'venueLoader')" — that crash was the symptom cited in
+    // issue #50 and is what the new loaders/index.test.ts pins.
+    const yoga = createYoga({
+        schema: builder.toSchema(),
+        context: () => ({ loaders: createLoaders() }),
+    });
 
     beforeEach(() => {
         vi.clearAllMocks();
