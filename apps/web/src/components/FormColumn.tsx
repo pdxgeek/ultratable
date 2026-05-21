@@ -11,6 +11,12 @@ interface FormColumnProps {
     teamsMap: Map<string, Team>;
 }
 
+const dotColor: Record<'W' | 'D' | 'L', string> = {
+    W: 'bg-accent-green',
+    D: 'bg-text-muted',
+    L: 'bg-accent-red',
+};
+
 const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => {
     const { showPopup, scheduleHide, cancelHide, hidePopup } = usePopup();
     const navigate = useNavigate();
@@ -50,13 +56,12 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
     );
 
     return (
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div className="flex gap-1">
             {form.map((entry, idx) => (
                 <div
                     key={idx}
-                    className={`form-dot ${entry.result}`}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white cursor-pointer ${dotColor[entry.result]}`}
                     title={entry.result === 'W' ? 'Win' : entry.result === 'D' ? 'Draw' : 'Loss'}
-                    style={{ cursor: 'pointer' }}
                     onMouseEnter={(e) => handleMouseEnter(entry.fixtureId, e.currentTarget)}
                     onMouseLeave={handleMouseLeave}
                     onClick={() => handleClick(entry.fixtureId)}
@@ -64,7 +69,7 @@ const FormColumn: React.FC<FormColumnProps> = ({ form, fixtures, teamsMap }) => 
                     {entry.result}
                 </div>
             ))}
-            {form.length === 0 && <span style={{ color: 'var(--text-muted)' }}>–</span>}
+            {form.length === 0 && <span className="text-text-muted">–</span>}
         </div>
     );
 };

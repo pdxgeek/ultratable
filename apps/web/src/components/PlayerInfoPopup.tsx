@@ -2,8 +2,6 @@ import React from 'react';
 
 import { usePlayer } from '../hooks/usePlayer';
 
-import './PlayerInfoPopup.css';
-
 interface PlayerInfoPopupProps {
     playerId: number;
     season: number;
@@ -26,6 +24,12 @@ interface PlayerStats {
     cards?: { yellow?: number; red?: number };
 }
 
+const popupShell =
+    'fixed z-[999999] min-w-[300px] max-w-[340px] bg-[rgba(18,18,28,0.95)] backdrop-blur-2xl border border-white/[0.08] rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden [animation:player-popup-in_0.15s_ease-out]';
+
+const shimmerBg =
+    'bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_25%,rgba(255,255,255,0.08)_50%,rgba(255,255,255,0.04)_75%)] bg-[length:200%_100%] [animation:shimmer_1.5s_infinite]';
+
 const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
     playerId,
     season,
@@ -43,21 +47,21 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
     if (left < 10) left = 10;
     if (left + 320 > window.innerWidth - 10) left = window.innerWidth - 330;
 
-    const style: React.CSSProperties = {
-        position: 'fixed',
-        top: `${top}px`,
-        left: `${left}px`,
-    };
+    const style: React.CSSProperties = { top: `${top}px`, left: `${left}px` };
 
     if (isLoading)
         return (
-            <div className="player-popup" style={style}>
-                <div className="player-popup__loading">
-                    <div className="player-popup__loading-photo" />
-                    <div className="player-popup__loading-lines">
-                        <div className="player-popup__loading-line" />
-                        <div className="player-popup__loading-line" />
-                        <div className="player-popup__loading-line" />
+            <div className={popupShell} style={style}>
+                <div className="flex items-center gap-3.5 px-4 py-3.5">
+                    <div className={`w-[72px] h-[72px] rounded-[10px] shrink-0 ${shimmerBg}`} />
+                    <div className="flex-1 flex flex-col gap-2">
+                        <div className={`h-3 rounded ${shimmerBg} w-4/5`} />
+                        <div
+                            className={`h-3 rounded ${shimmerBg} w-[55%] [animation-delay:0.1s]`}
+                        />
+                        <div
+                            className={`h-3 rounded ${shimmerBg} w-2/5 [animation-delay:0.2s]`}
+                        />
                     </div>
                 </div>
             </div>
@@ -66,22 +70,21 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
     if (!player) {
         const initials = String(playerId).slice(0, 2);
         return (
-            <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-                <button className="player-popup__close" onClick={onClose}>
-                    ✕
-                </button>
-                <div className="player-popup__header">
-                    <div className="player-popup__photo-placeholder">{initials}</div>
-                    <div className="player-popup__identity">
-                        <h3 className="player-popup__name">Player #{playerId}</h3>
-                        <p className="player-popup__nationality">Stats Unavailable</p>
+            <div className={popupShell} style={style} onClick={(e) => e.stopPropagation()}>
+                <CloseButton onClose={onClose} />
+                <div className="flex items-center gap-3.5 px-4 py-3.5 bg-[linear-gradient(135deg,rgba(100,120,255,0.08),rgba(140,80,220,0.06))] border-b border-white/[0.06]">
+                    <PhotoPlaceholder>{initials}</PhotoPlaceholder>
+                    <div className="flex-1 overflow-hidden">
+                        <h3 className="m-0 text-base font-bold text-white leading-tight">
+                            Player #{playerId}
+                        </h3>
+                        <p className="mt-1 text-[0.78rem] text-white/45">Stats Unavailable</p>
                     </div>
                 </div>
             </div>
         );
     }
 
-    // Pick the stats entry matching the current league, or fall back to most appearances
     const currentStats = (() => {
         if (!player.statistics?.length) return null;
         if (leagueSourceId) {
@@ -90,7 +93,6 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
             );
             if (match) return match as PlayerStats;
         }
-        // Fallback: pick entry with most appearances
         return player.statistics.reduce(
             (best: PlayerStats, s: PlayerStats) =>
                 (s.games?.appearences || 0) > (best?.games?.appearences || 0) ? s : best,
@@ -99,55 +101,60 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
     })();
 
     return (
-        <div className="player-popup" style={style} onClick={(e) => e.stopPropagation()}>
-            <button className="player-popup__close" onClick={onClose}>
-                ✕
-            </button>
+        <div className={popupShell} style={style} onClick={(e) => e.stopPropagation()}>
+            <CloseButton onClose={onClose} />
 
-            {/* Header: Photo + Name */}
-            <div className="player-popup__header">
+            <div className="flex items-center gap-3.5 px-4 py-3.5 bg-[linear-gradient(135deg,rgba(100,120,255,0.08),rgba(140,80,220,0.06))] border-b border-white/[0.06]">
                 {player.photo ? (
-                    <img src={player.photo} alt={player.name} className="player-popup__photo" />
+                    <img
+                        src={player.photo}
+                        alt={player.name}
+                        className="w-[72px] h-[72px] rounded-[10px] object-cover border-2 border-white/[0.12] shrink-0"
+                    />
                 ) : (
-                    <div className="player-popup__photo-placeholder">
+                    <PhotoPlaceholder>
                         {player.name
                             ?.split(' ')
                             .map((n: string) => n[0])
                             .join('')
                             .slice(0, 2)
                             .toUpperCase()}
-                    </div>
+                    </PhotoPlaceholder>
                 )}
-                <div className="player-popup__identity">
-                    <h3 className="player-popup__name">{player.name}</h3>
+                <div className="flex-1 overflow-hidden">
+                    <h3 className="m-0 text-base font-bold text-white leading-tight">
+                        {player.name}
+                    </h3>
                     {player.nationality && (
-                        <p className="player-popup__nationality">{player.nationality}</p>
+                        <p className="mt-1 text-[0.78rem] text-white/45">{player.nationality}</p>
                     )}
                     {currentStats?.games?.position && (
-                        <p className="player-popup__nationality">{currentStats.games.position}</p>
+                        <p className="mt-1 text-[0.78rem] text-white/45">
+                            {currentStats.games.position}
+                        </p>
                     )}
                 </div>
             </div>
 
-            {/* Body: Stats */}
-            <div className="player-popup__body">
-                {/* Bio */}
-                <div className="player-popup__section">
+            <div className="px-4 pt-2.5 pb-3.5">
+                <Section>
                     <Row label="Age" value={player.age as string | number} />
                     {player.height && <Row label="Height" value={player.height as string} />}
                     {player.weight && <Row label="Weight" value={player.weight as string} />}
-                </div>
+                </Section>
 
-                {/* Season stats */}
                 {currentStats && (
                     <>
-                        <div className="player-popup__section">
-                            <div className="player-popup__section-title">Season Stats</div>
+                        <Section>
+                            <SectionTitle>Season Stats</SectionTitle>
                             <Row label="Team" value={currentStats.team?.name} />
                             {currentStats.games?.number && (
                                 <Row label="Number" value={`#${currentStats.games.number}`} />
                             )}
-                            <Row label="Appearances" value={currentStats.games?.appearences || 0} />
+                            <Row
+                                label="Appearances"
+                                value={currentStats.games?.appearences || 0}
+                            />
                             <Row
                                 label="Minutes"
                                 value={(currentStats.games?.minutes || 0).toLocaleString()}
@@ -158,15 +165,15 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
                                     value={parseFloat(currentStats.games.rating).toFixed(2)}
                                 />
                             )}
-                        </div>
+                        </Section>
 
-                        <div className="player-popup__section">
-                            <div className="player-popup__section-title">Output</div>
+                        <Section>
+                            <SectionTitle>Output</SectionTitle>
                             <Row label="Goals" value={currentStats.goals?.total || 0} />
                             <Row label="Assists" value={currentStats.goals?.assists || 0} />
-                            <div className="player-popup__row">
-                                <span className="player-popup__label">Cards</span>
-                                <span className="player-popup__cards">
+                            <div className="flex justify-between items-center py-0.5 text-[0.8rem]">
+                                <span className="text-white/50">Cards</span>
+                                <span className="inline-flex gap-1.5 items-center font-semibold">
                                     <span style={{ color: '#ffd700' }}>
                                         🟨 {currentStats.cards?.yellow || 0}
                                     </span>
@@ -175,21 +182,50 @@ const PlayerInfoPopup: React.FC<PlayerInfoPopupProps> = ({
                                     </span>
                                 </span>
                             </div>
-                        </div>
+                        </Section>
                     </>
                 )}
 
-                {player.injured && <div className="player-popup__injury">⚠️ Currently Injured</div>}
+                {player.injured && (
+                    <div className="bg-[rgba(255,152,0,0.1)] border border-[rgba(255,152,0,0.25)] rounded-md p-1.5 text-[#ff9800] text-[0.75rem] font-semibold text-center mt-2">
+                        ⚠️ Currently Injured
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
 const Row = ({ label, value }: { label: string; value: string | number | undefined }) => (
-    <div className="player-popup__row">
-        <span className="player-popup__label">{label}</span>
-        <span className="player-popup__value">{value ?? 'N/A'}</span>
+    <div className="flex justify-between items-center py-0.5 text-[0.8rem]">
+        <span className="text-white/50">{label}</span>
+        <span className="text-white font-semibold">{value ?? 'N/A'}</span>
     </div>
+);
+
+const Section = ({ children }: { children: React.ReactNode }) => (
+    <div className="mb-2.5 last:mb-0">{children}</div>
+);
+
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <div className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-white/30 border-b border-white/[0.06] pb-1">
+        {children}
+    </div>
+);
+
+const PhotoPlaceholder = ({ children }: { children: React.ReactNode }) => (
+    <div className="w-[72px] h-[72px] rounded-[10px] flex items-center justify-center bg-[linear-gradient(135deg,#667eea,#764ba2)] border-2 border-white/[0.12] text-white font-bold text-2xl shrink-0">
+        {children}
+    </div>
+);
+
+const CloseButton = ({ onClose }: { onClose: () => void }) => (
+    <button
+        className="absolute top-2 right-2.5 bg-transparent border-none text-white/30 cursor-pointer text-[0.85rem] px-1 py-0.5 rounded transition-colors hover:text-white hover:bg-white/10"
+        onClick={onClose}
+    >
+        ✕
+    </button>
 );
 
 export default PlayerInfoPopup;

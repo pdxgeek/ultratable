@@ -8,28 +8,32 @@ interface FixtureRowProps {
     teams: Map<string, Team>;
 }
 
+const dotColor: Record<'W' | 'D' | 'L', string> = {
+    W: 'bg-accent-green',
+    D: 'bg-text-muted',
+    L: 'bg-accent-red',
+};
+
+const borderColor: Record<'W' | 'D' | 'L', string> = {
+    W: 'border-l-2 border-accent-green',
+    D: 'border-l-2 border-text-muted',
+    L: 'border-l-2 border-accent-red',
+};
+
 export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
     const navigate = useNavigate();
     const isHome = fixture.homeTeamId === teamId;
     const opponentId = isHome ? fixture.awayTeamId : fixture.homeTeamId;
     const opponent = teams.get(opponentId);
 
-    let resultClass = '';
-    let resultChar = '';
+    let resultChar: 'W' | 'D' | 'L' | '' = '';
 
     if (fixture.status === 'played' && fixture.goalsHome != null && fixture.goalsAway != null) {
         const teamGoals = isHome ? fixture.goalsHome : fixture.goalsAway;
         const oppGoals = isHome ? fixture.goalsAway : fixture.goalsHome;
-        if (teamGoals > oppGoals) {
-            resultClass = 'fixture-row--win';
-            resultChar = 'W';
-        } else if (teamGoals < oppGoals) {
-            resultClass = 'fixture-row--loss';
-            resultChar = 'L';
-        } else {
-            resultClass = 'fixture-row--draw';
-            resultChar = 'D';
-        }
+        if (teamGoals > oppGoals) resultChar = 'W';
+        else if (teamGoals < oppGoals) resultChar = 'L';
+        else resultChar = 'D';
     }
 
     const formatDate = (dateStr: string) => {
@@ -39,35 +43,39 @@ export function FixtureRow({ fixture, teamId, teams }: FixtureRowProps) {
 
     return (
         <div
-            className={`fixture-row ${resultClass}`}
-            style={{ cursor: 'pointer' }}
+            className={`flex items-center gap-2 px-1.5 py-1 rounded-sm text-xs transition-colors hover:bg-white/5 cursor-pointer ${resultChar ? borderColor[resultChar] : ''}`}
             onClick={() => navigate(`/match/${fixture.id}`)}
         >
-            <span className="fixture-row__ha">{isHome ? 'H' : 'A'}</span>
+            <span className="text-[0.65rem] font-bold text-text-muted w-3.5 text-left">
+                {isHome ? 'H' : 'A'}
+            </span>
             {opponent?.logo && (
                 <img
                     src={opponent.logo}
                     alt=""
-                    className="fixture-row__logo"
+                    className="w-[18px] h-[18px] object-contain"
                     onError={(e) => {
                         (e.target as HTMLImageElement).style.display = 'none';
                     }}
                 />
             )}
-            <span className="fixture-row__name">{opponent?.name ?? 'Unknown'}</span>
+            <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                {opponent?.name ?? 'Unknown'}
+            </span>
             {fixture.status === 'played' ? (
-                <span className="fixture-row__score">
+                <span className="font-semibold tabular-nums text-right min-w-10">
                     {fixture.goalsHome}–{fixture.goalsAway}
                 </span>
             ) : fixture.gameweek ? (
-                <span className="fixture-row__date">GW {fixture.gameweek}</span>
+                <span className="text-text-muted text-[0.75rem]">GW {fixture.gameweek}</span>
             ) : (
-                <span className="fixture-row__date">{formatDate(fixture.scheduledAt)}</span>
+                <span className="text-text-muted text-[0.75rem]">
+                    {formatDate(fixture.scheduledAt)}
+                </span>
             )}
             {resultChar && (
                 <span
-                    className={`form-dot ${resultChar}`}
-                    style={{ width: 18, height: 18, fontSize: '0.6rem' }}
+                    className={`w-[18px] h-[18px] rounded-full flex items-center justify-center text-[0.6rem] font-bold text-white ${dotColor[resultChar]}`}
                 >
                     {resultChar}
                 </span>

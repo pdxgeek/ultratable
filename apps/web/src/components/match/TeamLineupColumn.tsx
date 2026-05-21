@@ -19,27 +19,42 @@ const TeamLineupColumn: React.FC<TeamLineupColumnProps> = ({
     reverse,
     keyPrefix,
 }) => {
-    if (!lineup) return <div className="team-column" />;
+    if (!lineup) return <div />;
 
-    const alignRight = reverse ? { textAlign: 'right' as const } : undefined;
+    const align = reverse ? 'text-right' : '';
+    const headingClass = `mt-0 mb-3 text-[0.9rem] uppercase text-text-secondary border-b border-border pb-2 ${align}`;
 
     return (
-        <div className="team-column">
-            <div className={`coach-card ${reverse ? 'coach-card-reverse' : ''}`}>
+        <div>
+            <div
+                className={`flex items-center gap-[15px] bg-bg-accent p-[15px] rounded-xl mb-6 shadow-[0_2px_10px_rgba(0,0,0,0.1)] ${reverse ? 'flex-row-reverse' : ''}`}
+            >
                 {lineup.coachPhoto ? (
-                    <img src={lineup.coachPhoto} alt={lineup.coachName} className="coach-img" />
+                    <img
+                        src={lineup.coachPhoto}
+                        alt={lineup.coachName}
+                        className="w-[60px] h-[60px] rounded-full object-cover border-2 border-border"
+                    />
                 ) : (
-                    <div className="coach-placeholder">👤</div>
+                    <div className="w-[60px] h-[60px] rounded-full bg-bg-secondary flex items-center justify-center text-2xl border-2 border-border">
+                        👤
+                    </div>
                 )}
-                <div style={alignRight}>
-                    <div className="coach-label">Coach</div>
-                    <div className="coach-name">{lineup.coachName || 'Unknown'}</div>
-                    <div className="formation-label">{lineup.formation}</div>
+                <div className={align}>
+                    <div className="text-[0.75rem] uppercase text-text-muted tracking-wider">
+                        Coach
+                    </div>
+                    <div className="font-semibold text-base my-0.5">
+                        {lineup.coachName || 'Unknown'}
+                    </div>
+                    <div className="text-[0.85rem] text-accent-blue font-medium">
+                        {lineup.formation}
+                    </div>
                 </div>
             </div>
 
-            <h4 style={alignRight}>Starting XI</h4>
-            <ul className="player-list" style={alignRight}>
+            <h4 className={headingClass}>Starting XI</h4>
+            <ul className={`list-none p-0 mt-0 mb-[30px] ${align}`}>
                 {lineup.startXI?.map((p) => (
                     <PlayerRow
                         key={`${keyPrefix}-start-${p.sourceId}`}
@@ -51,8 +66,8 @@ const TeamLineupColumn: React.FC<TeamLineupColumnProps> = ({
                 ))}
             </ul>
 
-            <h4 style={alignRight}>Substitutes</h4>
-            <p className="subs-list-text" style={alignRight}>
+            <h4 className={headingClass}>Substitutes</h4>
+            <p className={`text-[0.85rem] text-text-secondary ${align}`}>
                 {lineup.substitutes?.map((p) => p.name).join(', ')}
             </p>
         </div>

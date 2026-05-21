@@ -28,7 +28,6 @@ const PlayerRow: React.FC<PlayerRowProps> = ({ player, season, leagueSourceId, r
 
     const handleMouseLeave = () => {
         if (hoverTimer.current) clearTimeout(hoverTimer.current);
-        // Slight close delay lets the user move into the popup without it disappearing.
         hoverTimer.current = setTimeout(() => {
             setShowPopup(false);
         }, 300);
@@ -36,17 +35,20 @@ const PlayerRow: React.FC<PlayerRowProps> = ({ player, season, leagueSourceId, r
 
     return (
         <li
-            className={`player-row ${reverse ? 'player-row-reverse' : ''}`}
+            className={`relative px-3 py-2 text-[0.95rem] rounded-md bg-bg-accent mb-1.5 transition-all hover:bg-white/5 hover:-translate-y-px cursor-pointer flex items-center gap-3 ${reverse ? 'flex-row-reverse' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            style={{ position: 'relative' }}
         >
             {player.photo ? (
-                <img src={player.photo} alt={player.name} className="player-photo" />
+                <img
+                    src={player.photo}
+                    alt={player.name}
+                    className="w-[30px] h-[30px] rounded-full object-cover bg-white/5"
+                />
             ) : (
-                <div className="player-photo-placeholder" />
+                <div className="w-[30px] h-[30px] rounded-full bg-white/5" />
             )}
-            <span className="player-name">{player.name}</span>
+            <span className="flex-1">{player.name}</span>
             {showPopup &&
                 createPortal(
                     <div
