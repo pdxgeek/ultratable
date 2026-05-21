@@ -48,7 +48,7 @@ function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
 const thBase =
     'text-left px-3 py-3 text-text-muted text-[0.75rem] uppercase tracking-wider font-semibold border-b border-border';
 const thClickable = `${thBase} cursor-pointer select-none transition-colors hover:text-text-primary`;
-const tdBase = 'px-3 py-2 border-b border-border text-[0.9rem]';
+const tdBase = 'px-3 py-2 border-b border-border text-[0.8rem]';
 const colStat = 'w-[50px] text-center';
 
 const StandingsTable: React.FC<StandingsTableProps> = ({
