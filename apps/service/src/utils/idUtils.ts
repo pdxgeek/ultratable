@@ -1,5 +1,4 @@
 import { customAlphabet } from 'nanoid';
-import crypto from 'crypto';
 
 // Custom alphabet: Base32-like (lowercase + numbers, removing similar looking characters: no l, 1, i, o, 0)
 // 30 chars for better distribution: 23456789abcdefghjkmnpqrstuvwxyz
@@ -39,25 +38,4 @@ export function generateDeterministicId(seed: string): string {
     }
 
     return id;
-}
-
-// SHA-256 hashing for binary deduplication Node.js
-export async function calculateHash(buffer: Buffer): Promise<string> {
-    const hash = crypto.createHash('sha256');
-    hash.update(buffer);
-    return hash.digest('hex');
-}
-
-/**
- * Generates a deterministic NanoID from a buffer's content.
- * This is the primary ID used for physical file storage.
- */
-export async function generateContentId(buffer: Buffer): Promise<string> {
-    const hash = await calculateHash(buffer);
-    return generateDeterministicId(hash);
-}
-
-// Legacy support: generate ID with prefix (deprecated - use pure IDs instead)
-export function generateIdWithPrefix(prefix: string): string {
-    return `${prefix}_${nanoid()}`;
 }

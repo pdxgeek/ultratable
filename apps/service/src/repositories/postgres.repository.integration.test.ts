@@ -99,7 +99,7 @@ describe('PostgresFootballRepository - Formula & Graphics', () => {
             let teams;
             try {
                 teams = await repository.teams.getTeams(leagueSourceId, season);
-            } catch (e) {
+            } catch {
                 return; // Skip if league/season not found
             }
             if (!teams || teams.length === 0) return;

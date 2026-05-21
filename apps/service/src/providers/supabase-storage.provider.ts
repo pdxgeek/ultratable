@@ -2,8 +2,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { StorageProvider } from './storage.provider';
 import * as dotenv from 'dotenv';
 import path from 'path';
+import { globalLogger } from '../services/log.service';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const logger = globalLogger.child({ module: 'providers/supabase-storage' });
 
 export class SupabaseStorageProvider implements StorageProvider {
     private client: SupabaseClient;
@@ -29,7 +32,7 @@ export class SupabaseStorageProvider implements StorageProvider {
             });
 
         if (error) {
-            console.error('Failed to upload to Supabase storage:', error.message);
+            logger.error({ error: error.message, bucket, path }, 'Failed to upload to Supabase storage');
             throw error;
         }
 
@@ -51,7 +54,7 @@ export class SupabaseStorageProvider implements StorageProvider {
             });
 
         if (error) {
-            console.error('Failed to list from Supabase storage:', error.message);
+            logger.error({ error: error.message, bucket, prefix }, 'Failed to list from Supabase storage');
             throw error;
         }
 
@@ -62,7 +65,7 @@ export class SupabaseStorageProvider implements StorageProvider {
     async delete(bucket: string, paths: string[]): Promise<void> {
         const { error } = await this.client.storage.from(bucket).remove(paths);
         if (error) {
-            console.error('Failed to delete from Supabase storage:', error.message);
+            logger.error({ error: error.message, bucket, paths }, 'Failed to delete from Supabase storage');
             throw error;
         }
     }

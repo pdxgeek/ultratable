@@ -118,8 +118,8 @@ import './graphics';
 // Yoga instances per role
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type YogaInstance = ReturnType<typeof createYoga<any>>;
+type TestContext = { user?: { id: string; roles: string[] } };
+type YogaInstance = ReturnType<typeof createYoga<TestContext>>;
 
 function createTestYoga(user?: { id: string; roles: string[] }): YogaInstance {
     return createYoga({

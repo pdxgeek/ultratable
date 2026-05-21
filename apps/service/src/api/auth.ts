@@ -2,12 +2,15 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db";
 import * as schema from "../db/schema";
+import { globalLogger } from "../services/log.service";
+
+const logger = globalLogger.child({ module: 'api/auth' });
 
 const betterAuthUrl = process.env.BETTER_AUTH_URL;
 if (!betterAuthUrl && process.env.NODE_ENV === 'production') {
     throw new Error('[Auth] BETTER_AUTH_URL is required in production. Set this environment variable.');
 } else if (!betterAuthUrl) {
-    console.warn('[Auth] BETTER_AUTH_URL not set — defaulting to http://localhost:8080. Set this in production!');
+    logger.warn('BETTER_AUTH_URL not set — defaulting to http://localhost:8080. Set this in production!');
 }
 
 // Build trusted origins from ALLOWED_ORIGINS + localhost fallbacks for dev.

@@ -40,3 +40,7 @@ Two separate Vercel projects:
 - Ensure domains are correctly mapped.
 - Verify that `https://api.ultratable.io/auth/...` endpoints are reachable from the frontends.
 - Confirm the `VITE_API_URL` is correctly injected during the Vercel build.
+
+## Future Hardening: Database RLS Facade
+
+By default Drizzle bypasses Supabase Row Level Security because the service connects as a superuser. To add database-layer defense-in-depth on top of resolver RBAC, implement a facade that reads the user ID from the Yoga context and sets `request.jwt.claims` via `set_config` before executing queries. Focus on table-level / role-based restrictions (locking down the `user` table) rather than row-ownership rules, to keep query planning fast.

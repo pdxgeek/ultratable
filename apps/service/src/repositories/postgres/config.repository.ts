@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ConfigRepository } from '../config';
+import { globalLogger } from '../../services/log.service';
+
+const logger = globalLogger.child({ module: 'repositories/config' });
 
 export class PostgresConfigRepository implements ConfigRepository {
     private async updateEnvs(updates: Record<string, string>) {
@@ -56,14 +59,20 @@ export class PostgresConfigRepository implements ConfigRepository {
         try {
             await this.updateEnvs({ 'DATABASE_URL': url });
             return true;
-        } catch { return false; }
+        } catch (e: unknown) {
+            logger.error({ error: (e as Error).message }, 'Failed to update DATABASE_URL in .env');
+            return false;
+        }
     }
 
     async updateApiFootballKey(key: string): Promise<boolean> {
         try {
             await this.updateEnvs({ 'API_FOOTBALL_KEY': key });
             return true;
-        } catch { return false; }
+        } catch (e: unknown) {
+            logger.error({ error: (e as Error).message }, 'Failed to update API_FOOTBALL_KEY in .env');
+            return false;
+        }
     }
 
     async updateSupabaseConfig(url: string, anonKey: string): Promise<boolean> {
@@ -73,6 +82,9 @@ export class PostgresConfigRepository implements ConfigRepository {
                 'SUPABASE_ANON_KEY': anonKey
             });
             return true;
-        } catch { return false; }
+        } catch (e: unknown) {
+            logger.error({ error: (e as Error).message }, 'Failed to update Supabase config in .env');
+            return false;
+        }
     }
 }

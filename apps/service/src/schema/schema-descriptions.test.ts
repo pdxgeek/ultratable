@@ -24,13 +24,6 @@ async function introspect(query: string) {
     return response.json();
 }
 
-// Types that are part of the GraphQL spec or internal to Pothos — skip these
-const SKIP_TYPES = new Set([
-    'Query', 'Mutation', 'String', 'Int', 'Float', 'Boolean', 'ID',
-    '__Schema', '__Type', '__Field', '__InputValue', '__EnumValue', '__Directive',
-    'DateTime', 'JSON',
-]);
-
 // Types defined by our schema that must be fully documented
 const APP_TYPES = [
     'Venue', 'League', 'Team', 'Season', 'Fixture', 'MatchEvent',
