@@ -2,6 +2,8 @@ import type { Execution } from '../WorkersView';
 
 import React from 'react';
 
+import { Progress } from '@/components/ui/progress';
+
 interface Props {
     activeExecution: Execution | null;
 }
@@ -18,12 +20,10 @@ export const SyncProgressBar: React.FC<Props> = ({ activeExecution }) => {
                     {activeExecution.processedCount} / {activeExecution.totalCount} ({percent}%)
                 </span>
             </div>
-            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/30">
-                <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-sky-500 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(99,102,241,0.4)]"
-                    style={{ width: `${percent}%` }}
-                />
-            </div>
+            <Progress
+                value={percent}
+                className="h-1.5 bg-slate-800 border border-slate-700/30 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-indigo-500 [&_[data-slot=progress-indicator]]:to-sky-500"
+            />
         </div>
     );
 };

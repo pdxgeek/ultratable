@@ -3,6 +3,16 @@ import type { Season } from '../leagues.types';
 import React from 'react';
 import { Calendar, Database, Loader2, RefreshCw } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
 interface Props {
     configSeasons: Season[];
     selectedConfigSeasonId: string;
@@ -25,27 +35,37 @@ export const SeasonPicker: React.FC<Props> = ({
                 <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700/50">
                     <Calendar className="w-5 h-5 text-amber-500" />
                 </div>
-                <div className="flex-1">
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 mb-1.5">
-                        Select Season to Override
-                    </h4>
-                    <select
-                        value={selectedConfigSeasonId}
-                        onChange={(e) => setSelectedConfigSeasonId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-all"
+                <div className="flex-1 space-y-1.5">
+                    <Label
+                        htmlFor="season-picker"
+                        className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1"
                     >
-                        <option value="">-- Choose Season --</option>
-                        {configSeasons.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {s.year} Season
-                            </option>
-                        ))}
-                    </select>
+                        Select Season to Override
+                    </Label>
+                    <Select
+                        value={selectedConfigSeasonId || undefined}
+                        onValueChange={(v) => setSelectedConfigSeasonId(v)}
+                    >
+                        <SelectTrigger
+                            id="season-picker"
+                            className="w-full h-10 bg-slate-950 border-slate-800 text-white focus-visible:border-amber-500 focus-visible:ring-0"
+                        >
+                            <SelectValue placeholder="-- Choose Season --" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {configSeasons.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                    {s.year} Season
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-                <button
+                <Button
+                    type="button"
                     onClick={onSync}
                     disabled={syncing || !selectedConfigSeasonId}
-                    className="mt-6 flex items-center gap-2 px-6 py-2 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 rounded-lg transition-all font-bold text-xs uppercase tracking-wider disabled:opacity-30"
+                    className="mt-6 h-9 px-6 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 font-bold text-xs uppercase tracking-wider disabled:opacity-30"
                 >
                     {syncing ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -53,7 +73,7 @@ export const SeasonPicker: React.FC<Props> = ({
                         <RefreshCw className="w-4 h-4" />
                     )}
                     {syncing ? 'Syncing...' : 'Sync Season'}
-                </button>
+                </Button>
             </div>
 
             <div className="flex items-baseline gap-1.5">

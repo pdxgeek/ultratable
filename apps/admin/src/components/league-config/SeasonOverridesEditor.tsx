@@ -1,6 +1,18 @@
 import React from 'react';
 import { RotateCcw } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+
 interface Props {
     configJson: string;
     setConfigJson: (val: string) => void;
@@ -14,7 +26,9 @@ interface Props {
     setHelperReason: (val: string) => void;
 }
 
-const labelBase = 'block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2';
+const labelClass = 'text-[10px] font-bold text-slate-500 uppercase tracking-widest';
+const fieldClass =
+    'h-10 bg-slate-950 border-slate-800 text-white focus-visible:border-amber-500 focus-visible:ring-0';
 
 export const SeasonOverridesEditor: React.FC<Props> = ({
     configJson,
@@ -66,67 +80,79 @@ export const SeasonOverridesEditor: React.FC<Props> = ({
                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                     Season Overrides (JSON)
                 </h4>
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={reset}
-                    className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-amber-400 uppercase tracking-widest transition-colors"
+                    className="h-auto px-0 text-[10px] font-bold text-slate-400 hover:text-amber-400 hover:bg-transparent uppercase tracking-widest"
                     title="Replace edits with the league default config"
                 >
                     <RotateCcw className="w-3.5 h-3.5" />
                     Reset to league defaults
-                </button>
+                </Button>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 w-full">
-                    <label className={labelBase}>Add points adjustment — Team</label>
-                    <select
-                        value={helperTeamId}
-                        onChange={(e) => setHelperTeamId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-all"
+                <div className="flex-1 w-full space-y-2">
+                    <Label htmlFor="helper-team" className={labelClass}>
+                        Add points adjustment — Team
+                    </Label>
+                    <Select
+                        value={helperTeamId || undefined}
+                        onValueChange={(v) => setHelperTeamId(v)}
                     >
-                        <option value="">-- Choose a team --</option>
-                        {configTeams.map((t) => (
-                            <option key={t.id as string} value={t.id as string}>
-                                {t.name as string}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger id="helper-team" className={`w-full ${fieldClass}`}>
+                            <SelectValue placeholder="-- Choose a team --" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {configTeams.map((t) => (
+                                <SelectItem key={t.id as string} value={t.id as string}>
+                                    {t.name as string}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-                <div className="w-24">
-                    <label className={labelBase}>Points</label>
-                    <input
+                <div className="w-24 space-y-2">
+                    <Label htmlFor="helper-points" className={labelClass}>
+                        Points
+                    </Label>
+                    <Input
+                        id="helper-points"
                         type="number"
                         value={helperPoints}
                         onChange={(e) => setHelperPoints(parseInt(e.target.value.toString()) || 0)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-all"
+                        className={fieldClass}
                     />
                 </div>
-                <div className="flex-[2] w-full">
-                    <label className={labelBase}>Reason</label>
-                    <input
-                        type="text"
+                <div className="flex-[2] w-full space-y-2">
+                    <Label htmlFor="helper-reason" className={labelClass}>
+                        Reason
+                    </Label>
+                    <Input
+                        id="helper-reason"
                         value={helperReason}
                         onChange={(e) => setHelperReason(e.target.value)}
                         placeholder="e.g. Financial irregularities"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-all"
+                        className={fieldClass}
                     />
                 </div>
-                <button
+                <Button
                     type="button"
                     disabled={!helperTeamId}
                     onClick={appendDeduction}
-                    className="bg-sky-500 hover:bg-sky-400 disabled:opacity-30 text-white px-4 py-2 rounded-lg font-bold text-sm transition-all"
+                    className="h-10 bg-sky-500 hover:bg-sky-400 disabled:opacity-30 text-white font-bold text-sm"
                 >
                     Add
-                </button>
+                </Button>
             </div>
 
-            <textarea
+            <Textarea
                 value={configJson}
                 onChange={(e) => setConfigJson(e.target.value)}
                 spellCheck={false}
-                className="w-full h-80 bg-slate-950/80 border border-slate-800/80 rounded-xl p-6 font-mono text-xs text-sky-300 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/10 transition-all"
+                className="h-80 bg-slate-950/80 border-slate-800/80 rounded-xl p-6 font-mono text-xs text-sky-300 focus-visible:border-amber-500/50 focus-visible:ring-1 focus-visible:ring-amber-500/10"
                 placeholder='{ "promotion": [1, 2], "playoffs": [3, 4, 5, 6], "relegation": [18, 19, 20], "deductions": [], "rankingCriteria": [] }'
             />
         </div>
