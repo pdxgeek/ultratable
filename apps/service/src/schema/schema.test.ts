@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import * as schema from '../db/schema';
 
 import './football'; // Ensure football schema is registered
@@ -22,28 +22,26 @@ vi.mock('../workers/runner', () => ({
 }));
 
 // Mock the repository
-vi.mock('../repositories/postgres.repository', () => ({
+vi.mock('../repositories', () => ({
     repository: {
-        football: {
-            leagues: {
-                getLeagues: vi.fn(),
-                getLeagueById: vi.fn(),
-                getInternalSeasons: vi.fn(),
-                getAllInternalSeasons: vi.fn(),
-            },
-            teams: {
-                getTeamsBySeasonId: vi.fn(),
-                getVenuesByIds: vi.fn(),
-                getVenuesBySeasonId: vi.fn(),
-                countTeamsInSeason: vi.fn(),
-            },
-            fixtures: {
-                getFixtures: vi.fn(),
-                getFixturesBySeasonId: vi.fn(),
-                syncFixtures: vi.fn(),
-                countFixturesInSeason: vi.fn(),
-            },
-        }
+        leagues: {
+            getLeagues: vi.fn(),
+            getLeagueById: vi.fn(),
+            getInternalSeasons: vi.fn(),
+            getAllInternalSeasons: vi.fn(),
+        },
+        teams: {
+            getTeamsBySeasonId: vi.fn(),
+            getVenuesByIds: vi.fn(),
+            getVenuesBySeasonId: vi.fn(),
+            countTeamsInSeason: vi.fn(),
+        },
+        fixtures: {
+            getFixtures: vi.fn(),
+            getFixturesBySeasonId: vi.fn(),
+            syncFixtures: vi.fn(),
+            countFixturesInSeason: vi.fn(),
+        },
     }
 }));
 
@@ -58,7 +56,7 @@ describe('GraphQL Schema', () => {
         const mockLeagues = [
             { id: '1', name: 'Premier League', slug: 'pl', sourceName: 'api-football', sourceId: 39 }
         ];
-        vi.mocked(repository.football.leagues.getLeagues).mockResolvedValue(mockLeagues as unknown as typeof schema.leagues.$inferSelect[]);
+        vi.mocked(repository.leagues.getLeagues).mockResolvedValue(mockLeagues as unknown as typeof schema.leagues.$inferSelect[]);
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -89,7 +87,7 @@ describe('GraphQL Schema', () => {
         const mockFixtures = [
             { id: '1', scheduledAt: new Date().toISOString(), status: 'scheduled', updatedAt: new Date().toISOString(), sourceName: 'api-football', sourceId: 101 }
         ];
-        vi.mocked(repository.football.fixtures.getFixturesBySeasonId).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
+        vi.mocked(repository.fixtures.getFixturesBySeasonId).mockResolvedValue(mockFixtures as unknown as typeof schema.fixtures.$inferSelect[]);
 
         const since = "2026-02-21T00:00:00.000Z";
         const response = await yoga.fetch('http://localhost:8080/graphql', {
@@ -111,12 +109,12 @@ describe('GraphQL Schema', () => {
 
         const result = await response.json();
         expect(result.data.fixtures).toHaveLength(1);
-        expect(repository.football.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date), undefined);
+        expect(repository.fixtures.getFixturesBySeasonId).toHaveBeenCalledWith('season-uuid-1', expect.any(Date), undefined);
     });
 
     it('should trigger syncFixtures mutation and track via JobRunner', async () => {
         // This test verifies the mutation wiring
-        vi.mocked(repository.football.fixtures.syncFixtures).mockResolvedValue({
+        vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
             data: [{ id: 'mock-fixture' }] as unknown as typeof schema.fixtures.$inferSelect[],
             stats: { processedCount: 1, apiCallsCount: 1 }
         });
@@ -145,7 +143,7 @@ describe('GraphQL Schema', () => {
 
         const result = await response.json();
         expect(result.data.syncFixtures).toBeDefined();
-        expect(repository.football.fixtures.syncFixtures).toHaveBeenCalled();
+        expect(repository.fixtures.syncFixtures).toHaveBeenCalled();
     });
 
     it('should query season with teams and venue', async () => {
@@ -153,13 +151,13 @@ describe('GraphQL Schema', () => {
             { id: 'season-1', year: 2024, leagueId: 'league-1', updatedAt: new Date().toISOString() }
         ];
 
-        vi.mocked(repository.football.leagues.getLeagueById).mockResolvedValue({ id: 'league-1', sourceId: 39 } as unknown as typeof schema.leagues.$inferSelect);
-        vi.mocked(repository.football.leagues.getInternalSeasons).mockResolvedValue(mockSeasons as unknown as typeof schema.seasons.$inferSelect[]);
-        vi.mocked(repository.football.teams.countTeamsInSeason).mockResolvedValue(20);
-        vi.mocked(repository.football.teams.getTeamsBySeasonId).mockResolvedValue(
+        vi.mocked(repository.leagues.getLeagueById).mockResolvedValue({ id: 'league-1', sourceId: 39 } as unknown as typeof schema.leagues.$inferSelect);
+        vi.mocked(repository.leagues.getInternalSeasons).mockResolvedValue(mockSeasons as unknown as typeof schema.seasons.$inferSelect[]);
+        vi.mocked(repository.teams.countTeamsInSeason).mockResolvedValue(20);
+        vi.mocked(repository.teams.getTeamsBySeasonId).mockResolvedValue(
             [{ id: 'team-1', name: 'Arsenal', venueId: 'venue-1' }] as unknown as typeof schema.teams.$inferSelect[]
         );
-        vi.mocked(repository.football.teams.getVenuesByIds).mockResolvedValue(
+        vi.mocked(repository.teams.getVenuesByIds).mockResolvedValue(
             [{ id: 'venue-1', name: 'Emirates Stadium' }] as unknown as typeof schema.venues.$inferSelect[]
         );
 
@@ -186,7 +184,7 @@ describe('GraphQL Schema', () => {
         });
 
         // Note: For full integration testing we need a real DB or more complex mocks
-        // Since we mock repository.football results, this mainly tests GraphQL wiring
+        // Since we mock the repository results, this mainly tests GraphQL wiring
         const result = await response.json();
         expect(result.data.seasons).toHaveLength(1);
         expect(result.data.seasons[0].year).toBe(2024);
@@ -256,7 +254,7 @@ describe('GraphQL Schema', () => {
                 { id: 'v1', name: 'Emirates', city: 'London', updatedAt: '2026-03-01T00:00:00Z' },
                 { id: 'v2', name: 'Anfield', city: 'Liverpool', updatedAt: '2026-03-03T00:00:00Z' },
             ];
-            vi.mocked(repository.football.teams.getVenuesBySeasonId).mockResolvedValue(
+            vi.mocked(repository.teams.getVenuesBySeasonId).mockResolvedValue(
                 mockVenues as unknown as typeof schema.venues.$inferSelect[]
             );
             return mockVenues;

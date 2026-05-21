@@ -5,7 +5,8 @@
  * and updates past-due "out of state" fixtures before serving cached data.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostgresFootballRepository } from './postgres.repository';
+import { PostgresFixturesRepository } from './postgres/fixtures.repository';
+import type { TeamsRepository } from './teams';
 import { cacheService } from '../services/cache.service';
 import type { IFootballProvider, IngestedFixture } from '../integrations/types';
 
@@ -167,8 +168,13 @@ function setupSeasonLookup(seasonOverrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+// getFixtures (the read path) never calls into the teams sub-repo — only
+// syncFixtures does. A no-op stub satisfies the constructor signature without
+// the test having to wire up a real TeamsRepository.
+const stubTeams = {} as TeamsRepository;
+
 describe('getFixtures — Live Polling', () => {
-    let repo: PostgresFootballRepository;
+    let repo: PostgresFixturesRepository;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -185,7 +191,7 @@ describe('getFixtures — Live Polling', () => {
                 venues: []
             })
         });
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         // Call sequence:
         // 1. Season lookup (select + innerJoin)
@@ -238,7 +244,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // Provider was called with the past-due fixture's source ID
         expect(provider.getFixturesByIds).toHaveBeenCalledWith([12345]);
@@ -259,7 +265,7 @@ describe('getFixtures — Live Polling', () => {
                 venues: []
             })
         });
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         // Pre-populate cache with stale data
         cacheService.set('fixtures:40:2025', [PAST_DUE_FIXTURE], 300_000);
@@ -299,7 +305,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // Should NOT return the stale cached data — should return fresh DB query result
         expect(result[0].status).toBe('played');
@@ -311,7 +317,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('skips polling when another request claimed the lock', async () => {
         const provider = createMockProvider();
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -333,7 +339,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // Provider was NOT called — lock was not acquired
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -345,7 +351,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('serves cached data when no past-due fixtures exist', async () => {
         const provider = createMockProvider();
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         // Pre-populate cache with valid data (all played)
         cacheService.set('fixtures:40:2025', [PLAYED_FIXTURE], 300_000);
@@ -368,7 +374,7 @@ describe('getFixtures — Live Polling', () => {
             }
         });
 
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // Returns cached data, no polling
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -380,7 +386,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('skips polling entirely when season is completed', async () => {
         const provider = createMockProvider();
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -400,7 +406,7 @@ describe('getFixtures — Live Polling', () => {
             }
         });
 
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // No polling — season is done
         expect(provider.getFixturesByIds).not.toHaveBeenCalled();
@@ -415,7 +421,7 @@ describe('getFixtures — Live Polling', () => {
         const provider = createMockProvider({
             getFixturesByIds: vi.fn().mockRejectedValue(new Error('API rate limit exceeded'))
         });
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -438,7 +444,7 @@ describe('getFixtures — Live Polling', () => {
         });
 
         // Should NOT throw — error is caught internally
-        const result = await repo.fixtures.getFixtures(40, 2025);
+        const result = await repo.getFixtures(40, 2025);
 
         // Provider was called but failed
         expect(provider.getFixturesByIds).toHaveBeenCalled();
@@ -454,7 +460,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('marks season complete when no past-due, no future, and no non-terminal fixtures remain', async () => {
         const provider = createMockProvider();
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -496,7 +502,7 @@ describe('getFixtures — Live Polling', () => {
             };
         });
 
-        await repo.fixtures.getFixtures(40, 2025);
+        await repo.getFixtures(40, 2025);
 
         // Should have called update twice: lock claim + season completion
         expect(mockUpdate).toHaveBeenCalledTimes(2);
@@ -509,7 +515,7 @@ describe('getFixtures — Live Polling', () => {
     // -----------------------------------------------------------------------
     it('does NOT mark season complete when non-terminal fixtures still exist (false positive bug)', async () => {
         const provider = createMockProvider();
-        repo = new PostgresFootballRepository(provider);
+        repo = new PostgresFixturesRepository(provider, stubTeams);
 
         let selectCallCount = 0;
         mockSelect.mockImplementation(() => {
@@ -537,7 +543,7 @@ describe('getFixtures — Live Polling', () => {
             })
         });
 
-        await repo.fixtures.getFixtures(40, 2025);
+        await repo.getFixtures(40, 2025);
 
         // Should have called update only ONCE: lock claim (no season completion)
         expect(mockUpdate).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'node:crypto';
 import { supabase } from '../db';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import { globalLogger } from '../services/log.service';
 
 const logger = globalLogger.child({ module: 'GfxService' });
@@ -47,7 +47,7 @@ export class GfxService {
             }
 
             // 4. Update Graphics mapping table via repository
-            await repository.football.graphics.saveGraphic({
+            await repository.graphics.saveGraphic({
                 entityType,
                 entityId,
                 variantName: variant,

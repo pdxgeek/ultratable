@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GfxService } from './gfx.service';
 import { supabase } from '../db';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 import axios from 'axios';
 
 vi.mock('axios');
@@ -15,12 +15,10 @@ vi.mock('../db', () => ({
         }
     }
 }));
-vi.mock('../repositories/postgres.repository', () => ({
+vi.mock('../repositories', () => ({
     repository: {
-        football: {
-            graphics: {
-                saveGraphic: vi.fn()
-            }
+        graphics: {
+            saveGraphic: vi.fn()
         }
     }
 }));
@@ -52,7 +50,7 @@ describe('GfxService - CAS Sideloading', () => {
 
         expect(result).toContain(testHash);
         expect(uploadMock).toHaveBeenCalled();
-        expect(repository.football.graphics.saveGraphic).toHaveBeenCalledWith(expect.objectContaining({
+        expect(repository.graphics.saveGraphic).toHaveBeenCalledWith(expect.objectContaining({
             entityId: 'team-123',
             blobPath: expect.stringContaining(testHash)
         }));
@@ -75,6 +73,6 @@ describe('GfxService - CAS Sideloading', () => {
         await GfxService.sideload('team', 'team-123', testUrl);
 
         expect(uploadMock).not.toHaveBeenCalled();
-        expect(repository.football.graphics.saveGraphic).toHaveBeenCalled();
+        expect(repository.graphics.saveGraphic).toHaveBeenCalled();
     });
 });

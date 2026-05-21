@@ -4,7 +4,8 @@ import * as schema from '../../db/schema';
 import { IFootballProvider } from '../../integrations/types';
 import { graphicsService } from '../../services/graphics.service';
 import { cacheService, TTL } from '../../services/cache.service';
-import { CatalogRepository, SyncResult } from '../interfaces';
+import { CatalogRepository } from '../catalog';
+import { SyncResult } from '../shared';
 import { DEFAULT_RANKING_CRITERIA } from './shared';
 
 export class PostgresCatalogRepository implements CatalogRepository {

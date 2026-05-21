@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createYoga } from 'graphql-yoga';
 import { builder } from './builder';
-import { repository } from '../repositories/postgres.repository';
+import { repository } from '../repositories';
 
 import './football'; // Ensure football schema is registered
 
@@ -21,29 +21,27 @@ vi.mock('../workers/runner', () => ({
 }));
 
 // Mock the repository
-vi.mock('../repositories/postgres.repository', () => ({
+vi.mock('../repositories', () => ({
     repository: {
-        football: {
-            leagues: {
-                getLeagues: vi.fn(),
-                getInternalSeasons: vi.fn(),
-                getAllInternalSeasons: vi.fn(),
-            },
-            teams: {
-                getTeamRoster: vi.fn(),
-                importSquad: vi.fn(),
-                getTeamsBySeasonId: vi.fn(),
-                getTeamById: vi.fn(),
-            },
-            fixtures: {
-                getFixtures: vi.fn(),
-                getFixturesBySeasonId: vi.fn(),
-                syncFixtures: vi.fn(),
-            },
-            players: {
-                resolvePlayerBySourceId: vi.fn(),
-            },
-        }
+        leagues: {
+            getLeagues: vi.fn(),
+            getInternalSeasons: vi.fn(),
+            getAllInternalSeasons: vi.fn(),
+        },
+        teams: {
+            getTeamRoster: vi.fn(),
+            importSquad: vi.fn(),
+            getTeamsBySeasonId: vi.fn(),
+            getTeamById: vi.fn(),
+        },
+        fixtures: {
+            getFixtures: vi.fn(),
+            getFixturesBySeasonId: vi.fn(),
+            syncFixtures: vi.fn(),
+        },
+        players: {
+            resolvePlayerBySourceId: vi.fn(),
+        },
     }
 }));
 
@@ -105,7 +103,7 @@ describe('Team Roster', () => {
     });
 
     it('should query teamRoster and return roster entries with player data', async () => {
-        vi.mocked(repository.football.teams.getTeamRoster).mockResolvedValue([mockRosterEntry]);
+        vi.mocked(repository.teams.getTeamRoster).mockResolvedValue([mockRosterEntry]);
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -136,11 +134,11 @@ describe('Team Roster', () => {
         expect(result.data.teamRoster[0].squadNumber).toBe(10);
         expect(result.data.teamRoster[0].position).toBe('Attacker');
         expect(result.data.teamRoster[0].player.name).toBe('Marcus Rashford');
-        expect(repository.football.teams.getTeamRoster).toHaveBeenCalledWith('team-uuid-1', 'season-uuid-1');
+        expect(repository.teams.getTeamRoster).toHaveBeenCalledWith('team-uuid-1', 'season-uuid-1');
     });
 
     it('should return empty array for unknown team roster', async () => {
-        vi.mocked(repository.football.teams.getTeamRoster).mockResolvedValue([]);
+        vi.mocked(repository.teams.getTeamRoster).mockResolvedValue([]);
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -165,7 +163,7 @@ describe('Team Roster', () => {
             ...mockRosterEntry,
             metadata: null, // No metadata at all
         };
-        vi.mocked(repository.football.teams.getTeamRoster).mockResolvedValue([entryWithNullMeta]);
+        vi.mocked(repository.teams.getTeamRoster).mockResolvedValue([entryWithNullMeta]);
 
         const response = await yoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
@@ -223,9 +221,9 @@ describe('Team Roster', () => {
             context: () => ({ user: { id: 'admin-1', roles: ['admin'] } }),
         });
 
-        vi.mocked(repository.football.teams.getTeamById).mockResolvedValue(mockTeam);
-        vi.mocked(repository.football.teams.importSquad).mockResolvedValue([]);
-        vi.mocked(repository.football.teams.getTeamRoster).mockResolvedValue([mockRosterEntry]);
+        vi.mocked(repository.teams.getTeamById).mockResolvedValue(mockTeam);
+        vi.mocked(repository.teams.importSquad).mockResolvedValue([]);
+        vi.mocked(repository.teams.getTeamRoster).mockResolvedValue([mockRosterEntry]);
 
         const response = await adminYoga.fetch('http://localhost:8080/graphql', {
             method: 'POST',
