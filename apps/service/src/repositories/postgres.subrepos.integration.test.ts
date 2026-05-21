@@ -56,7 +56,16 @@ const repo = createPostgresRepository(provider);
 async function deleteTestRows() {
     // FK order: roster + linkages first, then fixtures, then seasons, then
     // teams/venues/players/leagues. Catalog tables share the sourceName.
-    await db.delete(schema.teamRosters);   // safe — has cascade on team/player/season
+    //
+    // EVERY delete here MUST be scoped to TEST_SOURCE. team_rosters has no
+    // sourceName column — scope via the joined teams/players/seasons that do.
+    // An earlier version of this file deleted team_rosters unconditionally
+    // and wiped every roster in the dev database. Do not repeat that.
+    await db.delete(schema.teamRosters).where(sql`
+        team_id IN (SELECT id FROM teams WHERE source_name = ${TEST_SOURCE})
+        OR player_id IN (SELECT id FROM players WHERE source_name = ${TEST_SOURCE})
+        OR season_id IN (SELECT id FROM seasons WHERE league_id IN (SELECT id FROM leagues WHERE source_name = ${TEST_SOURCE}))
+    `);
     await db.delete(schema.playerSourceMappings).where(eq(schema.playerSourceMappings.sourceName, TEST_SOURCE));
     await db.delete(schema.players).where(eq(schema.players.sourceName, TEST_SOURCE));
     await db.delete(schema.seasonsToTeams).where(sql`team_id IN (SELECT id FROM teams WHERE source_name = ${TEST_SOURCE})`);
