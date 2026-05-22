@@ -14,6 +14,7 @@
 import { createYoga } from 'graphql-yoga';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { abilityFor } from '../auth/abilities';
 import { createLoaders } from '../loaders';
 import { repository } from '../repositories';
 import { builder } from './builder';
@@ -30,14 +31,22 @@ vi.mock('../repositories', async () => {
     return { repository: buildMockRepository() };
 });
 
-type Ctx = { user?: { id: string; roles: string[] }; loaders: ReturnType<typeof createLoaders> };
+type Ctx = {
+    user?: { id: string; roles: string[] };
+    loaders: ReturnType<typeof createLoaders>;
+    ability: Awaited<ReturnType<typeof abilityFor>>;
+};
 type YogaInstance = ReturnType<typeof createYoga<Ctx>>;
 
 function createTestYoga(user?: Ctx['user']): YogaInstance {
     return createYoga({
         schema: builder.toSchema(),
         maskedErrors: false,
-        context: () => ({ user, loaders: createLoaders() }),
+        context: async () => ({
+            user,
+            loaders: createLoaders(),
+            ability: await abilityFor(user),
+        }),
     });
 }
 

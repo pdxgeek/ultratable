@@ -17,6 +17,7 @@ import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import { createYoga } from 'graphql-yoga';
 
 import { auth } from './api/auth';
+import { abilityFor } from './auth/abilities';
 import { db } from './db';
 import * as schema from './db/schema';
 import { createLoaders } from './loaders';
@@ -161,7 +162,12 @@ const yoga = createYoga<{
 
         if (!session?.user?.id) {
             globalLogger.debug({ path: req.url }, 'Auth: no session — guest context');
-            return { req, user: undefined, loaders: createLoaders() };
+            return {
+                req,
+                user: undefined,
+                loaders: createLoaders(),
+                ability: await abilityFor(undefined),
+            };
         }
 
         // Resolve domain user via cached authLinks bridge lookup
@@ -176,7 +182,13 @@ const yoga = createYoga<{
             'Auth: context resolved',
         );
 
-        return { req, user, authUserId: session.user.id, loaders: createLoaders() };
+        return {
+            req,
+            user,
+            authUserId: session.user.id,
+            loaders: createLoaders(),
+            ability: await abilityFor(user),
+        };
     },
     // We use fastify's built-in error handling
     logging: globalLogger,
@@ -402,8 +414,53 @@ signals.forEach((signal) => {
     });
 });
 
+/**
+ * Boot-time schema preflight. Catches the case where a new column was added
+ * to the drizzle schema (e.g. Better Auth's admin plugin requires
+ * `auth_session.impersonated_by` and four columns on `auth_user`) but the
+ * matching migration has not yet been applied to the live DB.
+ *
+ * Without this check the failure mode is a buried Postgres "column X does
+ * not exist" error from the first GraphQL request that hits the auth layer.
+ * With it we exit immediately with a clear pointer to the fix.
+ *
+ * Cheap: each SELECT is `LIMIT 0` so the planner validates the column list
+ * without reading rows. Skipped when `db` isn't configured (CI without a
+ * real Postgres, etc.).
+ */
+async function preflightSchemaCheck() {
+    if (!db) return;
+    try {
+        // Columns added by Better Auth's admin plugin (migration 0014).
+        await db
+            .select({ impersonatedBy: schema.authSessions.impersonatedBy })
+            .from(schema.authSessions)
+            .limit(0);
+        await db
+            .select({
+                role: schema.authUsers.role,
+                banned: schema.authUsers.banned,
+                banReason: schema.authUsers.banReason,
+                banExpires: schema.authUsers.banExpires,
+            })
+            .from(schema.authUsers)
+            .limit(0);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (/column .* does not exist/i.test(message)) {
+            globalLogger.fatal(
+                { err: message },
+                'Database schema is behind the codebase. Run `npm run db:push --prefix apps/service` to apply pending migrations, then restart.',
+            );
+            process.exit(1);
+        }
+        throw err;
+    }
+}
+
 const start = async () => {
     try {
+        await preflightSchemaCheck();
         const host = process.env.HOST || '0.0.0.0';
         const port = Number(process.env.PORT) || 8080;
         await server.listen({ host, port });

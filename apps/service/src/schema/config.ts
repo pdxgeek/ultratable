@@ -1,6 +1,8 @@
+import { GraphQLError } from 'graphql';
+
 import { repository } from '../repositories';
 import { cacheService } from '../services/cache.service';
-import { builder, requireAdmin } from './builder';
+import { abilityOf, builder, requireAdmin } from './builder';
 
 const ConfigStatusRef = builder.objectRef<{
     isDatabaseConnected: boolean;
@@ -64,10 +66,23 @@ builder.queryField('cacheStats', (t) =>
     }),
 );
 
+// Dogfood for the CASL migration — the same gate as `requireAdmin`, expressed
+// directly through the ability so the pattern is visible to future resolvers.
+// The two error shapes (`Unauthenticated` / `Forbidden`) match the legacy
+// helper so the rbac.test.ts matrix keeps passing unmodified.
 builder.mutationField('clearCache', (t) =>
     t.boolean({
         resolve: async (_root, _args, ctx) => {
-            requireAdmin(ctx);
+            if (!ctx.user) {
+                throw new GraphQLError('Unauthenticated', {
+                    extensions: { http: { status: 401 } },
+                });
+            }
+            if (!abilityOf(ctx).can('manage', 'all')) {
+                throw new GraphQLError('Forbidden: Requires Admin Role', {
+                    extensions: { http: { status: 403 } },
+                });
+            }
             cacheService.clear();
             return true;
         },

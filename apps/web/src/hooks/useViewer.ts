@@ -6,6 +6,12 @@ export interface ViewerIdentity {
     linkedAt: string;
 }
 
+export interface ViewerGrant {
+    resourceType: string;
+    resourceId: string;
+    role: string;
+}
+
 export interface Viewer {
     id: string;
     name: string;
@@ -16,6 +22,7 @@ export interface Viewer {
     createdAt: string;
     identities: ViewerIdentity[];
     followedLeagueIds: string[];
+    myGrants: ViewerGrant[];
 }
 
 const VIEWER_QUERY = gql`
@@ -34,6 +41,11 @@ const VIEWER_QUERY = gql`
                 linkedAt
             }
             followedLeagueIds
+            myGrants {
+                resourceType
+                resourceId
+                role
+            }
         }
     }
 `;

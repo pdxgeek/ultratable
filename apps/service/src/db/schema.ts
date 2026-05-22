@@ -42,16 +42,29 @@ export const users = pgTable('user', {
 });
 
 // --- Better Auth Native Schema ---
+// `role`, `banned`, `banReason`, `banExpires` are required by Better Auth's
+// `admin` plugin (see better-auth/dist/plugins/admin/schema.mjs). We never
+// write to `role` directly — it is mirrored from `user.roles` whenever the
+// domain role changes, and the plugin's internal admin gate reads it. See
+// docs/auth-architecture.md "Role storage" for the full contract.
 export const authUsers = pgTable('auth_user', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     email: text('email').notNull().unique(),
     emailVerified: boolean('email_verified').notNull(),
     image: text('image'),
+    role: text('role'),
+    banned: boolean('banned').default(false),
+    banReason: text('ban_reason'),
+    banExpires: utcTimestamp('ban_expires'),
     createdAt: utcTimestamp('created_at').notNull(),
     updatedAt: utcTimestamp('updated_at').notNull(),
 });
 
+// `impersonatedBy` is required by Better Auth's `admin` plugin — when an
+// admin starts impersonating, the new session row records the original
+// admin's auth_user id here so the UI can surface "Impersonating …" and
+// the audit log (admin-page ticket) can trace it back.
 export const authSessions = pgTable('auth_session', {
     id: text('id').primaryKey(),
     expiresAt: utcTimestamp('expires_at').notNull(),
@@ -63,6 +76,7 @@ export const authSessions = pgTable('auth_session', {
     userId: text('user_id')
         .notNull()
         .references(() => authUsers.id, { onDelete: 'cascade' }),
+    impersonatedBy: text('impersonated_by'),
 });
 
 export const authAccounts = pgTable('auth_account', {

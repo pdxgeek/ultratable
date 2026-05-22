@@ -15,6 +15,7 @@
 import { createYoga } from 'graphql-yoga';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { abilityFor } from '../auth/abilities';
 import { builder } from './builder';
 
 // Import schema registrations AFTER mocks
@@ -165,14 +166,17 @@ vi.mock('../providers/storage', () => ({
 // Yoga instances per role
 // ---------------------------------------------------------------------------
 
-type TestContext = { user?: { id: string; roles: string[] } };
+type TestContext = {
+    user?: { id: string; roles: string[] };
+    ability: Awaited<ReturnType<typeof abilityFor>>;
+};
 type YogaInstance = ReturnType<typeof createYoga<TestContext>>;
 
 function createTestYoga(user?: { id: string; roles: string[] }): YogaInstance {
     return createYoga({
         schema: builder.toSchema(),
         maskedErrors: false,
-        context: () => ({ user }),
+        context: async () => ({ user, ability: await abilityFor(user) }),
     });
 }
 

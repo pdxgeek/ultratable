@@ -54,6 +54,204 @@ type AuthIdentity {
 
 `identities` joins through `auth_link` → `auth_account` (provider lives on `auth_account.provider_id`). The resolver lives in [`apps/service/src/schema/viewer.ts`](../apps/service/src/schema/viewer.ts) and goes through `repository.users` rather than touching `db` directly — this is the storage-agnostic facade rule from [AI_README_FIRST.MD §5](../AI_README_FIRST.MD).
 
+## Authorization (CASL)
+
+Authorization — "is the viewer allowed to do X?" — is the layer immediately above authentication. UltraTable uses [CASL](https://casl.js.org) (`@casl/ability`) so every decision flows through one rule set, expressed declaratively, and shared between the server and both frontends. **If you are adding a new gated action, you are adding a CASL rule.** Inline role checks (`ctx.user.roles.includes('admin')`, `viewer.roles.includes('admin')`, `entity.ownerId !== ctx.user.id`) do not belong anywhere in the codebase.
+
+### Where the rules live
+
+The rule set has three copies, by design:
+
+| File                                                                                 | Built when                  | Reads grants from                 |
+| ------------------------------------------------------------------------------------ | --------------------------- | --------------------------------- |
+| [apps/service/src/auth/abilities.ts](../apps/service/src/auth/abilities.ts)          | per GraphQL request         | grant loader (DB; empty today)    |
+| [apps/web/src/auth/abilities.ts](../apps/web/src/auth/abilities.ts)                  | on viewer change            | `viewer.myGrants` (GraphQL field) |
+| [apps/admin/src/auth/abilities.ts](../apps/admin/src/auth/abilities.ts)              | on viewer change            | `viewer.myGrants` (GraphQL field) |
+
+**The three files must stay in sync.** If you add a `can('manage', 'PredictionGroup', { ownerId: viewer.id })` line to the server, add the same line to both frontend copies. A drift produces the classic "the button renders but the click 403s" footgun. We accept the duplication because the alternative (a shared package) would couple browser and Node bundles unnecessarily — the rules are 30 lines of pure data.
+
+### Subjects and actions
+
+Subjects (the *what* of authorization):
+
+| Subject           | Means                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| `'Account'`       | A domain `user` row. Self-or-admin gates resolve against this.                             |
+| `'Viewer'`        | The viewer's read surface. "Is there a viewer at all?" → `can('read', 'Viewer')`.          |
+| `'League'`        | A public catalog league. Authenticated users can `follow` / `unfollow`.                    |
+| `'OwnedResource'` | Placeholder for any resource that exposes `ownerId`. Prediction groups will register here. |
+| `'all'`           | The wildcard. `manage all` is granted only to domain admins.                               |
+
+Actions: `'manage' | 'read' | 'create' | 'update' | 'delete' | 'follow' | 'unfollow'`. `manage` is CASL's wildcard — it matches every action.
+
+### Server pattern (resolvers)
+
+The GraphQL context attaches `ctx.ability` per request. Use the `abilityOf(ctx)` accessor (from [apps/service/src/schema/builder.ts](../apps/service/src/schema/builder.ts)) — it falls back to a grant-free build when the context was constructed without an ability (some older test harnesses).
+
+```ts
+import { subject } from '@casl/ability';
+import { abilityOf } from './builder';
+
+// Admin-only — global gate
+if (!ctx.user) throw new GraphQLError('Unauthenticated', { extensions: { http: { status: 401 } } });
+if (!abilityOf(ctx).can('manage', 'all')) {
+    throw new GraphQLError('Forbidden: Requires Admin Role', { extensions: { http: { status: 403 } } });
+}
+
+// Self-or-admin — conditional rule with subject(...)
+if (abilityOf(ctx).cannot('delete', subject('Account', { id: targetUserId }))) {
+    throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+}
+
+// Any-authenticated — read on Viewer
+if (!ctx.user || abilityOf(ctx).cannot('read', 'Viewer')) {
+    throw new GraphQLError('Unauthenticated', { extensions: { http: { status: 401 } } });
+}
+```
+
+`subject(...)` wraps an object so CASL evaluates the rule's condition (`{ id: ... }`, `{ ownerId: ... }`) against its fields rather than just matching the subject type. Always use `subject(...)` when the rule has a condition; passing a bare string skips the condition check.
+
+The legacy helpers `requireAdmin` / `requireViewer` / `requireSelfOrAdmin` in [builder.ts](../apps/service/src/schema/builder.ts) still exist and delegate to the same CASL checks. **Don't add a new helper.** When you find yourself wanting one, add a CASL rule instead and call it directly. The existing helpers are kept only so unrelated changes don't have to touch the resolvers that use them.
+
+### Frontend pattern (components)
+
+Each frontend wraps its tree in an `AbilityProvider` ([apps/web/src/auth/AbilityContext.tsx](../apps/web/src/auth/AbilityContext.tsx), [apps/admin/src/auth/AbilityContext.tsx](../apps/admin/src/auth/AbilityContext.tsx)) that builds the ability from the live `viewer` and supplies it via React context. Components consume it via the `<Can>` component or the `useAbility()` hook (both re-exported from `auth/abilities.ts`):
+
+```tsx
+import { Can, useAbility } from '@/auth/abilities';
+
+// Declarative
+<Can I="manage" a="all">
+    <AdminLink />
+</Can>
+
+// With a fallback (renders something whether allowed or not)
+<Can I="manage" a="all" passThrough>
+    {({ isAllowed }) => (isAllowed ? <Console /> : <AccessDenied />)}
+</Can>
+
+// Conditional on a specific resource
+<Can I="manage" this={group}>
+    <ManageMembersButton />
+</Can>
+
+// Imperative (inside a hook)
+const ability = useAbility();
+if (ability.can('manage', 'all')) { ... }
+```
+
+### Grants — the seam for per-resource sharing
+
+CASL's killer feature for us is **automatic query filtering from grant rules**. When prediction groups land, the resolver for "list my prediction groups" will not write `WHERE owner_id = $1 OR id IN (SELECT resource_id FROM grants WHERE grantee_id = $1)`. It'll write:
+
+```ts
+const filter = accessibleBy(ctx.ability, 'read').ofType('PredictionGroup');
+return repository.predictionGroups.find(filter);
+```
+
+CASL synthesises the WHERE clause from the rule definitions. This is the property that makes per-resource sharing tractable across many list endpoints.
+
+The grant loader on the server is wired but returns `[]` today. The prediction-groups ticket will:
+1. Land the `resource_grants` table.
+2. Replace the `noGrants` default in `abilityFor` with a real loader (`repository.grants.forGrantee(viewer.id)`).
+3. Populate `Viewer.myGrants` on the GraphQL side so the frontend ability gets the same data.
+
+No other code changes — the rule shape already handles it.
+
+### Adding a new rule
+
+1. **Define the subject** (a string literal added to `AppSubject` in all three `abilities.ts` files).
+2. **Write the rule** in `buildAbility` — one `can(...)` line per condition. Mirror to both frontend files.
+3. **Use it in the resolver / component** — `abilityOf(ctx).can('action', subject('Subject', {...}))` on the server, `<Can I="action" a="Subject">` (or `this={obj}`) on the frontend.
+4. **Test the rule directly** in [apps/service/src/auth/abilities.test.ts](../apps/service/src/auth/abilities.test.ts) — assert the rule holds for the allowed shape and fails for everything else. The schema-level RBAC matrix in [apps/service/src/schema/rbac.test.ts](../apps/service/src/schema/rbac.test.ts) pins the guest / user / admin behaviour for every mutation; new mutations should be added there.
+
+### Anti-patterns (do not do these)
+
+- ❌ `if (ctx.user.roles.includes('admin'))` in a resolver.
+- ❌ `if (viewer.roles.includes('admin'))` in a component.
+- ❌ Adding a fourth `requireXxx` helper.
+- ❌ Calling `auth.api.setRole` to mutate roles. Use `repository.users.setDomainUserRoles` — it writes both `user.roles` and the `auth_user.role` mirror in one transaction.
+- ❌ Reading `auth_user.role` from application code. It exists only for the Better Auth admin plugin's internal gate.
+- ❌ Letting the three `abilities.ts` files drift. A rule added on the server must be added on both frontends in the same PR.
+
+## Role storage
+
+UltraTable uses **two role columns** that look similar but mean different things:
+
+| Column            | Owner       | Source of truth | Read by                                                        |
+| ----------------- | ----------- | --------------- | -------------------------------------------------------------- |
+| `user.roles`      | UltraTable  | **yes**         | every GraphQL resolver, the CASL ability builder, our own code |
+| `auth_user.role`  | Better Auth | no (mirror)     | the Better Auth `admin` plugin's internal gate                 |
+
+`user.roles` is per **domain account** (one set of roles regardless of how the
+user signed in). `auth_user.role` is per **identity** — a user with both a
+Google identity and a credential identity has two `auth_user` rows. They
+mean different things in our two-tier model: per-account roles are the right
+abstraction, per-identity roles are not.
+
+We keep `user.roles` as the source of truth. `auth_user.role` is a derived
+**mirror**: whenever [`repository.users.setDomainUserRoles`](../apps/service/src/repositories/postgres/users.repository.ts) runs, it copies
+the new domain-admin status (`'admin'` or `null`) to every linked `auth_user`
+row in the same transaction. The mirror exists for exactly one reason — Better
+Auth's `admin` plugin checks `auth_user.role` against its `adminRoles` config
+(default `['admin']`) when gating `auth.api.listUsers` / `banUser` /
+`impersonateUser` / etc. Without the mirror, our domain admins couldn't use
+those endpoints.
+
+**Rules:**
+
+- **Never write to `auth_user.role` directly.** The only writer is
+  `setDomainUserRoles` (which also writes `user.roles` in the same call).
+- **Never call `auth.api.setRole`.** It would mutate `auth_user.role` without
+  touching `user.roles` and would silently desync the two columns. Treat it
+  as not existing.
+- **Read `user.roles`, not `auth_user.role`.** The CASL ability builder
+  reads from `ctx.user.roles` (domain), and every resolver-level gate goes
+  through CASL. The `auth_user.role` column should never appear in our own
+  code outside the mirror.
+
+If you're adding a new role, add it to `user.roles` and update the CASL
+rule set in [apps/service/src/auth/abilities.ts](../apps/service/src/auth/abilities.ts). The mirror handles `admin`
+specifically because that's what the plugin checks — other domain roles
+don't need to surface on `auth_user.role`.
+
+## Better Auth admin plugin
+
+The [`admin`](https://www.better-auth.com/docs/plugins/admin) plugin is
+registered in [apps/service/src/api/auth.ts](../apps/service/src/api/auth.ts).
+It adds these API endpoints (callable from the service via
+`auth.api.*`):
+
+- `listUsers({ query })` — paginated list with search.
+- `getUser({ userId })` — single user with identities + sessions.
+- `banUser({ userId, banReason?, banExpiresIn? })` / `unbanUser({ userId })`.
+- `impersonateUser({ userId })` — mints a new session as the target user
+  with `session.impersonatedBy` set to the original admin's `auth_user.id`.
+- `removeUser({ userId })` — runs Better Auth's deletion lifecycle hooks.
+- `setRole({ userId, role })` — **do not call.** See the role-storage rules above.
+
+These are exposed today but not yet wrapped in GraphQL. The admin
+user-management page (sibling ticket) builds the wrappers; every wrapper
+gates via CASL (`ctx.ability.throwUnlessCan('manage', 'all')`) before
+calling into `auth.api`.
+
+### Impersonation guardrails
+
+Impersonation is the one capability we couldn't reasonably build ourselves —
+session minting on behalf of another user, with audit metadata. Before the
+admin page exposes the button, these guardrails must be in place (they live
+with the admin-page ticket, not this one):
+
+- **Every impersonation event produces an audit log row** (admin id, target
+  id, started at, ended at, required reason field).
+- **Impersonated sessions are visually distinct** in every UI — banner across
+  the top: "Impersonating dave@example.com — exit". The plugin exposes
+  `session.impersonatedBy` for the detection.
+- **Production-only restriction:** in `apps/admin` only, never `apps/web`.
+
+The audit log table is part of the admin-page sibling issue. This file is
+the canonical "do not skip these" reference when that work lands.
+
 ## Dev login
 
 `/api/auth/dev-login` is a non-production endpoint that mints a Better Auth session for one of three canned roles (`admin`, `user`, `guest`). It calls Better Auth's `signUpEmail` if the identity doesn't exist (which fires the bootstrap hook, creating the matching domain user + link), then force-sets the requested role via `repository.users.setDomainUserRoles` and invalidates the domain-user cache. The endpoint returns 403 in production.
@@ -271,3 +469,4 @@ Don't hand-edit any of these — re-run `npm run setup`. The script preserves ex
 - Changing the identity model: re-read this doc's "Identity is not an account" section before touching the `auth_link` table or the hook. The "never auto-link by email" rule is load-bearing.
 - Changing the viewer surface: the schema descriptions test (`schema-descriptions.test.ts`) enforces that every field has a description. Add one for any new field.
 - Touching the bootstrap hook: keep [auth-bootstrap.test.ts](../apps/service/src/services/auth-bootstrap.test.ts) green. The duplicate-email-swallowing branch is intentional — do not make it throw.
+- Adding a new role / gated action / per-resource permission: edit the three `abilities.ts` files together in the same PR (server + web + admin), add coverage to [abilities.test.ts](../apps/service/src/auth/abilities.test.ts), and — if it's a new mutation — extend the RBAC matrix in [rbac.test.ts](../apps/service/src/schema/rbac.test.ts). Never reach for an inline role check; never call `auth.api.setRole`. See "Authorization (CASL)" above.

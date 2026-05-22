@@ -5,6 +5,8 @@ import React, { useEffect, useState } from 'react';
 import { Activity, Database, Globe, History, ImageIcon, Key, LayoutDashboard } from 'lucide-react';
 
 import ballerFailImg from './assets/baller_fail.png';
+import { Can } from './auth/abilities';
+import { AbilityProvider } from './auth/AbilityContext';
 import ApiKeyView from './components/ApiKeyView';
 import DashboardView from './components/DashboardView';
 import DatabaseView from './components/DatabaseView';
@@ -155,49 +157,48 @@ const App: React.FC = () => {
         );
     }
 
-    const isAdmin = session.user.roles?.includes('admin');
-    if (!isAdmin) {
-        const handleSwitchAccount = async () => {
-            await authClient.signOut();
-            await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
-        };
-        return (
-            <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617] text-slate-200 font-sans relative">
-                <img
-                    src={ballerFailImg}
-                    alt="Fail Whale"
-                    className="w-64 h-64 object-contain mb-8 opacity-80"
-                />
-                <h1 className="text-3xl font-bold mb-4 text-slate-100 tracking-tight">
-                    Access Denied
-                </h1>
-                <p className="text-slate-400 mb-8 max-w-md text-center">
-                    You are currently signed in as{' '}
-                    <span className="text-sky-400 font-mono">{session.user.email}</span> with the
-                    roles{' '}
-                    <span className="text-sky-400 font-mono">
-                        [{session.user.roles?.join(', ') || 'none'}]
-                    </span>
-                    .
-                    <br />
-                    <br />
-                    Administrative access is required to view the Ultratable console.
-                </p>
-                <Button
-                    onClick={handleSwitchAccount}
-                    variant="outline"
-                    className="h-10 px-4 border-slate-700 text-slate-200 hover:bg-slate-800"
-                >
-                    Switch account
-                </Button>
-                {import.meta.env.DEV && <DevLoginTools />}
-            </div>
-        );
-    }
+    const handleSwitchAccount = async () => {
+        await authClient.signOut();
+        await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+    };
 
-    return (
+    const accessDenied = (
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617] text-slate-200 font-sans relative">
+            <img
+                src={ballerFailImg}
+                alt="Fail Whale"
+                className="w-64 h-64 object-contain mb-8 opacity-80"
+            />
+            <h1 className="text-3xl font-bold mb-4 text-slate-100 tracking-tight">Access Denied</h1>
+            <p className="text-slate-400 mb-8 max-w-md text-center">
+                You are currently signed in as{' '}
+                <span className="text-sky-400 font-mono">{session.user.email}</span> with the roles{' '}
+                <span className="text-sky-400 font-mono">
+                    [{session.user.roles?.join(', ') || 'none'}]
+                </span>
+                .
+                <br />
+                <br />
+                Administrative access is required to view the Ultratable console.
+            </p>
+            <Button
+                onClick={handleSwitchAccount}
+                variant="outline"
+                className="h-10 px-4 border-slate-700 text-slate-200 hover:bg-slate-800"
+            >
+                Switch account
+            </Button>
+            {import.meta.env.DEV && <DevLoginTools />}
+        </div>
+    );
+
+    // <Can I="manage" a="all"> is the dogfood for the CASL migration. The
+    // ability is built from the same rule shape as the server's, so the
+    // same domain-admin gate that lets a mutation through also decides
+    // whether to show the console. `passThrough` lets us render the
+    // access-denied fallback in the else branch.
+    const consoleShell = (
         <div className="flex h-screen w-full overflow-hidden bg-[#020617] text-slate-200 font-sans selection:bg-sky-500/30">
-            {/* Sidebar */}
             <aside className="w-72 bg-[#020617] border-r border-slate-800/40 flex flex-col shrink-0">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-10 h-10 bg-gradient-to-tr from-sky-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-sky-500/20">
@@ -331,6 +332,14 @@ const App: React.FC = () => {
             {/* Dev-only login tools — hidden in production */}
             {import.meta.env.DEV && <DevLoginTools />}
         </div>
+    );
+
+    return (
+        <AbilityProvider viewer={session.user}>
+            <Can I="manage" a="all" passThrough>
+                {({ isAllowed }) => (isAllowed ? consoleShell : accessDenied)}
+            </Can>
+        </AbilityProvider>
     );
 };
 export default App;

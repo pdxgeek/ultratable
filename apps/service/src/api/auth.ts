@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { admin } from 'better-auth/plugins/admin';
 
 import { db } from '../db';
 import * as schema from '../db/schema';
@@ -131,4 +132,14 @@ export const auth = betterAuth({
     // request from X-Forwarded-Host — see the comment above the env read.
     baseURL: betterAuthUrl || (process.env.NODE_ENV !== 'production' ? 'http://localhost:8080' : undefined),
     trustedOrigins,
+    // The admin plugin exposes auth.api.{listUsers,getUser,banUser,unbanUser,
+    // impersonateUser,removeUser,setRole} for the upcoming user-management UI
+    // (sibling ticket). We deliberately do NOT call `auth.api.setRole` from
+    // our code — role mutations go through repository.users.setDomainUserRoles
+    // so user.roles stays the source of truth. The plugin's internal admin
+    // gate reads auth_user.role, which is mirrored from user.roles by the
+    // repository whenever the domain row changes (see the mirror in
+    // postgres/users.repository.ts). adminRoles defaults to ['admin'] which
+    // matches our domain role string.
+    plugins: [admin()],
 });
