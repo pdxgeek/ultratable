@@ -14,6 +14,8 @@ import LeaguesManagementView from './components/LeaguesManagementView';
 import { LogsView } from './components/LogsView';
 import WorkersView from './components/WorkersView';
 import { API_BASE, gqlFetch } from './lib/api';
+import { authClient } from './lib/auth-client';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type Tab = 'dashboard' | 'leagues' | 'api-keys' | 'database' | 'workers' | 'graphics' | 'logs';
@@ -131,8 +133,34 @@ const App: React.FC = () => {
         );
     }
 
-    const isAdmin = session?.user?.roles?.includes('admin');
+    if (!session) {
+        return (
+            <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617] text-slate-200 font-sans relative px-6">
+                <h1 className="text-3xl font-bold mb-3 text-slate-100 tracking-tight">
+                    Ultra<span className="text-sky-400">Admin</span>
+                </h1>
+                <p className="text-slate-400 mb-6 max-w-md text-center">
+                    Sign in to access the management console.
+                </p>
+                <Button
+                    onClick={() =>
+                        authClient.signIn.social({ provider: 'google', callbackURL: '/' })
+                    }
+                    className="h-10 px-4 bg-sky-500 hover:bg-sky-500/90 text-white"
+                >
+                    Continue with Google
+                </Button>
+                {import.meta.env.DEV && <DevLoginTools />}
+            </div>
+        );
+    }
+
+    const isAdmin = session.user.roles?.includes('admin');
     if (!isAdmin) {
+        const handleSwitchAccount = async () => {
+            await authClient.signOut();
+            await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+        };
         return (
             <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617] text-slate-200 font-sans relative">
                 <img
@@ -144,15 +172,24 @@ const App: React.FC = () => {
                     Access Denied
                 </h1>
                 <p className="text-slate-400 mb-8 max-w-md text-center">
-                    You are currently logged in with the roles{' '}
+                    You are currently signed in as{' '}
+                    <span className="text-sky-400 font-mono">{session.user.email}</span> with the
+                    roles{' '}
                     <span className="text-sky-400 font-mono">
-                        [{session?.user?.roles?.join(', ') || 'Guest'}]
+                        [{session.user.roles?.join(', ') || 'none'}]
                     </span>
                     .
                     <br />
                     <br />
                     Administrative access is required to view the Ultratable console.
                 </p>
+                <Button
+                    onClick={handleSwitchAccount}
+                    variant="outline"
+                    className="h-10 px-4 border-slate-700 text-slate-200 hover:bg-slate-800"
+                >
+                    Switch account
+                </Button>
                 {import.meta.env.DEV && <DevLoginTools />}
             </div>
         );
