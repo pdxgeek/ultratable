@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import * as schema from '../../db/schema';
 import { AuthIdentityRow, DomainUserRow, UsersRepository } from '../users';
+import { NOW_MS } from './shared';
 
 export class PostgresUsersRepository implements UsersRepository {
     async getDomainUserById(domainUserId: string): Promise<DomainUserRow | null> {
@@ -50,9 +51,11 @@ export class PostgresUsersRepository implements UsersRepository {
         roles: string[],
     ): Promise<typeof schema.users.$inferSelect | null> {
         if (!db) return null;
+        // NOW_MS (date_trunc to ms) matches the column precision and the
+        // GraphQL DateTime scalar — see AI_README_FIRST.MD §1.
         const [row] = await db
             .update(schema.users)
-            .set({ roles, updatedAt: new Date() })
+            .set({ roles, updatedAt: NOW_MS as unknown as Date })
             .where(eq(schema.users.id, domainUserId))
             .returning();
         return row ?? null;
