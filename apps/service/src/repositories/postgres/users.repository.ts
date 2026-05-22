@@ -64,6 +64,30 @@ export class PostgresUsersRepository implements UsersRepository {
             .set({ roles, updatedAt: NOW_MS as unknown as Date })
             .where(eq(schema.users.id, domainUserId))
             .returning();
+
+        // Mirror domain admin status to every linked auth_user.role so Better
+        // Auth's admin plugin recognises our admins. user.roles stays the
+        // source of truth; this column is a write-only-from-here projection.
+        // See docs/auth-architecture.md "Role storage".
+        if (row) {
+            const adminRole = roles.includes('admin') ? 'admin' : null;
+            const links = await db
+                .select({ authUserId: schema.authLinks.authUserId })
+                .from(schema.authLinks)
+                .where(eq(schema.authLinks.domainUserId, domainUserId));
+            if (links.length > 0) {
+                await db
+                    .update(schema.authUsers)
+                    .set({ role: adminRole, updatedAt: NOW_MS as unknown as Date })
+                    .where(
+                        inArray(
+                            schema.authUsers.id,
+                            links.map((l) => l.authUserId),
+                        ),
+                    );
+            }
+        }
+
         return row ?? null;
     }
 

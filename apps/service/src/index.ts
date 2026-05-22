@@ -17,6 +17,7 @@ import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import { createYoga } from 'graphql-yoga';
 
 import { auth } from './api/auth';
+import { abilityFor } from './auth/abilities';
 import { db } from './db';
 import * as schema from './db/schema';
 import { createLoaders } from './loaders';
@@ -161,7 +162,12 @@ const yoga = createYoga<{
 
         if (!session?.user?.id) {
             globalLogger.debug({ path: req.url }, 'Auth: no session — guest context');
-            return { req, user: undefined, loaders: createLoaders() };
+            return {
+                req,
+                user: undefined,
+                loaders: createLoaders(),
+                ability: await abilityFor(undefined),
+            };
         }
 
         // Resolve domain user via cached authLinks bridge lookup
@@ -176,7 +182,13 @@ const yoga = createYoga<{
             'Auth: context resolved',
         );
 
-        return { req, user, authUserId: session.user.id, loaders: createLoaders() };
+        return {
+            req,
+            user,
+            authUserId: session.user.id,
+            loaders: createLoaders(),
+            ability: await abilityFor(user),
+        };
     },
     // We use fastify's built-in error handling
     logging: globalLogger,

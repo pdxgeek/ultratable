@@ -1,7 +1,8 @@
+import { subject } from '@casl/ability';
 import { GraphQLError } from 'graphql';
 
 import { repository } from '../repositories';
-import { builder, requireSelfOrAdmin, requireViewer } from './builder';
+import { abilityOf, builder, requireViewer } from './builder';
 import { ViewerRef } from './viewer';
 
 /**
@@ -49,6 +50,10 @@ builder.mutationField('updateMyProfile', (t) =>
     }),
 );
 
+// Dogfood for the CASL migration. The check is the same as `requireViewer`
+// — "is there a viewer at all" — but expressed through the ability so the
+// pattern is visible. Resolvers that gate on viewer-presence-only become:
+//   if (!ctx.user || abilityOf(ctx).cannot('read', 'Viewer')) throw 401
 builder.mutationField('setMyLeagueFollows', (t) =>
     t.field({
         type: ['ID'],
@@ -58,12 +63,21 @@ builder.mutationField('setMyLeagueFollows', (t) =>
             leagueIds: t.arg.idList({ required: true }),
         },
         resolve: async (_root, { leagueIds }, ctx) => {
-            const viewer = requireViewer(ctx);
-            return repository.users.setFollowedLeagueIds(viewer.id, leagueIds as string[]);
+            if (!ctx.user || abilityOf(ctx).cannot('read', 'Viewer')) {
+                throw new GraphQLError('Unauthenticated', {
+                    extensions: { http: { status: 401 } },
+                });
+            }
+            return repository.users.setFollowedLeagueIds(ctx.user.id, leagueIds as string[]);
         },
     }),
 );
 
+// Dogfood for self-or-admin. The CASL rule "can('manage', 'Account', { id: viewer.id })"
+// + admin's "can('manage', 'all')" together produce the same gate as the
+// legacy `requireSelfOrAdmin(ctx, userId)`. Note the use of `subject(...)`
+// so CASL evaluates the conditional rule against the target id rather than
+// just the subject type.
 builder.mutationField('deleteUserAccount', (t) =>
     t.id({
         description:
@@ -72,7 +86,17 @@ builder.mutationField('deleteUserAccount', (t) =>
             userId: t.arg.id({ required: true }),
         },
         resolve: async (_root, { userId }, ctx) => {
-            requireSelfOrAdmin(ctx, userId as string);
+            if (!ctx.user) {
+                throw new GraphQLError('Unauthenticated', {
+                    extensions: { http: { status: 401 } },
+                });
+            }
+            const ability = abilityOf(ctx);
+            if (ability.cannot('delete', subject('Account', { id: userId as string }))) {
+                throw new GraphQLError('Forbidden', {
+                    extensions: { http: { status: 403 } },
+                });
+            }
             const result = await repository.users.deleteDomainUser(userId as string);
             return result.deletedDomainUserId;
         },

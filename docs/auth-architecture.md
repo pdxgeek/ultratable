@@ -54,6 +54,84 @@ type AuthIdentity {
 
 `identities` joins through `auth_link` → `auth_account` (provider lives on `auth_account.provider_id`). The resolver lives in [`apps/service/src/schema/viewer.ts`](../apps/service/src/schema/viewer.ts) and goes through `repository.users` rather than touching `db` directly — this is the storage-agnostic facade rule from [AI_README_FIRST.MD §5](../AI_README_FIRST.MD).
 
+## Role storage
+
+UltraTable uses **two role columns** that look similar but mean different things:
+
+| Column            | Owner       | Source of truth | Read by                                                        |
+| ----------------- | ----------- | --------------- | -------------------------------------------------------------- |
+| `user.roles`      | UltraTable  | **yes**         | every GraphQL resolver, the CASL ability builder, our own code |
+| `auth_user.role`  | Better Auth | no (mirror)     | the Better Auth `admin` plugin's internal gate                 |
+
+`user.roles` is per **domain account** (one set of roles regardless of how the
+user signed in). `auth_user.role` is per **identity** — a user with both a
+Google identity and a credential identity has two `auth_user` rows. They
+mean different things in our two-tier model: per-account roles are the right
+abstraction, per-identity roles are not.
+
+We keep `user.roles` as the source of truth. `auth_user.role` is a derived
+**mirror**: whenever [`repository.users.setDomainUserRoles`](../apps/service/src/repositories/postgres/users.repository.ts) runs, it copies
+the new domain-admin status (`'admin'` or `null`) to every linked `auth_user`
+row in the same transaction. The mirror exists for exactly one reason — Better
+Auth's `admin` plugin checks `auth_user.role` against its `adminRoles` config
+(default `['admin']`) when gating `auth.api.listUsers` / `banUser` /
+`impersonateUser` / etc. Without the mirror, our domain admins couldn't use
+those endpoints.
+
+**Rules:**
+
+- **Never write to `auth_user.role` directly.** The only writer is
+  `setDomainUserRoles` (which also writes `user.roles` in the same call).
+- **Never call `auth.api.setRole`.** It would mutate `auth_user.role` without
+  touching `user.roles` and would silently desync the two columns. Treat it
+  as not existing.
+- **Read `user.roles`, not `auth_user.role`.** The CASL ability builder
+  reads from `ctx.user.roles` (domain), and every resolver-level gate goes
+  through CASL. The `auth_user.role` column should never appear in our own
+  code outside the mirror.
+
+If you're adding a new role, add it to `user.roles` and update the CASL
+rule set in [apps/service/src/auth/abilities.ts](../apps/service/src/auth/abilities.ts). The mirror handles `admin`
+specifically because that's what the plugin checks — other domain roles
+don't need to surface on `auth_user.role`.
+
+## Better Auth admin plugin
+
+The [`admin`](https://www.better-auth.com/docs/plugins/admin) plugin is
+registered in [apps/service/src/api/auth.ts](../apps/service/src/api/auth.ts).
+It adds these API endpoints (callable from the service via
+`auth.api.*`):
+
+- `listUsers({ query })` — paginated list with search.
+- `getUser({ userId })` — single user with identities + sessions.
+- `banUser({ userId, banReason?, banExpiresIn? })` / `unbanUser({ userId })`.
+- `impersonateUser({ userId })` — mints a new session as the target user
+  with `session.impersonatedBy` set to the original admin's `auth_user.id`.
+- `removeUser({ userId })` — runs Better Auth's deletion lifecycle hooks.
+- `setRole({ userId, role })` — **do not call.** See the role-storage rules above.
+
+These are exposed today but not yet wrapped in GraphQL. The admin
+user-management page (sibling ticket) builds the wrappers; every wrapper
+gates via CASL (`ctx.ability.throwUnlessCan('manage', 'all')`) before
+calling into `auth.api`.
+
+### Impersonation guardrails
+
+Impersonation is the one capability we couldn't reasonably build ourselves —
+session minting on behalf of another user, with audit metadata. Before the
+admin page exposes the button, these guardrails must be in place (they live
+with the admin-page ticket, not this one):
+
+- **Every impersonation event produces an audit log row** (admin id, target
+  id, started at, ended at, required reason field).
+- **Impersonated sessions are visually distinct** in every UI — banner across
+  the top: "Impersonating dave@example.com — exit". The plugin exposes
+  `session.impersonatedBy` for the detection.
+- **Production-only restriction:** in `apps/admin` only, never `apps/web`.
+
+The audit log table is part of the admin-page sibling issue. This file is
+the canonical "do not skip these" reference when that work lands.
+
 ## Dev login
 
 `/api/auth/dev-login` is a non-production endpoint that mints a Better Auth session for one of three canned roles (`admin`, `user`, `guest`). It calls Better Auth's `signUpEmail` if the identity doesn't exist (which fires the bootstrap hook, creating the matching domain user + link), then force-sets the requested role via `repository.users.setDomainUserRoles` and invalidates the domain-user cache. The endpoint returns 403 in production.

@@ -53,9 +53,10 @@ const LeagueFollowsPanel: React.FC = () => {
         if (!viewer) return;
         setPending((p) => ({ ...p, [leagueId]: checked }));
         setError(null);
+        const current = viewer.followedLeagueIds ?? [];
         const next = checked
-            ? Array.from(new Set([...viewer.followedLeagueIds, leagueId]))
-            : viewer.followedLeagueIds.filter((id) => id !== leagueId);
+            ? Array.from(new Set([...current, leagueId]))
+            : current.filter((id) => id !== leagueId);
         const result = await setFollows({ leagueIds: next });
         setPending((p) => {
             const next = { ...p };
