@@ -50,6 +50,19 @@ if (!socialProviders && process.env.NODE_ENV === 'production') {
     );
 }
 
+// In production, apps/service, apps/admin, and apps/web each ship as an
+// independent container behind their own hostname (see [admin & web in
+// separate containers](../../../../docs/) — they don't share an origin with
+// each other or with the service). For the session cookie to survive the
+// cross-site fetches each frontend makes back to the service, it has to be
+// SameSite=None; Secure. In dev (localhost, all-same-site) the Better Auth
+// default of SameSite=Lax is correct and we keep it — Secure+None would
+// silently fail on plain http.
+const productionCookieAttributes =
+    process.env.NODE_ENV === 'production'
+        ? { sameSite: 'none' as const, secure: true, httpOnly: true }
+        : undefined;
+
 export const auth = betterAuth({
     database: drizzleAdapter(db, {
         provider: 'pg',
@@ -65,6 +78,9 @@ export const auth = betterAuth({
         enabled: true,
     },
     socialProviders,
+    advanced: productionCookieAttributes
+        ? { defaultCookieAttributes: productionCookieAttributes }
+        : undefined,
     databaseHooks: {
         user: {
             create: {
