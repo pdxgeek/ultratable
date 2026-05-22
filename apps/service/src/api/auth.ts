@@ -48,20 +48,27 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Google OAuth is configured per-frontend. apps/admin and apps/web each have
 // their own OAuth client (same Google Cloud project, different consent screens,
-// different redirect URIs). The PUBLIC client IDs live in each frontend's env
+// independent revocation). The PUBLIC client IDs live in each frontend's env
 // as VITE_GOOGLE_CLIENT_ID; the SECRETS live here, namespaced by frontend.
 //
-// Better Auth's `socialProviders.google` accepts `clientId: string[]`, which
-// makes the provider accept ID tokens whose audience matches any of the listed
-// client IDs (used by the upcoming frontend-driven ID-token sign-in). For the
-// auth-code flow that runs today, Better Auth uses the first client ID and the
-// (single) clientSecret it was configured with.
+// This is Better Auth's canonical pattern for cross-platform sign-in
+// (PR #9292, merged April 2026): pass an array of client IDs and the
+// provider accepts ID tokens whose `aud` claim matches any of them. Each
+// frontend uses its own client ID via Google Identity Services (GIS) in
+// the browser to obtain an ID token, then calls
+//   authClient.signIn.social({ provider: 'google', idToken: { token } })
+// and the service verifies the token against the configured audiences.
+// See docs/auth-architecture.md for the full flow.
 //
-// KNOWN FOLLOW-UP: per-host dispatch of (clientId, clientSecret) so the
-// auth-code flow uses admin's pair when the request comes from admin and
-// web's pair when it comes from web. Better Auth captures these at init,
-// not per-request, so this needs a custom social provider wrapper. Until
-// then, both frontends share whichever pair is picked here (admin first).
+// The single clientSecret below is kept for two reasons:
+//   1. The classic auth-code redirect flow (POST /api/auth/sign-in/social
+//      without an idToken) still works as a fallback. It uses the FIRST
+//      client ID in the array paired with this secret. We use admin's
+//      since dev BETTER_AUTH_URL points at the admin port.
+//   2. Anything Better Auth might do server-side that needs the secret
+//      (e.g. refresh-token exchange) has one to use.
+// In the user-facing ID-token flow the secret is unused — Google's ID
+// token is a JWT verified against Google's public keys.
 const adminClientId = process.env.GOOGLE_CLIENT_ID_ADMIN;
 const adminClientSecret = process.env.GOOGLE_CLIENT_SECRET_ADMIN;
 const webClientId = process.env.GOOGLE_CLIENT_ID_WEB;
@@ -70,6 +77,8 @@ const webClientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB;
 const googleClientIds = [adminClientId, webClientId].filter(
     (id): id is string => Boolean(id),
 );
+// Admin first: matches BETTER_AUTH_URL in dev and is the documented "primary"
+// frontend for the auth-code-flow fallback.
 const primaryGoogleSecret = adminClientSecret ?? webClientSecret;
 
 const socialProviders =

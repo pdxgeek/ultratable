@@ -92,24 +92,66 @@ Register **two** OAuth 2.0 Web application clients in the same Google Cloud proj
 
 ### Credential layout
 
-Each OAuth client has a public `clientId` and a sensitive `clientSecret`. They live in different env files based on whether they're public or secret:
+Each OAuth client has a public `clientId` and a `clientSecret`. They live in different env files based on whether they're public or sensitive:
 
 | Value                                        | Where                                  | Why                                                                  |
 | -------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------- |
-| Admin `clientId` (public)                    | [`apps/admin/.env`](../apps/admin/.env.example) as `VITE_GOOGLE_CLIENT_ID`   | Bundled into the admin JS so the frontend can render the Google sign-in button. Client IDs are public by design. |
+| Admin `clientId` (public)                    | [`apps/admin/.env`](../apps/admin/.env.example) as `VITE_GOOGLE_CLIENT_ID`   | Bundled into the admin JS so Google Identity Services can request a token under this client's identity. Client IDs are public by design. |
 | Web `clientId` (public)                      | [`apps/web/.env`](../apps/web/.env.example) as `VITE_GOOGLE_CLIENT_ID`     | Same as admin, for the web bundle.                                  |
-| Admin `clientSecret` (sensitive)             | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_ADMIN` | Used by the service for the OAuth code-for-token exchange. Never reaches a browser. |
-| Web `clientSecret` (sensitive)               | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_WEB`   | Same as admin, server-side only.                                    |
-| Admin/Web `clientId` (also on service)       | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_ID_{ADMIN,WEB}` | Pothos / Better Auth needs these on the server too — they're passed as a `clientId: string[]` array to the social provider config. Same value as the frontend env, duplicated by design. |
+| Admin/Web `clientId` (mirrored on service)   | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_ID_{ADMIN,WEB}` | Passed to Better Auth as `clientId: [adminId, webId]`. Used to verify that an inbound ID token's `aud` claim matches one of our known clients. Same value as the frontend env, duplicated by design. |
+| Admin `clientSecret`                         | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_ADMIN` | Kept server-side. **Not used in the user-facing ID-token flow** — only needed if Better Auth ever runs the auth-code redirect flow or a refresh-token exchange. Never bundled into a browser. |
+| Web `clientSecret`                           | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_WEB`   | Same as admin — stored but rarely exercised. Independent revocation: deleting one Google client doesn't affect the other.       |
 
 `npm run setup` collects both pairs once and writes them to all three .env files in the right places.
 
 > [!IMPORTANT]
 > **Anything in `apps/admin/.env` or `apps/web/.env` ships to every browser visiting the deployed site.** This is fine for `VITE_GOOGLE_CLIENT_ID` (public) but absolutely not OK for the secret. The split exists to make it impossible to accidentally bundle a secret.
 
-### Known follow-up: per-host credential dispatch
+### Sign-in flow: ID-token via Google Identity Services
 
-Better Auth's social provider takes `(clientId, clientSecret)` at init time, not per request, so today the auth-code flow uses whichever pair the service picks first (admin). The two-client architecture is fully provisioned in the env layout, but **dispatching by `X-Forwarded-Host` (so admin sign-ins use the admin client and web sign-ins use the web client) requires a custom wrapper around Better Auth's `google` provider** and is tracked as a follow-up. Until that lands, both frontends share the admin OAuth client at the protocol level — they still render their own buttons from their own `VITE_GOOGLE_CLIENT_ID`, but the redirect dance terminates at the admin client. The eventual ID-token flow (frontend uses Google Identity Services to obtain a token, posts it to the service for verification) sidesteps this entirely because both client IDs are accepted as valid audiences via `clientId: string[]` already.
+We use Better Auth's canonical multi-client pattern, landed in [PR #9292](https://github.com/better-auth/better-auth/pull/9292) (April 2026). The pattern was designed exactly for our case — one backend serving N frontends, each with its own OAuth client:
+
+```ts
+// apps/service/src/api/auth.ts (effective shape)
+socialProviders: {
+    google: {
+        clientId: [GOOGLE_CLIENT_ID_ADMIN, GOOGLE_CLIENT_ID_WEB],
+        clientSecret: GOOGLE_CLIENT_SECRET_ADMIN,
+    },
+},
+```
+
+`clientId: string[]` makes Better Auth accept ID tokens whose `aud` claim matches **any** of the listed clients. Each frontend uses its own client ID via Google Identity Services (GIS) in the browser to obtain a token, then posts the token to the service. The single `clientSecret` only matters if Better Auth needs to drive the auth-code redirect flow (e.g. a future server-initiated sign-in) or exchange a refresh token — neither happens in the user-facing flow.
+
+End-to-end:
+
+```
+1. User on https://admin.ultratable.io (or ultratable.io) clicks "Sign in"
+2. Frontend's GIS popup/button fires:
+       google.accounts.id.initialize({ client_id: VITE_GOOGLE_CLIENT_ID, … })
+3. Google issues an ID token (JWT, aud = VITE_GOOGLE_CLIENT_ID)
+4. Frontend calls:
+       authClient.signIn.social({ provider: 'google', idToken: { token } })
+   (cross-origin fetch to the service, credentials: 'include')
+5. Service verifies the JWT against Google's public keys, checks that
+   aud matches one of the configured GOOGLE_CLIENT_ID_{ADMIN,WEB}
+6. user.create.after hook fires for new identities → domain user + auth_link
+7. Better Auth sets the session cookie on the service's origin; subsequent
+   GraphQL fetches from the frontend (credentials: 'include') carry it
+```
+
+The user never leaves the SPA's hostname. There is no redirect dance. Per-host server-side dispatch is unnecessary because each frontend's Google handshake is fully client-side — the service just verifies.
+
+### Why two OAuth clients is worth it
+
+With the auth-code flow we punted on, "two clients" was mostly future-proofing. With the ID-token flow, two clients gives you concrete things:
+
+- **Per-frontend consent-screen branding** — Google shows "UltraTable Admin wants to access…" vs "UltraTable wants to access…" with whatever logo/homepage URL you set per client.
+- **Independent revocation** — disable one OAuth client in Google Cloud Console without affecting the other's active users.
+- **Per-frontend audit visibility** — Google Cloud Console's OAuth metrics split out admin sign-ins from web sign-ins.
+- **Secrets stay stored, ready to use** — if you ever need the auth-code flow on one frontend (e.g. server-initiated Google API access for admin), you have the matching secret in hand.
+
+The "two secrets to rotate independently" angle is mostly moot today because the secrets aren't on the user-facing path, but having the env layout in place means a future refresh-token feature or admin-only Google API integration would Just Work.
 
 ### Frontend edge rewrites
 
@@ -128,16 +170,70 @@ Each frontend container must rewrite `/api/auth/*` to the service. Vercel exampl
 
 The rewrite preserves `X-Forwarded-Host`, which is what makes the per-request base URL inference work. Without it, the service would generate a redirect URI on the service's own hostname and the user would briefly leave the SPA during sign-in.
 
-## Dev sign-in flow
+## Dev sign-in flow (ID-token, primary)
 
-| Step | Where the browser is        | What happens                                                                          |
-| ---- | --------------------------- | ------------------------------------------------------------------------------------- |
-| 1    | `http://localhost:5174`     | User clicks "Sign in with Google" in the admin app                                    |
-| 2    | `http://localhost:5174`     | Frontend navigates to `/api/auth/sign-in/social?provider=google&callbackURL=…`        |
-| 3    | (Vite proxies to 8080)      | Service redirects the browser to `accounts.google.com/o/oauth2/v2/auth` with `redirect_uri = ${BETTER_AUTH_URL}/api/auth/callback/google` |
-| 4    | `accounts.google.com`       | User approves                                                                          |
-| 5    | `${BETTER_AUTH_URL}/api/auth/callback/google?code=…` | Browser hits the callback; Vite proxies to the service; service exchanges the code, runs the `user.create.after` hook, sets the session cookie |
-| 6    | `callbackURL` frontend path | Service 302s the browser back to the SPA; the cookie is already set                   |
+| Step | Where the browser is    | What happens                                                                              |
+| ---- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| 1    | `http://localhost:5174` | User clicks "Sign in with Google" in the admin app                                        |
+| 2    | `http://localhost:5174` | Google Identity Services (GIS) popup loaded by the frontend with `VITE_GOOGLE_CLIENT_ID`  |
+| 3    | `accounts.google.com`   | User approves; GIS returns an ID token (JWT, `aud = VITE_GOOGLE_CLIENT_ID`) in-browser    |
+| 4    | `http://localhost:5174` | Frontend POSTs the token to `/api/auth/sign-in/social` (Vite proxies to 8080)             |
+| 5    | (service)               | Better Auth verifies the JWT against Google's public keys + `aud` ∈ configured clientIds; runs `user.create.after` hook for new identities; sets the session cookie |
+| 6    | `http://localhost:5174` | Set-Cookie flows back through the Vite proxy; cookie lands on `localhost:5174`. Subsequent GraphQL fetches carry it. |
+
+There is no redirect to Google's `accounts.google.com` and no redirect back. The whole exchange happens via the GIS in-browser popup + a single `fetch` to the service.
+
+### Fallback: auth-code (redirect) flow
+
+The classic redirect flow still works (POST `/api/auth/sign-in/social` without an `idToken`) — Better Auth uses the first client ID in the array plus the `clientSecret`. Useful for:
+- Server-initiated sign-in (rare for us)
+- Debugging without GIS loaded in the page
+- Any future scenario where a refresh token is needed (Google API access on behalf of the user)
+
+For the redirect flow only, the `vercel.json` rewrite documented under [Frontend edge rewrites](#frontend-edge-rewrites) matters — it's what keeps the OAuth redirect URI on the frontend's hostname. The ID-token flow doesn't redirect, so the rewrite is optional (though still useful as a way to keep session cookies same-origin with the SPA without `SameSite=None` gymnastics).
+
+## Wiring frontend sign-in (next ticket — sibling to #66)
+
+The next ticket implements Google sign-in on each frontend. Concrete shape:
+
+### Frontend (apps/admin and apps/web, mirrored)
+
+1. Load Google Identity Services in the page (Vite-friendly: add `<script src="https://accounts.google.com/gsi/client" async defer></script>` in `index.html`, or dynamically inject it from a `useEffect`).
+2. Initialize with the bundled client ID:
+   ```ts
+   google.accounts.id.initialize({
+       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+       callback: async ({ credential }) => {
+           await authClient.signIn.social({
+               provider: 'google',
+               idToken: { token: credential },
+           });
+           // session cookie is now set; re-query `viewer`
+       },
+   });
+   ```
+3. Render the button (either Google's branded element via `google.accounts.id.renderButton(...)` or a custom one that calls `google.accounts.id.prompt()`).
+4. After sign-in, refetch `Query.viewer` to load the domain user into the SPA's state.
+
+### Service
+
+Nothing. `socialProviders.google.clientId: [adminId, webId]` is already configured to accept tokens whose `aud` matches either frontend's client. The `user.create.after` hook + `Viewer` resolver are already in place. The first sign-in from each Google user creates the `auth_user`/`auth_link`/`user` rows; subsequent sign-ins reuse them.
+
+### Cross-frontend SSO
+
+Because Google's `sub` claim is stable for the same user across both OAuth clients in the same Google Cloud project, signing in via admin and later via web with the same Google account resolves to the **same `auth_user` row** (and therefore the same domain `user`). The `user.create.after` hook only fires on the first sign-in. SSO works without us doing anything explicit.
+
+### What goes in `authClient` (per frontend)
+
+Better Auth ships a client library used to invoke the auth endpoints with proper types. Each frontend will instantiate it with the service URL:
+
+```ts
+// apps/{admin,web}/src/lib/auth.ts
+import { createAuthClient } from 'better-auth/client';
+export const authClient = createAuthClient({
+    baseURL: import.meta.env.VITE_API_URL ?? '/',  // '/' lets Vite/Vercel rewrites handle proxying
+});
+```
 
 ## Env vars
 
