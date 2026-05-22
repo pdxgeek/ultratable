@@ -58,7 +58,7 @@ Two separate Vercel projects:
 }
 ```
 
-The rewrite is what makes the per-request OAuth redirect URI work. Without it, `/api/auth/sign-in/social` would 404 on the frontend and Google sign-in would never start.
+The rewrite proxies `/api/auth/*` to the service so the session cookie ends up on the SPA's origin (same-site, no `SameSite=None` needed). It also makes the optional auth-code redirect fallback work without the user briefly leaving the SPA. The primary ID-token sign-in flow (see [docs/auth-architecture.md](docs/auth-architecture.md)) uses this rewrite to POST the Google ID token to the service via the same-origin path.
 
 ## Step 3: Google OAuth Clients (two of them)
 
@@ -76,7 +76,7 @@ Credential layout:
 - Public client IDs → `VITE_GOOGLE_CLIENT_ID` in each frontend's Vercel project env (different value each), plus mirrored as `GOOGLE_CLIENT_ID_ADMIN` / `GOOGLE_CLIENT_ID_WEB` on the service.
 - Secrets → `GOOGLE_CLIENT_SECRET_ADMIN` / `GOOGLE_CLIENT_SECRET_WEB` on the service. **Never in a frontend env.**
 
-See [docs/auth-architecture.md](docs/auth-architecture.md) for the rationale and the known per-host-dispatch follow-up.
+See [docs/auth-architecture.md](docs/auth-architecture.md) for the rationale and the ID-token sign-in flow.
 
 ## Step 4: Final Production Wiring
 

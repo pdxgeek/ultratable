@@ -137,21 +137,7 @@ That rewrite is what keeps the OAuth redirect URI on the frontend's own hostname
 
 ### Google OAuth Setup
 
-Create **two OAuth 2.0 Client IDs** in the same Google Cloud project — one per frontend. Each has its own consent screen and its own redirect URI on its own host:
-
-1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
-2. **Admin client** (Web application):
-    - Authorized JavaScript origin: `https://admin.ultratable.io` (prod), `http://localhost:5174` (dev)
-    - Authorized redirect URI: `https://admin.ultratable.io/api/auth/callback/google` (prod), `http://localhost:5174/api/auth/callback/google` (dev)
-3. **Web client** (Web application):
-    - Authorized JavaScript origin: `https://ultratable.io` (prod), `http://localhost:5175` (dev)
-    - Authorized redirect URI: `https://ultratable.io/api/auth/callback/google` (prod), `http://localhost:5175/api/auth/callback/google` (dev)
-4. Set the resulting credentials in the right env files (`npm run setup` does this for you):
-    - Public client IDs → `VITE_GOOGLE_CLIENT_ID` in [`apps/admin/.env`](apps/admin/.env.example) and [`apps/web/.env`](apps/web/.env.example) (different value per file).
-    - Public client IDs (mirrored) → `GOOGLE_CLIENT_ID_ADMIN`, `GOOGLE_CLIENT_ID_WEB` in [`apps/service/.env`](apps/service/.env.example).
-    - Client secrets → `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_SECRET_WEB` in [`apps/service/.env`](apps/service/.env.example). Never in a frontend .env.
-
-See [docs/auth-architecture.md](docs/auth-architecture.md) for the full credential-layout rationale and the known per-host-dispatch follow-up.
+Two OAuth 2.0 clients (one per frontend) in the same Google Cloud project, with public client IDs in each frontend's `.env` and secrets on the service. Step-by-step setup + credential layout lives in [DEPLOYMENT.md § Step 3](DEPLOYMENT.md) — locally, `npm run setup` prompts for everything. Architectural rationale (why two clients, why split, how the ID-token flow uses them) is in [docs/auth-architecture.md](docs/auth-architecture.md).
 
 ### Deploying to Fly.io
 
