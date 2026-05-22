@@ -10,7 +10,7 @@ This phase details the target architecture and the steps to deploy the applicati
     - `GET|POST /api/auth/*` (Better Auth endpoints)
 - **/apps/web** → Vercel static deploy. Rewrites `/api/auth/*` to the service.
 - **/apps/admin** → Vercel static deploy. Rewrites `/api/auth/*` to the service.
-- **Auth Model** → Better Auth issues a session cookie (`SameSite=Lax`, set on the SPA's own origin via the rewrite). Browser sends the cookie on credentialed fetches; the service resolves the session via [`auth.api.getSession`](apps/service/src/index.ts). See [docs/auth-architecture.md](docs/auth-architecture.md) for the full model.
+- **Auth Model** → Better Auth issues a session cookie (`SameSite=Lax`, set on the SPA's own origin via the rewrite). Browser sends the cookie on credentialed fetches; the service resolves the session via [`auth.api.getSession`](../apps/service/src/index.ts). See [auth-architecture.md](./auth-architecture.md) for the full model.
 - **Supabase Access** → Service-only using `SUPABASE_SERVICE_ROLE_KEY`.
 - **Admin Security** → Service enforces admin role for admin resolvers.
 
@@ -35,7 +35,7 @@ This phase details the target architecture and the steps to deploy the applicati
 - (optional, per-frontend) `GOOGLE_CLIENT_ID_ADMIN`, `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_ID_WEB`, `GOOGLE_CLIENT_SECRET_WEB`
 
 > [!IMPORTANT]
-> **Do NOT set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` (sent by each frontend's edge rewrite), so the OAuth redirect URI lives on the frontend's own hostname. Pinning `BETTER_AUTH_URL` overrides this and forces every sign-in to bounce through the service domain. See [docs/auth-architecture.md § Per-frontend OAuth redirect URIs](docs/auth-architecture.md#per-frontend-oauth-redirect-uris-production).
+> **Do NOT set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` (sent by each frontend's edge rewrite), so the OAuth redirect URI lives on the frontend's own hostname. Pinning `BETTER_AUTH_URL` overrides this and forces every sign-in to bounce through the service domain. See [auth-architecture.md § Per-frontend OAuth redirect URIs](./auth-architecture.md#per-frontend-oauth-redirect-uris-production).
 
 ## Step 2: Deploy Web + Admin to Vercel
 
@@ -58,7 +58,7 @@ Two separate Vercel projects:
 }
 ```
 
-The rewrite proxies `/api/auth/*` to the service so the session cookie ends up on the SPA's origin (same-site, no `SameSite=None` needed). It also makes the optional auth-code redirect fallback work without the user briefly leaving the SPA. The primary ID-token sign-in flow (see [docs/auth-architecture.md](docs/auth-architecture.md)) uses this rewrite to POST the Google ID token to the service via the same-origin path.
+The rewrite proxies `/api/auth/*` to the service so the session cookie ends up on the SPA's origin (same-site, no `SameSite=None` needed). It also makes the optional auth-code redirect fallback work without the user briefly leaving the SPA. The primary ID-token sign-in flow (see [auth-architecture.md](./auth-architecture.md)) uses this rewrite to POST the Google ID token to the service via the same-origin path.
 
 ## Step 3: Google OAuth Clients (two of them)
 
@@ -76,7 +76,7 @@ Credential layout:
 - Public client IDs → `VITE_GOOGLE_CLIENT_ID` in each frontend's Vercel project env (different value each), plus mirrored as `GOOGLE_CLIENT_ID_ADMIN` / `GOOGLE_CLIENT_ID_WEB` on the service.
 - Secrets → `GOOGLE_CLIENT_SECRET_ADMIN` / `GOOGLE_CLIENT_SECRET_WEB` on the service. **Never in a frontend env.**
 
-See [docs/auth-architecture.md](docs/auth-architecture.md) for the rationale and the ID-token sign-in flow.
+See [auth-architecture.md](./auth-architecture.md) for the rationale and the ID-token sign-in flow.
 
 ## Step 4: Final Production Wiring
 

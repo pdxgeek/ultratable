@@ -137,7 +137,7 @@ That rewrite is what keeps the OAuth redirect URI on the frontend's own hostname
 
 ### Google OAuth Setup
 
-Two OAuth 2.0 clients (one per frontend) in the same Google Cloud project, with public client IDs in each frontend's `.env` and secrets on the service. Step-by-step setup + credential layout lives in [DEPLOYMENT.md § Step 3](DEPLOYMENT.md) — locally, `npm run setup` prompts for everything. Architectural rationale (why two clients, why split, how the ID-token flow uses them) is in [docs/auth-architecture.md](docs/auth-architecture.md).
+Two OAuth 2.0 clients (one per frontend) in the same Google Cloud project, with public client IDs in each frontend's `.env` and secrets on the service. Step-by-step setup + credential layout lives in [docs/DEPLOYMENT.md § Step 3](docs/DEPLOYMENT.md) — locally, `npm run setup` prompts for everything. Architectural rationale (why two clients, why split, how the ID-token flow uses them) is in [docs/auth-architecture.md](docs/auth-architecture.md).
 
 ### Deploying to Fly.io
 
