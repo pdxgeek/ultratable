@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 
 import Footer from './components/Footer';
 import TopNav from './components/TopNav';
+import AccountPage from './pages/account/AccountPage';
 import LoginPage from './pages/LoginPage';
 import MatchPage from './pages/MatchPage';
 import MissionPage from './pages/MissionPage';
@@ -18,6 +19,7 @@ const App: React.FC = () => {
                     <Route path="/match/:id" element={<MatchPage />} />
                     <Route path="/mission" element={<MissionPage />} />
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/account/*" element={<AccountPage />} />
                 </Routes>
             </main>
             <Footer />

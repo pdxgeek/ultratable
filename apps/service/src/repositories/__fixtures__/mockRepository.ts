@@ -145,6 +145,15 @@ export function buildMockUsers(overrides: Partial<UsersRepository> = {}): UsersR
         getDomainUserById: vi.fn().mockResolvedValue(null),
         getIdentitiesForDomainUser: vi.fn().mockResolvedValue([]),
         setDomainUserRoles: vi.fn().mockResolvedValue(null),
+        updateDomainUserProfile: vi.fn().mockResolvedValue(null),
+        getFollowedLeagueIds: vi.fn().mockResolvedValue([]),
+        setFollowedLeagueIds: vi.fn().mockResolvedValue([]),
+        deleteDomainUser: vi
+            .fn()
+            .mockImplementation(async (id: string) => ({
+                deletedDomainUserId: id,
+                deletedAuthUserIds: [],
+            })),
         ...overrides,
     };
 }

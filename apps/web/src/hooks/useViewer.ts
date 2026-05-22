@@ -1,5 +1,11 @@
 import { gql, useQuery } from 'urql';
 
+export interface ViewerIdentity {
+    authUserId: string;
+    provider: string;
+    linkedAt: string;
+}
+
 export interface Viewer {
     id: string;
     name: string;
@@ -7,6 +13,9 @@ export interface Viewer {
     image: string | null;
     emailVerified: boolean;
     roles: string[];
+    createdAt: string;
+    identities: ViewerIdentity[];
+    followedLeagueIds: string[];
 }
 
 const VIEWER_QUERY = gql`
@@ -18,6 +27,13 @@ const VIEWER_QUERY = gql`
             image
             emailVerified
             roles
+            createdAt
+            identities {
+                authUserId
+                provider
+                linkedAt
+            }
+            followedLeagueIds
         }
     }
 `;
