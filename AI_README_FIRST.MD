@@ -165,7 +165,38 @@ You must strictly adhere to the following coding standards when working on this 
 
 ---
 
-## 6. AI Agent Operational Rules
+## 6. Auth Contracts
+
+Auth is provided by Better Auth and lives in [apps/service](apps/service). The deep dive is in [docs/auth-architecture.md](docs/auth-architecture.md) — read that before touching sign-in, the hook, or the viewer query. The non-negotiable rules:
+
+### Identity ≠ Account (two-tier model)
+
+- `auth_user` rows are **identities** (one per provider sign-in). `user` rows are **domain accounts** (roles, profile, the GraphQL surface). They're bridged by `auth_link` (many identities → one account).
+- The GraphQL `Viewer` type always exposes the domain account UUID, never the auth_user ID. `Viewer.identities` is the list of linked auth identities — exposed for the account page, not as the primary key.
+
+### Never auto-link by email
+
+- The `databaseHooks.user.create.after` hook ([apps/service/src/services/auth-bootstrap.ts](apps/service/src/services/auth-bootstrap.ts)) creates a **fresh** domain user + auth_link for every new identity. Even if the new identity's email matches an existing domain user, do NOT auto-merge.
+- The `users.email` UNIQUE constraint will reject duplicates; the hook swallows that failure and logs it. The auth_user stays unlinked, the context falls back to a default `user` role, and the account-page flow is the only path to explicit linking. Don't change this — auto-merging on email match is a security footgun.
+
+### Per-frontend OAuth redirect URIs
+
+- In production each frontend container (`apps/admin`, `apps/web`) rewrites `/api/auth/*` to the service container. The OAuth redirect URI lives on the **frontend's** hostname, not the service's, so the user never leaves their SPA and the session cookie is same-site.
+- This works because `BETTER_AUTH_URL` is **unset** in production. Better Auth's default `trustedProxyHeaders: true` then derives the base URL per request from `X-Forwarded-Host`, so the redirect URI matches whichever frontend started the flow.
+- Google Cloud Console gets one redirect URI per frontend (e.g. `https://admin.ultratable.io/api/auth/callback/google` AND `https://ultratable.io/api/auth/callback/google`), not one on the service domain.
+- `ALLOWED_ORIGINS` feeds both Fastify CORS and Better Auth's `trustedOrigins` — every frontend origin must be listed.
+
+### Viewer query nulls, not throws
+
+- `Query.viewer` returns `null` when unauthenticated. It does NOT throw an `Unauthenticated` error. This lets frontends render a signed-out state without try/catch and is what the resolver tests in [apps/service/src/schema/viewer.test.ts](apps/service/src/schema/viewer.test.ts) pin.
+
+### Dev login is non-production only
+
+- `/api/auth/dev-login` mints a session for a canned role. It calls `signUpEmail` (which fires the bootstrap hook), then force-sets the requested role. It returns 403 when `NODE_ENV=production`. Don't route any real auth flow through it.
+
+---
+
+## 7. AI Agent Operational Rules
 
 - **ANSWER QUESTIONS FIRST (DO NOT MUTATE)**: If the owner explicitly asks a question (e.g., "why...", "did you...", "how does..."), you must **JUST ANSWER IT**. Do NOT make autonomous code changes, do NOT trigger deployments, and do NOT proactively mutate state while answering a direct query. Always wait for explicit instruction to proceed with changes after answering.
 - **Strict TypeScript (No `any`)**: We explicitly chose TypeScript to avoid loose typing. **DO NOT use `any` under any circumstances.** Always define proper interfaces, use `unknown` with assertions if the type is truly not known, and leverage Drizzle's `$inferSelect`/`$inferInsert` for database types. Maintaining a strict, zero-warning TypeScript environment is mandatory. Always verify your changes do not introduce warnings by running `npm run lint --workspaces`.

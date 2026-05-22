@@ -104,11 +104,13 @@ All variables are set as Fly secrets. See [`apps/service/.env.example`](apps/ser
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅       | Supabase service role key (server-side storage uploads)                                                                                                              |
 | `API_FOOTBALL_KEY`          | ✅       | API-Football.com API key                                                                                                                                             |
 | `BETTER_AUTH_SECRET`        | ✅       | Session signing secret (≥32 chars)                                                                                                                                   |
-| `BETTER_AUTH_URL`           | ✅       | `https://api.ultratable.io`                                                                                                                                          |
-| `ALLOWED_ORIGINS`           | ✅       | `https://ultratable.io,https://admin.ultratable.io`                                                                                                                  |
+| `ALLOWED_ORIGINS`           | ✅       | Comma-separated list of every frontend origin. Feeds both Fastify CORS and Better Auth's `trustedOrigins`. e.g. `https://ultratable.io,https://admin.ultratable.io`  |
 | `LOG_LEVEL`                 | Optional | Log verbosity: `trace\|debug\|info\|warn\|error\|fatal`. Defaults to `info` in production. Set to `warn` for minimal noise. Debug-level logs never hit the database. |
 | `GOOGLE_CLIENT_ID`          | Optional | Google OAuth client ID                                                                                                                                               |
 | `GOOGLE_CLIENT_SECRET`      | Optional | Google OAuth client secret                                                                                                                                           |
+
+> [!IMPORTANT]
+> **Do not set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` — so each frontend's OAuth redirect URI lives on its own hostname, not on the service. This is the architecture each `vercel.json` rewrite below relies on. See [docs/auth-architecture.md](docs/auth-architecture.md) for the full model.
 
 ### Frontend Environment Variables (Vercel)
 
@@ -118,14 +120,29 @@ Set in each Vercel project's settings.
 | -------------- | ---------- | ---------------------------------------------------------------- |
 | `VITE_API_URL` | web, admin | `https://api.ultratable.io` (absolute URL for production builds) |
 
+Each frontend also needs a `vercel.json` rewrite at its repo root so `/api/auth/*` hits the service:
+
+```json
+{
+    "rewrites": [
+        { "source": "/api/auth/:path*", "destination": "https://api.ultratable.io/api/auth/:path*" }
+    ]
+}
+```
+
+That rewrite is what keeps the OAuth redirect URI on the frontend's own hostname — the user never leaves their SPA during sign-in.
+
 ### Google OAuth Setup
 
 1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
 2. Create an OAuth 2.0 Client ID (Web application)
-3. Add authorized redirect URIs:
-    - Dev: `http://localhost:8080/api/auth/callback/google`
-    - Prod: `https://api.ultratable.io/api/auth/callback/google`
-4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the service env.
+3. Add **one authorized redirect URI per frontend** (the redirect lives on the SPA's own hostname, not the service):
+    - Prod: `https://ultratable.io/api/auth/callback/google`
+    - Prod: `https://admin.ultratable.io/api/auth/callback/google`
+    - Dev:  `http://localhost:5174/api/auth/callback/google`
+    - Dev:  `http://localhost:5175/api/auth/callback/google` (when web sign-in is wired)
+4. Authorized JavaScript origins can be empty — Better Auth doesn't use Google's JS SDK in the browser.
+5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the service env via `fly secrets set`.
 
 ### Deploying to Fly.io
 
@@ -135,8 +152,10 @@ fly apps create ultratable-api
 fly secrets set NODE_ENV=production PORT=8080 HOST=0.0.0.0 \
   DATABASE_URL=... SUPABASE_URL=... SUPABASE_ANON_KEY=... \
   SUPABASE_SERVICE_ROLE_KEY=... API_FOOTBALL_KEY=... \
-  BETTER_AUTH_SECRET=... BETTER_AUTH_URL=https://api.ultratable.io \
+  BETTER_AUTH_SECRET=... \
   ALLOWED_ORIGINS=https://ultratable.io,https://admin.ultratable.io
+# NOTE: BETTER_AUTH_URL is intentionally not set in prod — Better Auth
+# derives the base URL per request from X-Forwarded-Host.
 
 # Deploy
 fly deploy
