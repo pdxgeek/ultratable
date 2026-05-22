@@ -5,6 +5,7 @@ import { GraphicsRepository } from './graphics';
 import { LeaguesRepository } from './leagues';
 import { PlayersRepository } from './players';
 import { TeamsRepository } from './teams';
+import { UsersRepository } from './users';
 import { WorkersRepository } from './workers';
 
 /**
@@ -21,4 +22,5 @@ export interface IRepository {
     catalog: CatalogRepository;
     players: PlayersRepository;
     graphics: GraphicsRepository;
+    users: UsersRepository;
 }

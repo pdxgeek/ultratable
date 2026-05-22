@@ -7,6 +7,7 @@ import './football';
 import './catalog';
 import './workers';
 import './graphics';
+import './viewer';
 
 /**
  * These tests use GraphQL introspection to verify that every type, field,
@@ -45,6 +46,8 @@ const APP_TYPES = [
     'SystemLog',
     'Graphic',
     'SyncCatalogResult',
+    'Viewer',
+    'AuthIdentity',
 ];
 
 describe('Schema Description Coverage', () => {
@@ -92,8 +95,7 @@ describe('Schema Description Coverage', () => {
 
         const missing: string[] = [];
         for (const field of result.data.__schema.queryType.fields) {
-            // Skip the introspection 'me' query (it's a simple auth check)
-            if (field.name === 'me' || field.name.startsWith('__')) continue;
+            if (field.name.startsWith('__')) continue;
             if (!field.description || field.description.trim() === '') {
                 missing.push(`Query.${field.name}`);
             }
@@ -145,7 +147,7 @@ describe('Schema Description Coverage', () => {
         const missing: string[] = [];
 
         for (const field of result.data.__schema.queryType.fields) {
-            if (field.name === 'me' || field.name.startsWith('__')) continue;
+            if (field.name.startsWith('__')) continue;
             for (const arg of field.args) {
                 if (!arg.description || arg.description.trim() === '') {
                     missing.push(`Query.${field.name}(${arg.name})`);

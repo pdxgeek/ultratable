@@ -9,7 +9,8 @@ This file covers **what to run and where things live**. The architectural contra
 - **§1 ID Philosophy** — dual-ID system, naming convention, timestamp/timezone rules, hybrid SQL+JSONB column policy
 - **§3–4 Cache Isolation & Lifecycle** — raw API cache vs. domain cache keying
 - **§5 Architecture & Design Principles** — library-over-bespoke, DataLoader requirement for nested resolvers, performance and SOLID/DRY guidance
-- **§6 AI Agent Operational Rules** — no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
+- **§6 Auth Contracts** — identity ≠ account, never auto-link by email, per-frontend OAuth redirect URIs, viewer-returns-null. Deep dive: [docs/auth-architecture.md](docs/auth-architecture.md).
+- **§7 AI Agent Operational Rules** — no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
 
 ## First-Run Setup
 
@@ -80,7 +81,9 @@ UltraTable is a real-time fantasy sports platform structured as a monorepo with 
 
 ### Authentication
 
-Better Auth manages sessions (email/password + Google OAuth). Two-tier user model: `auth_user` (Better Auth) linked to domain `user` (with roles) via `auth_links`. Dev-only `/api/auth/dev-login` endpoint exists for testing roles locally.
+Better Auth manages sessions (email/password + Google OAuth). Two-tier user model: `auth_user` (one per provider identity) linked to domain `user` (with roles) via `auth_links`. A `user.create.after` hook in [apps/service/src/services/auth-bootstrap.ts](apps/service/src/services/auth-bootstrap.ts) creates a fresh domain user + link for every new identity — no auto-linking by email. The GraphQL `Query.viewer` returns the joined domain account (or `null` when unauthenticated), defined in [apps/service/src/schema/viewer.ts](apps/service/src/schema/viewer.ts). Dev-only `/api/auth/dev-login` endpoint mints sessions for canned roles locally.
+
+Each frontend has its own Google OAuth client (same Google Cloud project, different consent screens). The public `VITE_GOOGLE_CLIENT_ID` lives in `apps/{admin,web}/.env` (bundled into the JS for Google Identity Services); secrets stay server-side as `GOOGLE_CLIENT_SECRET_{ADMIN,WEB}`. Service passes `clientId: [adminId, webId]` to Better Auth — this is Better Auth's canonical cross-platform pattern, so a single backend accepts ID tokens from either client. Frontend sign-in (next ticket) uses GIS to obtain a token in-browser and posts it via `authClient.signIn.social({ provider: 'google', idToken: { token } })` — no redirect dance. See [docs/auth-architecture.md](docs/auth-architecture.md) for the full model — read it before touching sign-in, the hook, or the viewer.
 
 ## Verifying Changes
 

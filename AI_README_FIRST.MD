@@ -165,7 +165,48 @@ You must strictly adhere to the following coding standards when working on this 
 
 ---
 
-## 6. AI Agent Operational Rules
+## 6. Auth Contracts
+
+Auth is provided by Better Auth and lives in [apps/service](apps/service). The deep dive is in [docs/auth-architecture.md](docs/auth-architecture.md) — read that before touching sign-in, the hook, or the viewer query. The non-negotiable rules:
+
+### Identity ≠ Account (two-tier model)
+
+- `auth_user` rows are **identities** (one per provider sign-in). `user` rows are **domain accounts** (roles, profile, the GraphQL surface). They're bridged by `auth_link` (many identities → one account).
+- The GraphQL `Viewer` type always exposes the domain account UUID, never the auth_user ID. `Viewer.identities` is the list of linked auth identities — exposed for the account page, not as the primary key.
+
+### Never auto-link by email
+
+- The `databaseHooks.user.create.after` hook ([apps/service/src/services/auth-bootstrap.ts](apps/service/src/services/auth-bootstrap.ts)) creates a **fresh** domain user + auth_link for every new identity. Even if the new identity's email matches an existing domain user, do NOT auto-merge.
+- The `users.email` UNIQUE constraint will reject duplicates; the hook swallows that failure and logs it. The auth_user stays unlinked, the context falls back to a default `user` role, and the account-page flow is the only path to explicit linking. Don't change this — auto-merging on email match is a security footgun.
+
+### Two OAuth clients (one per frontend) + ID-token flow
+
+- `apps/admin` and `apps/web` each have **their own Google OAuth client** (same Google Cloud project, different consent screens, independent revocation). Each client has its own JS origin and redirect URI on its frontend's host.
+- **Public `clientId`s live in each frontend's `.env`** as `VITE_GOOGLE_CLIENT_ID` and bundle into the JS. This is by design — client IDs are public.
+- **`clientSecret`s live on the service**, namespaced: `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_SECRET_WEB`. They never reach a browser.
+- Service passes **`clientId: [adminId, webId]`** to Better Auth's `socialProviders.google` ([PR #9292](https://github.com/better-auth/better-auth/pull/9292), Better Auth's canonical cross-platform pattern). Tokens whose `aud` matches *either* client are accepted.
+- **Frontend sign-in uses Google Identity Services (GIS) in the browser** to obtain an ID token under its own client ID, then posts the token to the service via `authClient.signIn.social({ provider: 'google', idToken: { token } })`. The service verifies, runs the bootstrap hook for new identities, and sets the session cookie. No redirect to Google, no per-host server-side dispatch.
+- The `clientSecret` is unused in the user-facing ID-token flow (the JWT is verified against Google's public keys). It's kept on the service as a fallback for the auth-code/redirect flow and any future server-side token operations.
+- `npm run setup` collects both client-id/secret pairs once and writes them to the three .env files (service, admin, web) atomically.
+
+### Per-frontend OAuth redirect URIs
+
+- In production each frontend container (`apps/admin`, `apps/web`) rewrites `/api/auth/*` to the service container. The OAuth redirect URI lives on the **frontend's** hostname, not the service's, so the user never leaves their SPA and the session cookie is same-site.
+- This works because `BETTER_AUTH_URL` is **unset** in production. Better Auth's default `trustedProxyHeaders: true` then derives the base URL per request from `X-Forwarded-Host`, so the redirect URI matches whichever frontend started the flow.
+- Each Google OAuth client gets exactly one production redirect URI (its own frontend's host) — they're not shared.
+- `ALLOWED_ORIGINS` feeds both Fastify CORS and Better Auth's `trustedOrigins` — every frontend origin must be listed.
+
+### Viewer query nulls, not throws
+
+- `Query.viewer` returns `null` when unauthenticated. It does NOT throw an `Unauthenticated` error. This lets frontends render a signed-out state without try/catch and is what the resolver tests in [apps/service/src/schema/viewer.test.ts](apps/service/src/schema/viewer.test.ts) pin.
+
+### Dev login is non-production only
+
+- `/api/auth/dev-login` mints a session for a canned role. It calls `signUpEmail` (which fires the bootstrap hook), then force-sets the requested role. It returns 403 when `NODE_ENV=production`. Don't route any real auth flow through it.
+
+---
+
+## 7. AI Agent Operational Rules
 
 - **ANSWER QUESTIONS FIRST (DO NOT MUTATE)**: If the owner explicitly asks a question (e.g., "why...", "did you...", "how does..."), you must **JUST ANSWER IT**. Do NOT make autonomous code changes, do NOT trigger deployments, and do NOT proactively mutate state while answering a direct query. Always wait for explicit instruction to proceed with changes after answering.
 - **Strict TypeScript (No `any`)**: We explicitly chose TypeScript to avoid loose typing. **DO NOT use `any` under any circumstances.** Always define proper interfaces, use `unknown` with assertions if the type is truly not known, and leverage Drizzle's `$inferSelect`/`$inferInsert` for database types. Maintaining a strict, zero-warning TypeScript environment is mandatory. Always verify your changes do not introduce warnings by running `npm run lint --workspaces`.

@@ -31,6 +31,7 @@ export default defineConfig({
                 'src/repositories/repository.ts',
                 'src/repositories/shared.ts',
                 'src/repositories/teams.ts',
+                'src/repositories/users.ts',
                 'src/repositories/workers.ts',
                 'src/workers/**', // Job runner infrastructure
                 'src/schema/catalog.ts', // GraphQL wiring (schema registration)
