@@ -200,6 +200,17 @@ Auth is provided by Better Auth and lives in [apps/service](apps/service). The d
 
 - `Query.viewer` returns `null` when unauthenticated. It does NOT throw an `Unauthenticated` error. This lets frontends render a signed-out state without try/catch and is what the resolver tests in [apps/service/src/schema/viewer.test.ts](apps/service/src/schema/viewer.test.ts) pin.
 
+### Authorization goes through CASL — no inline role checks
+
+Every "is the viewer allowed to do X" decision flows through a single per-request CASL ability built in [apps/service/src/auth/abilities.ts](apps/service/src/auth/abilities.ts) and attached to the GraphQL context as `ctx.ability`. The frontend mirrors the same rule shape in [apps/web/src/auth/abilities.ts](apps/web/src/auth/abilities.ts) and [apps/admin/src/auth/abilities.ts](apps/admin/src/auth/abilities.ts) so server and client stay in sync. **The full pattern (rule shape, when to use direct CASL vs the legacy helpers, how to add a rule, how to test, how to use `<Can>` on the frontend) lives in [docs/auth-architecture.md](docs/auth-architecture.md) under "Authorization (CASL)" — read it before adding any new auth gate.** Non-negotiable rules:
+
+- **Never write inline role checks.** `if (ctx.user.roles.includes('admin'))`, `if (viewer.roles.includes('admin'))`, manual `entity.ownerId !== ctx.user.id` ownership checks — none of these belong in a resolver or a component. Express the gate as a CASL rule and call `ctx.ability.can(...)` (server) or `<Can I="..." a="...">` (frontend).
+- **`user.roles` is the source of truth, `auth_user.role` is a mirror.** Role mutations go through `repository.users.setDomainUserRoles`, which also writes the mirror. Never call Better Auth's `auth.api.setRole` — it would desync the columns.
+- **Adding a new gated action means adding a CASL rule, not a new helper.** The rule lives once in `abilities.ts` (mirrored to the two frontend copies); resolvers/components consume it. If you find yourself wanting a fourth `requireXxx` helper, that's the signal to add a CASL rule instead.
+- **Server and frontend rules must match.** If the server says `can('manage', 'PredictionGroup', { ownerId: viewer.id })`, both `apps/web/src/auth/abilities.ts` and `apps/admin/src/auth/abilities.ts` get the same line. A drift here is the classic "the button appears but the click 403s" footgun.
+
+The legacy `requireAdmin` / `requireViewer` / `requireSelfOrAdmin` helpers in [apps/service/src/schema/builder.ts](apps/service/src/schema/builder.ts) still exist and delegate to CASL — leave them in place when you're touching unrelated code, but new gates should call `abilityOf(ctx).can(...)` / `cannot(...)` directly.
+
 ### Dev login is non-production only
 
 - `/api/auth/dev-login` mints a session for a canned role. It calls `signUpEmail` (which fires the bootstrap hook), then force-sets the requested role. It returns 403 when `NODE_ENV=production`. Don't route any real auth flow through it.

@@ -9,7 +9,7 @@ This file covers **what to run and where things live**. The architectural contra
 - **§1 ID Philosophy** — dual-ID system, naming convention, timestamp/timezone rules, hybrid SQL+JSONB column policy
 - **§3–4 Cache Isolation & Lifecycle** — raw API cache vs. domain cache keying
 - **§5 Architecture & Design Principles** — library-over-bespoke, DataLoader requirement for nested resolvers, performance and SOLID/DRY guidance
-- **§6 Auth Contracts** — identity ≠ account, never auto-link by email, per-frontend OAuth redirect URIs, viewer-returns-null. Deep dive: [docs/auth-architecture.md](docs/auth-architecture.md).
+- **§6 Auth Contracts** — identity ≠ account, never auto-link by email, per-frontend OAuth redirect URIs, viewer-returns-null, **CASL ability is the only authorization surface** (no inline role checks anywhere). Deep dive: [docs/auth-architecture.md](docs/auth-architecture.md).
 - **§7 AI Agent Operational Rules** — no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
 
 ## First-Run Setup
