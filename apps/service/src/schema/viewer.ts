@@ -3,7 +3,7 @@ import type { DomainUserRow } from '../repositories/users';
 import { repository } from '../repositories';
 import { builder } from './builder';
 
-const ViewerRef = builder.objectRef<DomainUserRow>('Viewer');
+export const ViewerRef = builder.objectRef<DomainUserRow>('Viewer');
 
 const AuthIdentity = builder.simpleObject('AuthIdentity', {
     description:
@@ -50,6 +50,15 @@ builder.objectType(ViewerRef, {
             description:
                 'Every auth_user linked to this account, with the provider that owns each.',
             resolve: (parent) => repository.users.getIdentitiesForDomainUser(parent.id),
+        }),
+        // Security note: this field only ever surfaces the *viewer's own* follow
+        // set — `parent.id` here is the domain user we already gated through
+        // `Query.viewer`. Do not promote `Viewer` to a publicly-queryable type
+        // keyed by id; per-user data must stay tied to `ctx.user`.
+        followedLeagueIds: t.idList({
+            description:
+                'IDs of leagues the viewer follows. Pair with the top-level `leagues` query to render labels — kept as a bare ID list to keep the viewer query cheap.',
+            resolve: (parent) => repository.users.getFollowedLeagueIds(parent.id),
         }),
     }),
 });

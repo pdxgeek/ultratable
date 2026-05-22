@@ -4,8 +4,13 @@
  * Verifies that every mutation and admin-only query correctly enforces
  * role-based access control:
  *   - Guest (no user): expects "Unauthenticated"
- *   - User (role: user): expects "Forbidden"
+ *   - User (role: user): expects "Forbidden"  (admin-gated mutations only)
  *   - Admin (role: admin): expects NO auth error (may fail for other reasons)
+ *
+ * Viewer-gated (self-service) mutations have a separate matrix — see
+ * VIEWER_ONLY_MUTATIONS below. Per-mutation positive coverage lives in
+ * account.test.ts; this file pins the "no mutation is publicly callable"
+ * property across the whole schema.
  */
 import { createYoga } from 'graphql-yoga';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -18,6 +23,8 @@ import './catalog';
 import './workers';
 import './config';
 import './graphics';
+import './viewer';
+import './account';
 
 // Mock ALL modules that schema files import at resolve-time
 vi.mock('../db', () => ({
@@ -109,6 +116,33 @@ vi.mock('../repositories', () => ({
             updateDatabaseUrl: vi.fn().mockResolvedValue(true),
             updateApiFootballKey: vi.fn().mockResolvedValue(true),
             updateSupabaseConfig: vi.fn().mockResolvedValue(true),
+        },
+        users: {
+            getDomainUserById: vi.fn().mockResolvedValue({
+                id: 'mock',
+                name: 'Mock',
+                email: 'mock@example.com',
+                image: null,
+                emailVerified: true,
+                roles: ['user'],
+                createdAt: new Date(),
+            }),
+            getIdentitiesForDomainUser: vi.fn().mockResolvedValue([]),
+            setDomainUserRoles: vi.fn().mockResolvedValue(null),
+            updateDomainUserProfile: vi.fn().mockResolvedValue({
+                id: 'mock',
+                name: 'Mock',
+                email: 'mock@example.com',
+                image: null,
+                emailVerified: true,
+                roles: ['user'],
+                createdAt: new Date(),
+            }),
+            getFollowedLeagueIds: vi.fn().mockResolvedValue([]),
+            setFollowedLeagueIds: vi.fn().mockResolvedValue([]),
+            deleteDomainUser: vi
+                .fn()
+                .mockResolvedValue({ deletedDomainUserId: 'mock', deletedAuthUserIds: [] }),
         },
     },
 }));
@@ -212,6 +246,27 @@ const MUTATIONS: RbacTestCase[] = [
     },
 ];
 
+// Viewer-gated mutations: callable by any authenticated user (including admins).
+// Pinned here so a future mutation that *forgets* to gate at all gets caught.
+// Per-mutation positive/negative coverage lives in account.test.ts.
+const VIEWER_ONLY_MUTATIONS: RbacTestCase[] = [
+    {
+        name: 'updateMyProfile',
+        query: 'mutation { updateMyProfile(name: "New") { id } }',
+    },
+    {
+        name: 'setMyLeagueFollows',
+        query: 'mutation { setMyLeagueFollows(leagueIds: []) }',
+    },
+    // deleteUserAccount uses requireSelfOrAdmin — guests still get Unauthenticated,
+    // which is the only property this matrix pins. Self-vs-other behavior is in
+    // account.test.ts.
+    {
+        name: 'deleteUserAccount',
+        query: 'mutation { deleteUserAccount(userId: "user-123") }',
+    },
+];
+
 const ADMIN_QUERIES: RbacTestCase[] = [
     { name: 'configStatus', query: '{ configStatus { isDatabaseConnected } }' },
     { name: 'cacheStats', query: '{ cacheStats { size hitRate } }' },
@@ -258,6 +313,29 @@ describe('RBAC Security Verification', () => {
         it.each(MUTATIONS)('$name → no auth error', async ({ query }) => {
             const result = await gql(adminYoga, query);
             // Admin should never get an auth-related error
+            const authErrors = (result.errors || []).filter(
+                (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden'),
+            );
+            expect(authErrors).toHaveLength(0);
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // Viewer-Only Mutations (self-service: auth required, no admin role needed)
+    // -----------------------------------------------------------------------
+    describe('Viewer Mutations — Guest (unauthenticated)', () => {
+        it.each(VIEWER_ONLY_MUTATIONS)('$name → Unauthenticated', async ({ query }) => {
+            const result = await gql(guestYoga, query);
+            expect(result.errors).toBeDefined();
+            expect(result.errors![0].message).toContain('Unauthenticated');
+        });
+    });
+
+    describe('Viewer Mutations — User (granted, acting on self)', () => {
+        it.each(VIEWER_ONLY_MUTATIONS)('$name → no auth error', async ({ query }) => {
+            // user-123 is the test user. deleteUserAccount targets user-123 above,
+            // so the requireSelfOrAdmin check passes.
+            const result = await gql(userYoga, query);
             const authErrors = (result.errors || []).filter(
                 (e) => e.message.includes('Unauthenticated') || e.message.includes('Forbidden'),
             );

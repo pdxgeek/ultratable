@@ -26,6 +26,7 @@ import { invalidateDomainUserCache, resolveDomainUser, toWebHeaders } from './se
 import { globalLogger } from './services/log.service';
 import { seedRankingFormulas } from './services/seed-ranking-formulas';
 
+import './schema/account';
 import './schema/catalog';
 import './schema/config';
 import './schema/football';

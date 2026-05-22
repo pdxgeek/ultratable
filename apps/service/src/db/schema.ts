@@ -109,6 +109,25 @@ export const authLinks = pgTable(
 );
 // --------------------------
 
+// Per-user opt-in to follow specific leagues. Cascading on both sides keeps
+// the account-wipe path simple (deleting the user row removes their follows)
+// and makes pruning a league safe too.
+export const userLeagueFollows = pgTable(
+    'user_league_follows',
+    {
+        userId: uuid('user_id')
+            .references(() => users.id, { onDelete: 'cascade' })
+            .notNull(),
+        leagueId: uuid('league_id')
+            .references(() => leagues.id, { onDelete: 'cascade' })
+            .notNull(),
+        followedAt: utcTimestamp('followed_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.userId, table.leagueId] }),
+    }),
+);
+
 export const catalogCountries = pgTable(
     'catalog_countries',
     {
