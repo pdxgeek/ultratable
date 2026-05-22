@@ -78,18 +78,38 @@ To make one Better Auth deployment serve N frontends, the service is configured 
 - **`baseURL` left undefined in the `betterAuth({...})` config in prod** ([apps/service/src/api/auth.ts](../apps/service/src/api/auth.ts)). In dev a static `baseURL` is still required because Vite's default proxy does not forward `X-Forwarded-*` headers; we set it from `BETTER_AUTH_URL` env when present.
 - **`ALLOWED_ORIGINS` lists every frontend origin.** The same env var feeds both Fastify's CORS allowlist and Better Auth's `trustedOrigins`, so an unlisted origin is rejected during OAuth callbackURL validation.
 
-### Google Cloud Console config
+### Google Cloud Console config — two OAuth clients
 
-Register one OAuth 2.0 client (Web application). Add one authorized redirect URI per frontend:
+Register **two** OAuth 2.0 Web application clients in the same Google Cloud project (one per frontend). Each gets its own consent screen, can be rotated independently, and has its own redirect URI on the frontend's own host:
 
-```
-https://admin.ultratable.io/api/auth/callback/google
-https://ultratable.io/api/auth/callback/google
-http://localhost:5174/api/auth/callback/google     # dev — admin
-http://localhost:5175/api/auth/callback/google     # dev — web (when wired)
-```
+**Admin client**
+- Authorized JavaScript origin: `https://admin.ultratable.io` (and `http://localhost:5174` for dev)
+- Authorized redirect URI: `https://admin.ultratable.io/api/auth/callback/google` (and `http://localhost:5174/api/auth/callback/google` for dev)
 
-Authorized JavaScript origins can be empty — Better Auth doesn't load Google's JS SDK in the browser.
+**Web client**
+- Authorized JavaScript origin: `https://ultratable.io` (and `http://localhost:5175` for dev)
+- Authorized redirect URI: `https://ultratable.io/api/auth/callback/google` (and `http://localhost:5175/api/auth/callback/google` for dev)
+
+### Credential layout
+
+Each OAuth client has a public `clientId` and a sensitive `clientSecret`. They live in different env files based on whether they're public or secret:
+
+| Value                                        | Where                                  | Why                                                                  |
+| -------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------- |
+| Admin `clientId` (public)                    | [`apps/admin/.env`](../apps/admin/.env.example) as `VITE_GOOGLE_CLIENT_ID`   | Bundled into the admin JS so the frontend can render the Google sign-in button. Client IDs are public by design. |
+| Web `clientId` (public)                      | [`apps/web/.env`](../apps/web/.env.example) as `VITE_GOOGLE_CLIENT_ID`     | Same as admin, for the web bundle.                                  |
+| Admin `clientSecret` (sensitive)             | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_ADMIN` | Used by the service for the OAuth code-for-token exchange. Never reaches a browser. |
+| Web `clientSecret` (sensitive)               | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_SECRET_WEB`   | Same as admin, server-side only.                                    |
+| Admin/Web `clientId` (also on service)       | [`apps/service/.env`](../apps/service/.env.example) as `GOOGLE_CLIENT_ID_{ADMIN,WEB}` | Pothos / Better Auth needs these on the server too — they're passed as a `clientId: string[]` array to the social provider config. Same value as the frontend env, duplicated by design. |
+
+`npm run setup` collects both pairs once and writes them to all three .env files in the right places.
+
+> [!IMPORTANT]
+> **Anything in `apps/admin/.env` or `apps/web/.env` ships to every browser visiting the deployed site.** This is fine for `VITE_GOOGLE_CLIENT_ID` (public) but absolutely not OK for the secret. The split exists to make it impossible to accidentally bundle a secret.
+
+### Known follow-up: per-host credential dispatch
+
+Better Auth's social provider takes `(clientId, clientSecret)` at init time, not per request, so today the auth-code flow uses whichever pair the service picks first (admin). The two-client architecture is fully provisioned in the env layout, but **dispatching by `X-Forwarded-Host` (so admin sign-ins use the admin client and web sign-ins use the web client) requires a custom wrapper around Better Auth's `google` provider** and is tracked as a follow-up. Until that lands, both frontends share the admin OAuth client at the protocol level — they still render their own buttons from their own `VITE_GOOGLE_CLIENT_ID`, but the redirect dance terminates at the admin client. The eventual ID-token flow (frontend uses Google Identity Services to obtain a token, posts it to the service for verification) sidesteps this entirely because both client IDs are accepted as valid audiences via `clientId: string[]` already.
 
 ### Frontend edge rewrites
 
@@ -119,19 +139,35 @@ The rewrite preserves `X-Forwarded-Host`, which is what makes the per-request ba
 | 5    | `${BETTER_AUTH_URL}/api/auth/callback/google?code=…` | Browser hits the callback; Vite proxies to the service; service exchanges the code, runs the `user.create.after` hook, sets the session cookie |
 | 6    | `callbackURL` frontend path | Service 302s the browser back to the SPA; the cookie is already set                   |
 
-## Env vars (service)
+## Env vars
 
-Documented in full in [apps/service/.env.example](../apps/service/.env.example). The auth-relevant ones:
+Documented in full in [apps/service/.env.example](../apps/service/.env.example), [apps/admin/.env.example](../apps/admin/.env.example), and [apps/web/.env.example](../apps/web/.env.example). The auth-relevant ones:
 
-| Var                    | Dev                         | Prod                                                    |
-| ---------------------- | --------------------------- | ------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`   | auto-generated by setup     | required, ≥32 chars                                     |
-| `BETTER_AUTH_URL`      | `http://localhost:5174`     | **unset** — service derives per request from headers    |
-| `ALLOWED_ORIGINS`      | localhost defaults applied  | required, comma-separated list of every frontend origin |
-| `GOOGLE_CLIENT_ID`     | optional (skips Google)     | required for Google sign-in                             |
-| `GOOGLE_CLIENT_SECRET` | optional (skips Google)     | required for Google sign-in                             |
+**Service** (`apps/service/.env`)
 
-Don't hand-edit `apps/service/.env` — re-run `npm run setup`. The script preserves existing values as defaults.
+| Var                          | Dev                         | Prod                                                    |
+| ---------------------------- | --------------------------- | ------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`         | auto-generated by setup     | required, ≥32 chars                                     |
+| `BETTER_AUTH_URL`            | `http://localhost:5174`     | **unset** — service derives per request from headers    |
+| `ALLOWED_ORIGINS`            | localhost defaults applied  | required, comma-separated list of every frontend origin |
+| `GOOGLE_CLIENT_ID_ADMIN`     | optional (skips Google)     | required for admin Google sign-in                       |
+| `GOOGLE_CLIENT_SECRET_ADMIN` | optional (skips Google)     | required for admin Google sign-in                       |
+| `GOOGLE_CLIENT_ID_WEB`       | optional (skips Google)     | required for web Google sign-in                         |
+| `GOOGLE_CLIENT_SECRET_WEB`   | optional (skips Google)     | required for web Google sign-in                         |
+
+**Admin frontend** (`apps/admin/.env`)
+
+| Var                     | Notes                                                                |
+| ----------------------- | -------------------------------------------------------------------- |
+| `VITE_GOOGLE_CLIENT_ID` | Admin OAuth client's public ID. Same value as `GOOGLE_CLIENT_ID_ADMIN` on the service. Bundles into the JS. |
+
+**Web frontend** (`apps/web/.env`)
+
+| Var                     | Notes                                                                |
+| ----------------------- | -------------------------------------------------------------------- |
+| `VITE_GOOGLE_CLIENT_ID` | Web OAuth client's public ID. Same value as `GOOGLE_CLIENT_ID_WEB` on the service. Bundles into the JS. |
+
+Don't hand-edit any of these — re-run `npm run setup`. The script preserves existing values as defaults and writes to all three files atomically.
 
 ## When you're changing something here
 

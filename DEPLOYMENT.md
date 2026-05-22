@@ -32,7 +32,7 @@ This phase details the target architecture and the steps to deploy the applicati
 - `SUPABASE_SERVICE_ROLE_KEY=...`
 - `DATABASE_URL=...`
 - `API_FOOTBALL_KEY=...`
-- (optional) `GOOGLE_CLIENT_ID=...`, `GOOGLE_CLIENT_SECRET=...`
+- (optional, per-frontend) `GOOGLE_CLIENT_ID_ADMIN`, `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_ID_WEB`, `GOOGLE_CLIENT_SECRET_WEB`
 
 > [!IMPORTANT]
 > **Do NOT set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` (sent by each frontend's edge rewrite), so the OAuth redirect URI lives on the frontend's own hostname. Pinning `BETTER_AUTH_URL` overrides this and forces every sign-in to bounce through the service domain. See [docs/auth-architecture.md § Per-frontend OAuth redirect URIs](docs/auth-architecture.md#per-frontend-oauth-redirect-uris-production).
@@ -60,18 +60,23 @@ Two separate Vercel projects:
 
 The rewrite is what makes the per-request OAuth redirect URI work. Without it, `/api/auth/sign-in/social` would 404 on the frontend and Google sign-in would never start.
 
-## Step 3: Google OAuth Client
+## Step 3: Google OAuth Clients (two of them)
 
-Register one OAuth 2.0 client (Web application) at [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials). Add **one authorized redirect URI per frontend**:
+Register **two** OAuth 2.0 Web application clients in the same Google Cloud project at [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) — one per frontend, with its own consent screen and per-host redirect URI:
 
-```
-https://ultratable.io/api/auth/callback/google
-https://admin.ultratable.io/api/auth/callback/google
-http://localhost:5174/api/auth/callback/google     # dev — admin
-http://localhost:5175/api/auth/callback/google     # dev — web (when wired)
-```
+**Admin client**
+- JavaScript origin: `https://admin.ultratable.io` (and `http://localhost:5174` for dev)
+- Redirect URI:      `https://admin.ultratable.io/api/auth/callback/google` (and `http://localhost:5174/api/auth/callback/google` for dev)
 
-Authorized JavaScript origins can be empty — Better Auth doesn't use Google's JS SDK in the browser.
+**Web client**
+- JavaScript origin: `https://ultratable.io` (and `http://localhost:5175` for dev)
+- Redirect URI:      `https://ultratable.io/api/auth/callback/google` (and `http://localhost:5175/api/auth/callback/google` for dev)
+
+Credential layout:
+- Public client IDs → `VITE_GOOGLE_CLIENT_ID` in each frontend's Vercel project env (different value each), plus mirrored as `GOOGLE_CLIENT_ID_ADMIN` / `GOOGLE_CLIENT_ID_WEB` on the service.
+- Secrets → `GOOGLE_CLIENT_SECRET_ADMIN` / `GOOGLE_CLIENT_SECRET_WEB` on the service. **Never in a frontend env.**
+
+See [docs/auth-architecture.md](docs/auth-architecture.md) for the rationale and the known per-host-dispatch follow-up.
 
 ## Step 4: Final Production Wiring
 

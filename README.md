@@ -106,8 +106,10 @@ All variables are set as Fly secrets. See [`apps/service/.env.example`](apps/ser
 | `BETTER_AUTH_SECRET`        | ✅       | Session signing secret (≥32 chars)                                                                                                                                   |
 | `ALLOWED_ORIGINS`           | ✅       | Comma-separated list of every frontend origin. Feeds both Fastify CORS and Better Auth's `trustedOrigins`. e.g. `https://ultratable.io,https://admin.ultratable.io`  |
 | `LOG_LEVEL`                 | Optional | Log verbosity: `trace\|debug\|info\|warn\|error\|fatal`. Defaults to `info` in production. Set to `warn` for minimal noise. Debug-level logs never hit the database. |
-| `GOOGLE_CLIENT_ID`          | Optional | Google OAuth client ID                                                                                                                                               |
-| `GOOGLE_CLIENT_SECRET`      | Optional | Google OAuth client secret                                                                                                                                           |
+| `GOOGLE_CLIENT_ID_ADMIN`     | Optional | Admin frontend's Google OAuth client ID. Same value as `VITE_GOOGLE_CLIENT_ID` in `apps/admin/.env`.                                                                |
+| `GOOGLE_CLIENT_SECRET_ADMIN` | Optional | Admin frontend's Google OAuth client secret. Stays server-side only.                                                                                                |
+| `GOOGLE_CLIENT_ID_WEB`       | Optional | Web frontend's Google OAuth client ID. Same value as `VITE_GOOGLE_CLIENT_ID` in `apps/web/.env`.                                                                    |
+| `GOOGLE_CLIENT_SECRET_WEB`   | Optional | Web frontend's Google OAuth client secret. Stays server-side only.                                                                                                  |
 
 > [!IMPORTANT]
 > **Do not set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` — so each frontend's OAuth redirect URI lives on its own hostname, not on the service. This is the architecture each `vercel.json` rewrite below relies on. See [docs/auth-architecture.md](docs/auth-architecture.md) for the full model.
@@ -116,9 +118,10 @@ All variables are set as Fly secrets. See [`apps/service/.env.example`](apps/ser
 
 Set in each Vercel project's settings.
 
-| Variable       | Project    | Description                                                      |
-| -------------- | ---------- | ---------------------------------------------------------------- |
-| `VITE_API_URL` | web, admin | `https://api.ultratable.io` (absolute URL for production builds) |
+| Variable                | Project    | Description                                                                                       |
+| ----------------------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| `VITE_API_URL`          | web, admin | `https://api.ultratable.io` (absolute URL for production builds)                                  |
+| `VITE_GOOGLE_CLIENT_ID` | web, admin | Public Google OAuth client ID — one per frontend, different value for each. Bundled into the JS. |
 
 Each frontend also needs a `vercel.json` rewrite at its repo root so `/api/auth/*` hits the service:
 
@@ -134,15 +137,21 @@ That rewrite is what keeps the OAuth redirect URI on the frontend's own hostname
 
 ### Google OAuth Setup
 
-1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
-2. Create an OAuth 2.0 Client ID (Web application)
-3. Add **one authorized redirect URI per frontend** (the redirect lives on the SPA's own hostname, not the service):
-    - Prod: `https://ultratable.io/api/auth/callback/google`
-    - Prod: `https://admin.ultratable.io/api/auth/callback/google`
-    - Dev:  `http://localhost:5174/api/auth/callback/google`
-    - Dev:  `http://localhost:5175/api/auth/callback/google` (when web sign-in is wired)
-4. Authorized JavaScript origins can be empty — Better Auth doesn't use Google's JS SDK in the browser.
-5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the service env via `fly secrets set`.
+Create **two OAuth 2.0 Client IDs** in the same Google Cloud project — one per frontend. Each has its own consent screen and its own redirect URI on its own host:
+
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+2. **Admin client** (Web application):
+    - Authorized JavaScript origin: `https://admin.ultratable.io` (prod), `http://localhost:5174` (dev)
+    - Authorized redirect URI: `https://admin.ultratable.io/api/auth/callback/google` (prod), `http://localhost:5174/api/auth/callback/google` (dev)
+3. **Web client** (Web application):
+    - Authorized JavaScript origin: `https://ultratable.io` (prod), `http://localhost:5175` (dev)
+    - Authorized redirect URI: `https://ultratable.io/api/auth/callback/google` (prod), `http://localhost:5175/api/auth/callback/google` (dev)
+4. Set the resulting credentials in the right env files (`npm run setup` does this for you):
+    - Public client IDs → `VITE_GOOGLE_CLIENT_ID` in [`apps/admin/.env`](apps/admin/.env.example) and [`apps/web/.env`](apps/web/.env.example) (different value per file).
+    - Public client IDs (mirrored) → `GOOGLE_CLIENT_ID_ADMIN`, `GOOGLE_CLIENT_ID_WEB` in [`apps/service/.env`](apps/service/.env.example).
+    - Client secrets → `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_SECRET_WEB` in [`apps/service/.env`](apps/service/.env.example). Never in a frontend .env.
+
+See [docs/auth-architecture.md](docs/auth-architecture.md) for the full credential-layout rationale and the known per-host-dispatch follow-up.
 
 ### Deploying to Fly.io
 

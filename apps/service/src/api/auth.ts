@@ -46,18 +46,44 @@ if (process.env.NODE_ENV !== 'production') {
     trustedOrigins.push(...DEV_ORIGINS);
 }
 
-// Google OAuth is wired in only when both env vars are present. Leaving it
-// configured-but-empty makes Better Auth advertise the provider with broken
-// credentials, which breaks the sign-in UI; absent is the correct dev default.
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+// Google OAuth is configured per-frontend. apps/admin and apps/web each have
+// their own OAuth client (same Google Cloud project, different consent screens,
+// different redirect URIs). The PUBLIC client IDs live in each frontend's env
+// as VITE_GOOGLE_CLIENT_ID; the SECRETS live here, namespaced by frontend.
+//
+// Better Auth's `socialProviders.google` accepts `clientId: string[]`, which
+// makes the provider accept ID tokens whose audience matches any of the listed
+// client IDs (used by the upcoming frontend-driven ID-token sign-in). For the
+// auth-code flow that runs today, Better Auth uses the first client ID and the
+// (single) clientSecret it was configured with.
+//
+// KNOWN FOLLOW-UP: per-host dispatch of (clientId, clientSecret) so the
+// auth-code flow uses admin's pair when the request comes from admin and
+// web's pair when it comes from web. Better Auth captures these at init,
+// not per-request, so this needs a custom social provider wrapper. Until
+// then, both frontends share whichever pair is picked here (admin first).
+const adminClientId = process.env.GOOGLE_CLIENT_ID_ADMIN;
+const adminClientSecret = process.env.GOOGLE_CLIENT_SECRET_ADMIN;
+const webClientId = process.env.GOOGLE_CLIENT_ID_WEB;
+const webClientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB;
+
+const googleClientIds = [adminClientId, webClientId].filter(
+    (id): id is string => Boolean(id),
+);
+const primaryGoogleSecret = adminClientSecret ?? webClientSecret;
+
 const socialProviders =
-    googleClientId && googleClientSecret
-        ? { google: { clientId: googleClientId, clientSecret: googleClientSecret } }
+    googleClientIds.length > 0 && primaryGoogleSecret
+        ? {
+              google: {
+                  clientId: googleClientIds.length === 1 ? googleClientIds[0] : googleClientIds,
+                  clientSecret: primaryGoogleSecret,
+              },
+          }
         : undefined;
 if (!socialProviders && process.env.NODE_ENV === 'production') {
     logger.warn(
-        'GOOGLE_CLIENT_ID/SECRET not set — Google sign-in is disabled in this deployment.',
+        'Google OAuth client IDs/secrets not set — Google sign-in is disabled in this deployment.',
     );
 }
 

@@ -179,11 +179,19 @@ Auth is provided by Better Auth and lives in [apps/service](apps/service). The d
 - The `databaseHooks.user.create.after` hook ([apps/service/src/services/auth-bootstrap.ts](apps/service/src/services/auth-bootstrap.ts)) creates a **fresh** domain user + auth_link for every new identity. Even if the new identity's email matches an existing domain user, do NOT auto-merge.
 - The `users.email` UNIQUE constraint will reject duplicates; the hook swallows that failure and logs it. The auth_user stays unlinked, the context falls back to a default `user` role, and the account-page flow is the only path to explicit linking. Don't change this — auto-merging on email match is a security footgun.
 
+### Two OAuth clients (one per frontend)
+
+- `apps/admin` and `apps/web` each have **their own Google OAuth client** (same Google Cloud project, different consent screens, independent rotation). Each client has its own JS origin and redirect URI on its frontend's host.
+- **Public `clientId`s live in each frontend's `.env`** as `VITE_GOOGLE_CLIENT_ID` and bundle into the JS. This is by design — client IDs are public.
+- **`clientSecret`s live on the service**, namespaced: `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_SECRET_WEB`. They never reach a browser. The service also holds both client IDs (`GOOGLE_CLIENT_ID_{ADMIN,WEB}`) for Better Auth's social provider config.
+- `npm run setup` collects both pairs once and writes them to the three .env files (service, admin, web) atomically.
+- **Known follow-up: per-host dispatch.** Better Auth's social provider takes credentials at init, not per request, so the auth-code flow currently uses the admin pair for both frontends. The two-client architecture is fully provisioned at the env level; service-side dispatch by `X-Forwarded-Host` is a separate piece of work. See [docs/auth-architecture.md § Known follow-up](docs/auth-architecture.md#known-follow-up-per-host-credential-dispatch).
+
 ### Per-frontend OAuth redirect URIs
 
 - In production each frontend container (`apps/admin`, `apps/web`) rewrites `/api/auth/*` to the service container. The OAuth redirect URI lives on the **frontend's** hostname, not the service's, so the user never leaves their SPA and the session cookie is same-site.
 - This works because `BETTER_AUTH_URL` is **unset** in production. Better Auth's default `trustedProxyHeaders: true` then derives the base URL per request from `X-Forwarded-Host`, so the redirect URI matches whichever frontend started the flow.
-- Google Cloud Console gets one redirect URI per frontend (e.g. `https://admin.ultratable.io/api/auth/callback/google` AND `https://ultratable.io/api/auth/callback/google`), not one on the service domain.
+- Each Google OAuth client gets exactly one production redirect URI (its own frontend's host) — they're not shared.
 - `ALLOWED_ORIGINS` feeds both Fastify CORS and Better Auth's `trustedOrigins` — every frontend origin must be listed.
 
 ### Viewer query nulls, not throws
