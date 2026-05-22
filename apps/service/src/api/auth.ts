@@ -8,14 +8,25 @@ import { globalLogger } from '../services/log.service';
 
 const logger = globalLogger.child({ module: 'api/auth' });
 
+// `BETTER_AUTH_URL` pins the base URL Better Auth uses when generating OAuth
+// redirect URIs and signed-cookie domains. We deliberately leave it unset in
+// production: apps/service, apps/admin, and apps/web ship as independent
+// containers on distinct hostnames, and each frontend proxies `/api/auth/*`
+// to the service via its own edge (Vercel rewrites, etc.). With this static
+// value absent and `trustedProxyHeaders: true` (Better Auth's default), the
+// service derives the base URL per request from `X-Forwarded-Host` /
+// `X-Forwarded-Proto`. The redirect URI Google receives then matches whichever
+// frontend started the flow — so the user never leaves their SPA's hostname,
+// and the session cookie is set on the frontend's origin (same-site, no
+// SameSite=None gymnastics).
+//
+// In dev the service is hit directly or through Vite's default proxy (which
+// does NOT forward X-Forwarded headers), so a static base URL is required;
+// `BETTER_AUTH_URL` provides it.
 const betterAuthUrl = process.env.BETTER_AUTH_URL;
-if (!betterAuthUrl && process.env.NODE_ENV === 'production') {
-    throw new Error(
-        '[Auth] BETTER_AUTH_URL is required in production. Set this environment variable.',
-    );
-} else if (!betterAuthUrl) {
+if (!betterAuthUrl && process.env.NODE_ENV !== 'production') {
     logger.warn(
-        'BETTER_AUTH_URL not set — defaulting to http://localhost:8080. Set this in production!',
+        'BETTER_AUTH_URL not set — defaulting to http://localhost:8080. Set this in apps/service/.env (via `npm run setup`).',
     );
 }
 
@@ -50,19 +61,6 @@ if (!socialProviders && process.env.NODE_ENV === 'production') {
     );
 }
 
-// In production, apps/service, apps/admin, and apps/web each ship as an
-// independent container behind their own hostname (see [admin & web in
-// separate containers](../../../../docs/) — they don't share an origin with
-// each other or with the service). For the session cookie to survive the
-// cross-site fetches each frontend makes back to the service, it has to be
-// SameSite=None; Secure. In dev (localhost, all-same-site) the Better Auth
-// default of SameSite=Lax is correct and we keep it — Secure+None would
-// silently fail on plain http.
-const productionCookieAttributes =
-    process.env.NODE_ENV === 'production'
-        ? { sameSite: 'none' as const, secure: true, httpOnly: true }
-        : undefined;
-
 export const auth = betterAuth({
     database: drizzleAdapter(db, {
         provider: 'pg',
@@ -78,9 +76,6 @@ export const auth = betterAuth({
         enabled: true,
     },
     socialProviders,
-    advanced: productionCookieAttributes
-        ? { defaultCookieAttributes: productionCookieAttributes }
-        : undefined,
     databaseHooks: {
         user: {
             create: {
@@ -96,6 +91,9 @@ export const auth = betterAuth({
             },
         },
     },
-    baseURL: betterAuthUrl || 'http://localhost:8080',
+    // Only pin baseURL when an explicit BETTER_AUTH_URL is set (dev). When
+    // unset (intended prod default), Better Auth derives the base URL per
+    // request from X-Forwarded-Host — see the comment above the env read.
+    baseURL: betterAuthUrl || (process.env.NODE_ENV !== 'production' ? 'http://localhost:8080' : undefined),
     trustedOrigins,
 });
