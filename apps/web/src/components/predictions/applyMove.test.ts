@@ -45,7 +45,7 @@ describe('applyMove', () => {
         expect(next).toEqual(slots);
     });
 
-    it('cascade stops at the first empty slot below the destination', () => {
+    it('pool→slot cascades DOWN when there is room below the destination', () => {
         // t-pool dropped at position 2. Cascade bumps t-2→3, t-3→4. Slot 4
         // is empty, cascade stops.
         const slots: (string | null)[] = [null, 't-2', 't-3', null, null];
@@ -53,12 +53,13 @@ describe('applyMove', () => {
         expect(next).toEqual([null, 't-pool', 't-2', 't-3', null]);
     });
 
-    it('pushes the last team off the end into the pool when cascade runs out (pool→slot, all-below-full)', () => {
-        // t-pool dropped at position 3. Slots 3..5 are all occupied. t-3
-        // bumps to 4, t-4 bumps to 5, t-5 falls off → pool (absent).
-        const slots: (string | null)[] = ['t-1', 't-2', 't-3', 't-4', 't-5'];
-        const next = applyMove(slots, 't-pool', { kind: 'slot', position: 3 });
-        expect(next).toEqual(['t-1', 't-2', 't-pool', 't-3', 't-4']);
+    it('pool→slot cascades UP when slots below are full but there is room above', () => {
+        // t-pool dropped at position 4. Slots 4..5 are full (no room below);
+        // position 1 is empty (room above). Cascade goes UP: t-4 bumps to 3,
+        // t-3 to 2, t-2 to 1 (the empty). No pool spillover.
+        const slots: (string | null)[] = [null, 't-2', 't-3', 't-4', 't-5'];
+        const next = applyMove(slots, 't-pool', { kind: 'slot', position: 4 });
+        expect(next).toEqual(['t-2', 't-3', 't-4', 't-pool', 't-5']);
     });
 
     it('unplaces a team when dropped on the pool', () => {

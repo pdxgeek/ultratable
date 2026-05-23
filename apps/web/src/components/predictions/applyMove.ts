@@ -13,10 +13,15 @@ import type { MoveTarget } from './ProjectedFinishBoard';
  *   For slot→slot moves the cascade always terminates at the now-empty
  *   source position (we clear it before cascading), so nobody falls out.
  *
- *   For pool→slot moves we don't have a source position; the cascade
- *   defaults to bumping DOWN. If every slot from the destination to the
- *   end of the list is already full the last team gets pushed off the end
- *   and back into the pool (i.e. simply absent from the new slots array).
+ *   For pool→slot moves we don't have a source position. The cascade
+ *   prefers DOWN, but flips to UP when every slot from the destination to
+ *   the end of the list is already full (i.e. there's no room below the
+ *   drop). This keeps a placed team from getting kicked back to the pool
+ *   when there's a perfectly good empty slot somewhere above the drop.
+ *   The pool→slot path is the only one that can ever push a team to the
+ *   pool — and only when there's no room in either direction, which can
+ *   only happen if the slots are saturated (which by construction means
+ *   the pool is empty, so this never fires in practice).
  *
  * Returns the original array (a copy) when the move is a no-op or invalid
  * so React can short-circuit re-renders.
@@ -43,9 +48,15 @@ export function applyMove(
     //     source so the in-between items shift to fill the source's gap.
     //   - Slot source below destination (moving up) → cascade DOWN toward
     //     source.
-    //   - Pool source (no slot index) → cascade DOWN; if it runs off the
-    //     end of the list the last bumped team goes to the pool.
-    const step = sourceIdx !== -1 && sourceIdx < destIdx ? -1 : 1;
+    //   - Pool source → prefer DOWN, fall back to UP when the slots below
+    //     the destination are all full.
+    let step: -1 | 1;
+    if (sourceIdx === -1) {
+        const hasRoomBelow = next.slice(destIdx + 1).some((s) => s === null);
+        step = hasRoomBelow ? 1 : -1;
+    } else {
+        step = sourceIdx < destIdx ? -1 : 1;
+    }
 
     let toPlace: string | null = teamId;
     let i = destIdx;
