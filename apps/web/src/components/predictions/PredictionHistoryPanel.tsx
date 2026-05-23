@@ -2,7 +2,7 @@ import type { PredictionSnapshot } from './queries';
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Trash2 } from 'lucide-react';
+import { RotateCcw, Trash2 } from 'lucide-react';
 
 import {
     AlertDialog,
@@ -23,6 +23,8 @@ interface PredictionHistoryPanelProps {
     canLockIn: boolean;
     isLocking: boolean;
     lockInError: string | null;
+    canReset: boolean;
+    onReset: () => Promise<void>;
     canDeleteCurrent: boolean;
     isDeleting: boolean;
     deleteError: string | null;
@@ -41,6 +43,8 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     canLockIn,
     isLocking,
     lockInError,
+    canReset,
+    onReset,
     canDeleteCurrent,
     isDeleting,
     deleteError,
@@ -49,7 +53,8 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     onMakePredictions,
     onConfirmDelete,
 }) => {
-    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [confirmResetOpen, setConfirmResetOpen] = useState(false);
     const currentSnapshot = snapshots.find((s) => s.id === viewingSnapshotId) ?? null;
 
     return (
@@ -69,6 +74,16 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
                             {lockInError}
                         </p>
                     )}
+                    {canReset && (
+                        <button
+                            type="button"
+                            onClick={() => setConfirmResetOpen(true)}
+                            className="inline-flex items-center gap-1 self-start text-[0.75rem] text-text-muted hover:text-text-primary transition-colors"
+                        >
+                            <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                            Reset
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="flex flex-col gap-2">
@@ -82,7 +97,7 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
                     {canDeleteCurrent && currentSnapshot && (
                         <button
                             type="button"
-                            onClick={() => setConfirmOpen(true)}
+                            onClick={() => setConfirmDeleteOpen(true)}
                             className="inline-flex items-center gap-1 self-start text-[0.75rem] text-text-muted hover:text-destructive transition-colors"
                         >
                             <Trash2 className="w-3 h-3" aria-hidden="true" />
@@ -123,9 +138,9 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
             </div>
 
             <AlertDialog
-                open={confirmOpen}
+                open={confirmDeleteOpen}
                 onOpenChange={(next) => {
-                    if (!isDeleting) setConfirmOpen(next);
+                    if (!isDeleting) setConfirmDeleteOpen(next);
                 }}
             >
                 <AlertDialogContent>
@@ -149,13 +164,40 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
                                 e.preventDefault();
                                 void (async () => {
                                     const ok = await onConfirmDelete();
-                                    if (ok) setConfirmOpen(false);
+                                    if (ok) setConfirmDeleteOpen(false);
                                 })();
                             }}
                             disabled={isDeleting}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             {isDeleting ? 'Deleting…' : 'Delete'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={confirmResetOpen} onOpenChange={setConfirmResetOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reset your prediction?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            All current placements will be cleared and the pool will be refilled
+                            with every team. Saved snapshots in the history list aren&apos;t
+                            affected.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void (async () => {
+                                    await onReset();
+                                    setConfirmResetOpen(false);
+                                })();
+                            }}
+                        >
+                            Reset
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -2,8 +2,9 @@ import type { PredictionSnapshot, PredictionType } from '../components/predictio
 import type { AppAbility } from '../auth/abilities';
 import type { ZoneArrays } from '../lib/zones';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
@@ -21,6 +22,13 @@ import {
 } from '../components/predictions/queries';
 import { useAbility } from '../auth/abilities';
 import { useLeague } from '../context/LeagueContext';
+import {
+    clearDraft,
+    draftKey,
+    loadDraft,
+    sanitizeDraftSlots,
+    saveDraft,
+} from '../db/predictionDrafts';
 import { useStandings } from '../hooks/useStandings';
 import { useViewer } from '../hooks/useViewer';
 
@@ -48,25 +56,62 @@ const PredictionsPage: React.FC = () => {
 
     const teamIds = useMemo(() => standings.map((s) => s.teamId), [standings]);
     const N = teamIds.length;
-    // Stable shuffle: only re-shuffles when the team *set* changes (joined
-    // key, not the standings reference). Live standings updates (scores,
-    // form) won't re-jumble the pool mid-session.
     const teamSetKey = teamIds.join('|');
     const poolOrder = useMemo(
         () => shuffle(teamIds),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [teamSetKey],
     );
+    const validTeamIds = useMemo(() => new Set(teamIds), [teamIds]);
 
     const [selectedType, setSelectedType] = useState<PredictionType>('PROJECTED_FINISH');
-    // `userSlots` is null until the user touches anything; we then fall back
-    // to an all-empty slot array. This keeps "restore pre-view order" simple:
-    // pass null to mean "snap back to a blank draft."
     const [userSlots, setUserSlots] = useState<(string | null)[] | null>(null);
-    const [preViewSlots, setPreViewSlots] = useState<(string | null)[] | null>(null);
     const [mode, setMode] = useState<Mode>({ kind: 'draft' });
     const [lockInError, setLockInError] = useState<string | null>(null);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+
+    // Dexie-backed draft persistence. The composite key scopes drafts per
+    // (user, season, type) — switching season or signing in/out flips to a
+    // different draft cleanly. Guests (no viewer) get a stable null key and
+    // skip persistence entirely.
+    const persistKey =
+        viewer && seasonId ? draftKey({ userId: viewer.id, seasonId, type: selectedType }) : null;
+    const liveDraft = useLiveQuery(
+        () => (persistKey ? loadDraft(persistKey) : undefined),
+        [persistKey],
+    );
+
+    // Hydrate `userSlots` once per (persistKey, team-set) using the
+    // set-state-during-render pattern. Re-runs only when the key or the team
+    // set changes (e.g. user switches season), which is when stored drafts
+    // need to be re-validated against the new team list.
+    const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+    const hydrationFingerprint = persistKey ? `${persistKey}::${teamSetKey}` : null;
+    if (
+        hydrationFingerprint &&
+        hydratedFor !== hydrationFingerprint &&
+        liveDraft !== undefined &&
+        N > 0
+    ) {
+        setHydratedFor(hydrationFingerprint);
+        const sanitized = liveDraft
+            ? sanitizeDraftSlots(liveDraft.slots, validTeamIds, N)
+            : null;
+        setUserSlots(sanitized);
+    }
+    const hasHydrated = hydratedFor === hydrationFingerprint;
+
+    // Persist on change. Only after hydration, only with a viewer, only in
+    // draft mode (view mode doesn't touch the draft). Writes are best-effort;
+    // a transient failure just means the next change reattempts.
+    useEffect(() => {
+        if (!hasHydrated || !persistKey || mode.kind !== 'draft') return;
+        if (userSlots === null) {
+            void clearDraft(persistKey);
+        } else {
+            void saveDraft(persistKey, userSlots);
+        }
+    }, [userSlots, hasHydrated, persistKey, mode.kind]);
 
     const emptySlots = useMemo(() => Array<string | null>(N).fill(null), [N]);
     const draftSlots = userSlots ?? emptySlots;
@@ -129,6 +174,7 @@ const PredictionsPage: React.FC = () => {
     const poolTeamIds =
         mode.kind === 'viewing' ? [] : poolOrder.filter((id) => !placedSet.has(id));
     const allPlaced = N > 0 && slots.every((s) => s !== null);
+    const hasAnyPlacement = mode.kind === 'draft' && draftSlots.some((s) => s !== null);
 
     const [lockInState, lockIn] = useMutation<
         { lockInPrediction: PredictionSnapshot },
@@ -147,16 +193,21 @@ const PredictionsPage: React.FC = () => {
         );
     };
 
+    // Make Predictions / delete-success no longer juggle a pre-view snapshot
+    // of the slots — the in-progress draft lives in Dexie, so it's already
+    // there when we exit view mode.
     const handleSelectSnapshot = (id: string) => {
-        if (mode.kind === 'draft') setPreViewSlots(userSlots);
         setMode({ kind: 'viewing', snapshotId: id });
     };
 
     const handleMakePredictions = () => {
-        setUserSlots(preViewSlots);
-        setPreViewSlots(null);
         setMode({ kind: 'draft' });
         setDeleteError(null);
+    };
+
+    const handleReset = async (): Promise<void> => {
+        setUserSlots(null);
+        if (persistKey) await clearDraft(persistKey);
     };
 
     const handleLockIn = async () => {
@@ -167,10 +218,6 @@ const PredictionsPage: React.FC = () => {
             input: { seasonId, type: selectedType, orderedTeamIds },
         });
         if (result.error) {
-            // urql wraps GraphQLErrors. PREDICTION_LIMIT_REACHED message
-            // arrives pre-formatted as "X/Y" from the server (#108); no extra
-            // hint about deleting older snapshots because soft-delete doesn't
-            // free capacity.
             const msg = result.error.graphQLErrors[0]?.message ?? result.error.message;
             setLockInError(msg);
             return;
@@ -186,8 +233,6 @@ const PredictionsPage: React.FC = () => {
             setDeleteError(result.error.graphQLErrors[0]?.message ?? result.error.message);
             return false;
         }
-        setUserSlots(preViewSlots);
-        setPreViewSlots(null);
         setMode({ kind: 'draft' });
         refetchHistory({ requestPolicy: 'network-only' });
         return true;
@@ -263,6 +308,8 @@ const PredictionsPage: React.FC = () => {
                     canLockIn={allPlaced && mode.kind === 'draft'}
                     isLocking={lockInState.fetching}
                     lockInError={lockInError}
+                    canReset={hasAnyPlacement}
+                    onReset={handleReset}
                     canDeleteCurrent={canDeleteCurrent}
                     isDeleting={deleteState.fetching}
                     deleteError={deleteError}
