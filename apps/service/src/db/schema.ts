@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
     boolean,
     index,
@@ -427,6 +428,67 @@ export const playerSourceMappings = pgTable(
     (table) => ({
         pk: primaryKey({ columns: [table.sourceName, table.sourceId] }),
         playerIdx: index('psm_player_id_idx').on(table.playerId),
+    }),
+);
+
+// --- Predictions ---
+// Snapshot of a viewer's ordered prediction for a season (e.g. projected
+// final-standings finish). Snapshots are immutable: new predictions create
+// new rows. Deletions are soft (`deletedAt`) so the per-season cap can count
+// deleted rows too — preventing create/delete loops from bypassing the limit.
+// See issue #105 for the full contract.
+export const predictionSnapshots = pgTable(
+    'prediction_snapshots',
+    {
+        // Stable external identifier. Surfaced as the GraphQL `id` and used
+        // for any future shareable URL — internal numeric ids are never
+        // exposed. See AI_README_FIRST §1.
+        id: uuid('id').primaryKey().defaultRandom(),
+        userId: uuid('user_id')
+            .references(() => users.id, { onDelete: 'cascade' })
+            .notNull(),
+        seasonId: uuid('season_id')
+            .references(() => seasons.id, { onDelete: 'cascade' })
+            .notNull(),
+        type: varchar('type', { length: 50 }).notNull(),
+        lockedAt: utcTimestamp('locked_at').defaultNow().notNull(),
+        // Soft-delete marker. Null = live; set to now() on delete. Rows are
+        // never physically removed in normal operation. The cap counts both
+        // live and soft-deleted rows on purpose.
+        deletedAt: utcTimestamp('deleted_at'),
+    },
+    (table) => ({
+        // Live-row read path: filter `deletedAt IS NULL` and look up by
+        // (userId, seasonId, type). Partial index keeps the hot path tight.
+        livePerScopeIdx: index('prediction_snapshots_live_per_scope_idx')
+            .on(table.userId, table.seasonId, table.type)
+            .where(sql`${table.deletedAt} IS NULL`),
+        // Cap-count path: counts every row including soft-deleted ones, so
+        // the index intentionally has no partial filter.
+        scopeIdx: index('prediction_snapshots_scope_idx').on(
+            table.userId,
+            table.seasonId,
+            table.type,
+        ),
+    }),
+);
+
+export const predictionSnapshotEntries = pgTable(
+    'prediction_snapshot_entries',
+    {
+        snapshotId: uuid('snapshot_id')
+            .references(() => predictionSnapshots.id, { onDelete: 'cascade' })
+            .notNull(),
+        teamId: uuid('team_id')
+            .references(() => teams.id)
+            .notNull(),
+        position: integer('position').notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.snapshotId, table.teamId] }),
+        // One team per position within a snapshot; pairs with the (snapshot,
+        // team) PK to enforce the bijection required by `lockInPrediction`.
+        uniqueSnapshotPosition: unique().on(table.snapshotId, table.position),
     }),
 );
 

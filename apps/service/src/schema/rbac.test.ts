@@ -26,6 +26,7 @@ import './config';
 import './graphics';
 import './viewer';
 import './account';
+import './predictions';
 
 // Mock ALL modules that schema files import at resolve-time
 vi.mock('../db', () => ({
@@ -117,6 +118,23 @@ vi.mock('../repositories', () => ({
             updateDatabaseUrl: vi.fn().mockResolvedValue(true),
             updateApiFootballKey: vi.fn().mockResolvedValue(true),
             updateSupabaseConfig: vi.fn().mockResolvedValue(true),
+        },
+        predictions: {
+            createSnapshot: vi.fn().mockResolvedValue({
+                id: 'snap-mock',
+                userId: 'mock',
+                seasonId: 'mock',
+                type: 'projected_finish',
+                lockedAt: new Date(),
+                deletedAt: null,
+            }),
+            listSnapshots: vi.fn().mockResolvedValue([]),
+            getSnapshotById: vi.fn().mockResolvedValue(null),
+            listSnapshotEntries: vi.fn().mockResolvedValue([]),
+            listSnapshotEntriesByIds: vi.fn().mockResolvedValue(new Map()),
+            softDeleteSnapshot: vi.fn().mockResolvedValue('snap-mock'),
+            countSnapshotsInScope: vi.fn().mockResolvedValue(0),
+            countGameweeksInSeason: vi.fn().mockResolvedValue(0),
         },
         users: {
             getDomainUserById: vi.fn().mockResolvedValue({
@@ -247,6 +265,15 @@ const MUTATIONS: RbacTestCase[] = [
     {
         name: 'autoSideloadGraphic',
         query: 'mutation { autoSideloadGraphic(entityId: "test", entityType: "team") }',
+    },
+    // predictions.ts — `lockInPrediction` is gated on the `predictions`
+    // role; the matrix's `user` (roles=['user']) gets Forbidden, admins
+    // bypass via `manage all`. `deletePredictionSnapshot` returns NOT_FOUND
+    // before the auth check when no snapshot exists, so it's covered in
+    // predictions.test.ts rather than here.
+    {
+        name: 'lockInPrediction',
+        query: 'mutation { lockInPrediction(input: { seasonId: "s", type: PROJECTED_FINISH, orderedTeamIds: ["t"] }) { id } }',
     },
 ];
 

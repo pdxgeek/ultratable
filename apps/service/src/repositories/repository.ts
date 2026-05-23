@@ -4,6 +4,7 @@ import { FixturesRepository } from './fixtures';
 import { GraphicsRepository } from './graphics';
 import { LeaguesRepository } from './leagues';
 import { PlayersRepository } from './players';
+import { PredictionsRepository } from './predictions';
 import { TeamsRepository } from './teams';
 import { UsersRepository } from './users';
 import { WorkersRepository } from './workers';
@@ -23,4 +24,5 @@ export interface IRepository {
     players: PlayersRepository;
     graphics: GraphicsRepository;
     users: UsersRepository;
+    predictions: PredictionsRepository;
 }
