@@ -8,6 +8,8 @@
         "build": "tsc",
         "start": "node dist/index.js",
         "db:generate": "drizzle-kit generate",
+        "db:bootstrap": "ts-node src/scripts/bootstrap-migrations.ts",
+        "db:migrate": "ts-node src/scripts/migrate.ts",
         "db:push": "drizzle-kit push",
         "db:reset": "ts-node src/scripts/wipe_and_seed.ts",
         "test": "vitest run",

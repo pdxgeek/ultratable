@@ -44,10 +44,13 @@ npm run health:check     # Verify all three ports are responding
 ```bash
 npm run dev              # Nodemon + ts-node
 npm run db:generate      # Drizzle schema → migration files
-npm run db:push          # Apply migrations to Postgres
+npm run db:bootstrap     # One-time: stamp drizzle.__drizzle_migrations on a DB that was set up via db:push (idempotent)
+npm run db:migrate       # Apply pending migration files (canonical dev + prod path)
 npm run db:reset         # Wipe and reseed database
 npm run test:integration # Integration tests only
 ```
+
+**Schema changes go through `db:generate` → commit the migration → `db:migrate`.** `npm run db:push` still exists as an escape hatch for prototyping (diffs the live DB against the TS schema), but it bypasses the migration history — if you use it, run `npm run db:bootstrap` afterward so the migration runner stays in sync. See [issue #99](../../../issues/99) for the backstory.
 
 ### Web / Admin (`apps/web/`, `apps/admin/`)
 
