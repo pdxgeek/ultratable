@@ -267,9 +267,13 @@ server.post('/api/auth/dev-login', async (request, reply) => {
     }
 
     const { role } = request.body as { role: string };
-    const validRoles = ['admin', 'user', 'guest'];
+    const rolesForSlug: Record<string, string[]> = {
+        admin: ['admin', 'predictions'],
+        user: ['user', 'predictions'],
+        guest: ['guest'],
+    };
 
-    if (!validRoles.includes(role)) {
+    if (!(role in rolesForSlug)) {
         return reply.status(400).send({ error: 'Invalid role' });
     }
 
@@ -321,10 +325,14 @@ server.post('/api/auth/dev-login', async (request, reply) => {
         return reply.status(500).send({ error: 'auth_link missing — bootstrap hook failed' });
     }
 
-    // Always force the requested role — the bootstrap hook seeds ["user"] by
-    // default, and re-runs of dev-login may flip an existing dev account
-    // (admin → guest, etc.).
-    const updated = await repository.users.setDomainUserRoles(domainUser.id, [role]);
+    // Always force the requested role — the bootstrap hook seeds defaults,
+    // and re-runs of dev-login may flip an existing dev account (admin →
+    // guest, etc.). Non-guest dev users carry 'predictions' so they can
+    // exercise the gated UI.
+    const updated = await repository.users.setDomainUserRoles(
+        domainUser.id,
+        rolesForSlug[role],
+    );
     invalidateDomainUserCache(providerUser.id);
 
     globalLogger.info(

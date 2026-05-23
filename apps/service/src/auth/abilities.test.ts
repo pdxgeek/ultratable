@@ -64,6 +64,43 @@ describe('abilityFor — admin', () => {
     });
 });
 
+describe('abilityFor — predictions role', () => {
+    it('viewer with predictions role can create predictions', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user', 'predictions'] });
+        expect(ability.can('create', 'Prediction')).toBe(true);
+    });
+
+    it('viewer with predictions role can read/delete only their own predictions', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user', 'predictions'] });
+        expect(ability.can('read', subject('Prediction', { userId: 'user-1' }))).toBe(true);
+        expect(ability.can('delete', subject('Prediction', { userId: 'user-1' }))).toBe(true);
+        expect(ability.can('read', subject('Prediction', { userId: 'someone-else' }))).toBe(false);
+        expect(ability.can('delete', subject('Prediction', { userId: 'someone-else' }))).toBe(
+            false,
+        );
+    });
+
+    it('viewer without predictions role gets nothing on Prediction', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user'] });
+        expect(ability.can('create', 'Prediction')).toBe(false);
+        expect(ability.can('read', subject('Prediction', { userId: 'user-1' }))).toBe(false);
+    });
+
+    it('guest role gets nothing on Prediction', () => {
+        const ability = buildAbility({ id: 'guest-1', roles: ['guest'] });
+        expect(ability.can('create', 'Prediction')).toBe(false);
+        expect(ability.can('read', subject('Prediction', { userId: 'guest-1' }))).toBe(false);
+    });
+
+    it('admin bypasses prediction ownership scope via manage all', () => {
+        const ability = buildAbility({ id: 'admin-1', roles: ['admin'] });
+        expect(ability.can('create', 'Prediction')).toBe(true);
+        expect(ability.can('delete', subject('Prediction', { userId: 'someone-else' }))).toBe(
+            true,
+        );
+    });
+});
+
 describe('abilityFor — grant translation seam', () => {
     it('owner/admin role → manage on the specific resource id', () => {
         const ability = buildAbility({ id: 'user-1', roles: ['user'] }, [

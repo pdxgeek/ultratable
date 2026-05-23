@@ -67,7 +67,13 @@ export type AppAction =
     | 'follow'
     | 'unfollow';
 
-export type AppSubject = 'Account' | 'Viewer' | 'League' | 'OwnedResource' | 'all';
+export type AppSubject =
+    | 'Account'
+    | 'Viewer'
+    | 'League'
+    | 'OwnedResource'
+    | 'Prediction'
+    | 'all';
 
 export type AppAbility = MongoAbility<[AppAction, AppSubject | object]>;
 
@@ -101,6 +107,16 @@ export function buildAbility(viewer: ViewerCtx | undefined, grants: GrantRow[] =
     // this directly; nothing in the current schema does today, so the rule is
     // inert until then.
     can('manage', 'OwnedResource', { ownerId: viewer.id });
+
+    // Predictions. The 'predictions' role gates both the UI button and the
+    // mutation surface. `create` is unconditional (the resolver pins userId
+    // from the viewer); `read`/`delete` are owner-scoped via userId match.
+    // Guests and other roles never get this — admins still bypass via the
+    // global wildcard below.
+    if (viewer.roles.includes('predictions')) {
+        can('create', 'Prediction');
+        can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+    }
 
     // Grant-based rules. Each grant translates to one `can(...)` call.
     for (const grant of grants) {

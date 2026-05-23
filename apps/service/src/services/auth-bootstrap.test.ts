@@ -58,11 +58,28 @@ describe('bootstrapDomainUserFromAuthUser', () => {
             email: 'ada@example.com',
             emailVerified: true,
             image: 'https://example.com/ada.png',
+            roles: ['user', 'predictions'],
         });
         expect(authLinksValuesMock).toHaveBeenCalledWith({
             authUserId: 'auth-1',
             domainUserId: 'domain-uuid-1',
         });
+    });
+
+    it("seeds new users with the 'predictions' role alongside 'user'", async () => {
+        returningMock.mockResolvedValueOnce([{ id: 'domain-uuid-roles' }]);
+        authLinksValuesMock.mockResolvedValueOnce(undefined);
+
+        await bootstrapDomainUserFromAuthUser({
+            id: 'auth-roles',
+            name: 'Roles Default',
+            email: 'roles@example.com',
+            emailVerified: true,
+        });
+
+        expect(usersValuesMock).toHaveBeenCalledWith(
+            expect.objectContaining({ roles: ['user', 'predictions'] }),
+        );
     });
 
     it('coerces a missing avatar to null on the inserted row', async () => {
