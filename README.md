@@ -37,7 +37,7 @@ This interactive script:
 3. Asks for your API-Football key (optional — the service starts without it, but sport-data endpoints will 401 until you add one).
 4. Generates a `BETTER_AUTH_SECRET` automatically.
 5. Writes [`apps/service/.env`](apps/service/.env.example) and the root [`.env`](.env.example).
-6. Offers to run `npm install` and `npm run db:push --prefix apps/service` (Drizzle migrations).
+6. Offers to run `npm install` and the two-step migration flow in `apps/service`: `npm run db:bootstrap` (stamps `drizzle.__drizzle_migrations` for DBs that were originally set up via `db:push`; idempotent) followed by `npm run db:migrate` (applies any pending migration files).
 
 Re-run it any time to change credentials — existing values become the prompt defaults, so press Enter to keep them. Each run timestamps the prior `apps/service/.env` to `apps/service/.env.backup.<ISO timestamp>` so nothing is lost.
 
@@ -62,7 +62,8 @@ Wraps `concurrently` to start all three dev servers, killing any stale processes
 
 ```bash
 npm run health:check                  # ping all three ports
-npm run db:push --prefix apps/service # apply migrations
+npm run db:migrate --prefix apps/service  # apply pending migrations (canonical path)
+npm run db:bootstrap --prefix apps/service # one-time: stamp __drizzle_migrations on a db:push-bootstrapped DB
 npm run db:reset --prefix apps/service # wipe + reseed
 npm run lint --workspaces             # lint all packages
 npm run test                          # vitest across all workspaces

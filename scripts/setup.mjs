@@ -542,14 +542,27 @@ async function main() {
     // ── Optional: migrations ─────────────────────────────────
     header('Database migrations');
     paragraph(
-        `Applies all Drizzle migrations under apps/service/drizzle/ to the database\n` +
-            `at DATABASE_URL. Required on a fresh database; safe to re-run.`,
+        `Applies the Drizzle migrations under apps/service/drizzle/ to the database\n` +
+            `at DATABASE_URL. Two steps:\n\n` +
+            `  1. ${c.bold('db:bootstrap')} — stamps drizzle.__drizzle_migrations on a DB\n` +
+            `                 that was bootstrapped via \`drizzle-kit push\`. Idempotent:\n` +
+            `                 no-op once the table has rows.\n` +
+            `  2. ${c.bold('db:migrate')}   — applies any new migration files. Safe to re-run.`,
     );
-    if (await confirm('Run `npm run db:push` in apps/service now?', true)) {
-        if (!run('npm', ['run', 'db:push'], { cwd: path.join(ROOT, 'apps/service') })) {
+    if (
+        await confirm('Run `npm run db:bootstrap && npm run db:migrate` in apps/service now?', true)
+    ) {
+        const serviceCwd = path.join(ROOT, 'apps/service');
+        if (!run('npm', ['run', 'db:bootstrap'], { cwd: serviceCwd })) {
             stdout.write(
                 c.red(
-                    '  Migrations failed — check that Postgres is reachable and re-run `npm run db:push --prefix apps/service`.\n',
+                    '  Bootstrap failed — check that Postgres is reachable and re-run `npm run db:bootstrap --prefix apps/service`.\n',
+                ),
+            );
+        } else if (!run('npm', ['run', 'db:migrate'], { cwd: serviceCwd })) {
+            stdout.write(
+                c.red(
+                    '  Migrate failed — fix the error above and re-run `npm run db:migrate --prefix apps/service`.\n',
                 ),
             );
         } else {

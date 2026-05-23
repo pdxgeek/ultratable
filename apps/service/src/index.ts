@@ -450,7 +450,7 @@ async function preflightSchemaCheck() {
         if (/column .* does not exist/i.test(message)) {
             globalLogger.fatal(
                 { err: message },
-                'Database schema is behind the codebase. Run `npm run db:push --prefix apps/service` to apply pending migrations, then restart.',
+                'Database schema is behind the codebase. Run `npm run db:migrate --prefix apps/service` to apply pending migrations, then restart. (If migrate fails, the DB was bootstrapped via `db:push` — run `npm run db:bootstrap --prefix apps/service` first to stamp __drizzle_migrations.)',
             );
             process.exit(1);
         }
