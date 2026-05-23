@@ -1,7 +1,6 @@
 import type { Team } from '../db';
 import type { Mock } from 'vitest';
 
-import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
@@ -42,45 +41,47 @@ const teams: Team[] = [
 ];
 const teamsMap = new Map(teams.map((t) => [t.id, t]));
 
-const standings = [
-    { teamId: 't-1', position: 1, team: { name: 'Arsenal' } },
-    { teamId: 't-2', position: 2, team: { name: 'Brentford' } },
-    { teamId: 't-3', position: 3, team: { name: 'Chelsea' } },
+// Default standings have `played: 0` so season hasn't started — delta arrows
+// should not appear unless a test overrides this.
+const standingsNotStarted = [
+    { teamId: 't-1', position: 1, played: 0, team: { name: 'Arsenal' } },
+    { teamId: 't-2', position: 2, played: 0, team: { name: 'Brentford' } },
+    { teamId: 't-3', position: 3, played: 0, team: { name: 'Chelsea' } },
 ];
+const standingsStarted = [
+    { teamId: 't-1', position: 1, played: 5, team: { name: 'Arsenal' } },
+    { teamId: 't-2', position: 2, played: 5, team: { name: 'Brentford' } },
+    { teamId: 't-3', position: 3, played: 5, team: { name: 'Chelsea' } },
+];
+
+type Snapshot = {
+    id: string;
+    userId: string;
+    seasonId: string;
+    type: 'PROJECTED_FINISH';
+    lockedAt: string;
+    deletedAt: null;
+};
+
+type SnapshotWithEntries = Snapshot & {
+    entries: Array<{ teamId: string; position: number }>;
+};
 
 function setupHooks({
     snapshots = [],
     snapshot = null,
-    lockInResult = {},
     deleteResult = {},
     viewerOverride = viewer,
+    standingsOverride = standingsNotStarted,
 }: {
-    snapshots?: Array<{
-        id: string;
-        userId: string;
-        seasonId: string;
-        type: 'PROJECTED_FINISH';
-        lockedAt: string;
-        deletedAt: null;
-    }>;
-    snapshot?: {
-        id: string;
-        userId: string;
-        seasonId: string;
-        type: 'PROJECTED_FINISH';
-        lockedAt: string;
-        deletedAt: null;
-        entries: Array<{ teamId: string; position: number }>;
-    } | null;
-    lockInResult?: {
-        data?: unknown;
-        error?: { graphQLErrors?: Array<{ message: string }>; message: string };
-    };
+    snapshots?: Snapshot[];
+    snapshot?: SnapshotWithEntries | null;
     deleteResult?: {
         data?: unknown;
         error?: { graphQLErrors?: Array<{ message: string }>; message: string };
     };
     viewerOverride?: Viewer;
+    standingsOverride?: typeof standingsNotStarted;
 } = {}) {
     (useViewer as unknown as Mock).mockReturnValue({
         viewer: viewerOverride,
@@ -97,7 +98,7 @@ function setupHooks({
         isSyncing: false,
     });
     (useStandings as unknown as Mock).mockReturnValue({
-        standings,
+        standings: standingsOverride,
         fixtures: [],
         teamsMap,
         season: { id: 's-1' },
@@ -113,17 +114,14 @@ function setupHooks({
         return [{ data: { predictionSnapshot: snapshot }, fetching: false }, vi.fn()];
     });
 
-    const lockInExec = vi
-        .fn()
-        .mockResolvedValue({ data: lockInResult.data, error: lockInResult.error });
+    const lockInExec = vi.fn().mockResolvedValue({ data: undefined, error: undefined });
     const deleteExec = vi
         .fn()
         .mockResolvedValue({ data: deleteResult.data, error: deleteResult.error });
-    let useMutationCallCount = 0;
+    let mutationCalls = 0;
     (useMutation as unknown as Mock).mockImplementation(() => {
-        useMutationCallCount += 1;
-        // PredictionsPage instantiates lockIn first, then delete — preserve that order.
-        if (useMutationCallCount % 2 === 1) {
+        mutationCalls += 1;
+        if (mutationCalls % 2 === 1) {
             return [{ fetching: false, stale: false, error: undefined }, lockInExec];
         }
         return [{ fetching: false, stale: false, error: undefined }, deleteExec];
@@ -147,86 +145,35 @@ describe('PredictionsPage', () => {
         vi.clearAllMocks();
     });
 
-    it('renders teams in current standings order by default', () => {
+    it('renders all teams in the pool and empty slots by default', () => {
         setupHooks();
         renderPage();
 
-        const rows = screen.getAllByRole('row').slice(1); // skip header
-        expect(rows.map((r) => within(r).getByText(/Arsenal|Brentford|Chelsea/).textContent)).toEqual([
-            'Arsenal',
-            'Brentford',
-            'Chelsea',
-        ]);
+        const pool = screen.getByTestId('pool');
+        expect(within(pool).getByText('Arsenal')).toBeTruthy();
+        expect(within(pool).getByText('Brentford')).toBeTruthy();
+        expect(within(pool).getByText('Chelsea')).toBeTruthy();
+
+        // Each slot starts with the "Drop a team here" placeholder.
+        const slot1 = screen.getByTestId('slot-1');
+        const slot2 = screen.getByTestId('slot-2');
+        const slot3 = screen.getByTestId('slot-3');
+        expect(within(slot1).getByText(/Drop a team here/i)).toBeTruthy();
+        expect(within(slot2).getByText(/Drop a team here/i)).toBeTruthy();
+        expect(within(slot3).getByText(/Drop a team here/i)).toBeTruthy();
     });
 
-    it('reorders via the up arrow when a row is selected', () => {
+    it('disables the Lock In button until every slot is filled', () => {
         setupHooks();
         renderPage();
 
-        // Click Brentford row to select it
-        fireEvent.click(screen.getByText('Brentford'));
-        // Click ↑ to move it above Arsenal
-        fireEvent.click(screen.getByLabelText('Move Brentford up'));
-
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.map((r) => within(r).getByText(/Arsenal|Brentford|Chelsea/).textContent)).toEqual([
-            'Brentford',
-            'Arsenal',
-            'Chelsea',
-        ]);
+        const lockIn = screen.getByRole('button', { name: /Lock In/i });
+        expect(lockIn.hasAttribute('disabled')).toBe(true);
+        // Status hint reflects 0/3 placed.
+        expect(screen.getByText(/0\/3 placed/)).toBeTruthy();
     });
 
-    it('calls lockInPrediction with the current draft order and refetches history', async () => {
-        const { lockInExec, refetchHistory } = setupHooks({
-            lockInResult: {
-                data: {
-                    lockInPrediction: {
-                        id: 'p-1',
-                        userId: 'u-1',
-                        seasonId: 's-1',
-                        type: 'PROJECTED_FINISH',
-                        lockedAt: '2026-05-23T12:00:00.000Z',
-                        deletedAt: null,
-                    },
-                },
-            },
-        });
-        renderPage();
-
-        fireEvent.click(screen.getByRole('button', { name: /Lock In/i }));
-
-        await waitFor(() =>
-            expect(lockInExec).toHaveBeenCalledWith({
-                input: {
-                    seasonId: 's-1',
-                    type: 'PROJECTED_FINISH',
-                    orderedTeamIds: ['t-1', 't-2', 't-3'],
-                },
-            }),
-        );
-        await waitFor(() => expect(refetchHistory).toHaveBeenCalled());
-    });
-
-    it('surfaces a PREDICTION_LIMIT_REACHED error verbatim', async () => {
-        setupHooks({
-            lockInResult: {
-                error: {
-                    graphQLErrors: [
-                        { message: 'Prediction limit reached for this season (50/50)' },
-                    ],
-                    message: 'Prediction limit reached for this season (50/50)',
-                },
-            },
-        });
-        renderPage();
-
-        fireEvent.click(screen.getByRole('button', { name: /Lock In/i }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/Prediction limit reached/);
-    });
-
-    it('enters read-only view mode when a snapshot is clicked', async () => {
+    it('renders the snapshot order in slots and hides the pool in view mode', async () => {
         setupHooks({
             snapshots: [
                 {
@@ -254,29 +201,25 @@ describe('PredictionsPage', () => {
         });
         renderPage();
 
-        // The history button shows the formatted timestamp; click it.
         const historyButton = screen
             .getAllByRole('button')
             .find((b) => /2026/.test(b.textContent ?? ''));
-        expect(historyButton).toBeDefined();
         fireEvent.click(historyButton!);
 
-        // Lock In is replaced by Make Predictions.
-        await waitFor(() =>
-            expect(screen.getByRole('button', { name: /Make Predictions/i })).toBeTruthy(),
-        );
-        expect(screen.queryByRole('button', { name: /^Lock In$/i })).toBeNull();
+        await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
 
-        // Order matches the snapshot, not current standings.
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.map((r) => within(r).getByText(/Arsenal|Brentford|Chelsea/).textContent)).toEqual([
-            'Chelsea',
-            'Arsenal',
-            'Brentford',
-        ]);
+        // Pool is gone in view mode.
+        expect(screen.queryByTestId('pool')).toBeNull();
+
+        // Slots show the snapshot's order: Chelsea, Arsenal, Brentford.
+        expect(within(screen.getByTestId('slot-1')).getByText('Chelsea')).toBeTruthy();
+        expect(within(screen.getByTestId('slot-2')).getByText('Arsenal')).toBeTruthy();
+        expect(within(screen.getByTestId('slot-3')).getByText('Brentford')).toBeTruthy();
     });
 
-    it('restores the user pre-view order when Make Predictions is clicked', async () => {
+    it('shows up/down/neutral delta arrows in view mode when the season has started', async () => {
+        // Current positions: t-1=1, t-2=2, t-3=3. Snapshot reorders to
+        // t-3=1, t-1=2, t-2=3 → t-3 moves up 2, t-1 down 1, t-2 down 1.
         setupHooks({
             snapshots: [
                 {
@@ -301,32 +244,105 @@ describe('PredictionsPage', () => {
                     { teamId: 't-2', position: 3 },
                 ],
             },
+            standingsOverride: standingsStarted,
         });
         renderPage();
 
-        // Edit draft: swap Brentford and Arsenal.
-        fireEvent.click(screen.getByText('Brentford'));
-        fireEvent.click(screen.getByLabelText('Move Brentford up'));
+        const historyButton = screen
+            .getAllByRole('button')
+            .find((b) => /2026/.test(b.textContent ?? ''));
+        fireEvent.click(historyButton!);
 
-        // Enter view mode.
+        await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
+        expect(
+            within(screen.getByTestId('slot-1')).getByText(/2 positions higher/i),
+        ).toBeTruthy();
+        expect(within(screen.getByTestId('slot-2')).getByText(/1 positions lower/i)).toBeTruthy();
+        expect(within(screen.getByTestId('slot-3')).getByText(/1 positions lower/i)).toBeTruthy();
+    });
+
+    it('renders the neutral delta when the prediction matches current position', async () => {
+        // Snapshot matches current standings exactly: all deltas = 0.
+        setupHooks({
+            snapshots: [
+                {
+                    id: 'p-1',
+                    userId: 'u-1',
+                    seasonId: 's-1',
+                    type: 'PROJECTED_FINISH',
+                    lockedAt: '2026-05-23T12:00:00.000Z',
+                    deletedAt: null,
+                },
+            ],
+            snapshot: {
+                id: 'p-1',
+                userId: 'u-1',
+                seasonId: 's-1',
+                type: 'PROJECTED_FINISH',
+                lockedAt: '2026-05-23T12:00:00.000Z',
+                deletedAt: null,
+                entries: [
+                    { teamId: 't-1', position: 1 },
+                    { teamId: 't-2', position: 2 },
+                    { teamId: 't-3', position: 3 },
+                ],
+            },
+            standingsOverride: standingsStarted,
+        });
+        renderPage();
+
         const historyButton = screen
             .getAllByRole('button')
             .find((b) => /2026/.test(b.textContent ?? ''));
         fireEvent.click(historyButton!);
         await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
 
-        // Click Make Predictions — should restore the user's edited order.
-        fireEvent.click(screen.getByRole('button', { name: /Make Predictions/i }));
-
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.map((r) => within(r).getByText(/Arsenal|Brentford|Chelsea/).textContent)).toEqual([
-            'Brentford',
-            'Arsenal',
-            'Chelsea',
-        ]);
+        expect(within(screen.getByTestId('slot-1')).getByText(/Same position/i)).toBeTruthy();
+        expect(within(screen.getByTestId('slot-2')).getByText(/Same position/i)).toBeTruthy();
+        expect(within(screen.getByTestId('slot-3')).getByText(/Same position/i)).toBeTruthy();
     });
 
-    it('shows the subtle delete control only when the viewer can delete', async () => {
+    it('omits delta indicators when the season has not started', async () => {
+        setupHooks({
+            snapshots: [
+                {
+                    id: 'p-1',
+                    userId: 'u-1',
+                    seasonId: 's-1',
+                    type: 'PROJECTED_FINISH',
+                    lockedAt: '2026-05-23T12:00:00.000Z',
+                    deletedAt: null,
+                },
+            ],
+            snapshot: {
+                id: 'p-1',
+                userId: 'u-1',
+                seasonId: 's-1',
+                type: 'PROJECTED_FINISH',
+                lockedAt: '2026-05-23T12:00:00.000Z',
+                deletedAt: null,
+                entries: [
+                    { teamId: 't-3', position: 1 },
+                    { teamId: 't-1', position: 2 },
+                    { teamId: 't-2', position: 3 },
+                ],
+            },
+            // standingsNotStarted (default) — every team has played === 0.
+        });
+        renderPage();
+
+        const historyButton = screen
+            .getAllByRole('button')
+            .find((b) => /2026/.test(b.textContent ?? ''));
+        fireEvent.click(historyButton!);
+        await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
+
+        expect(screen.queryByText(/positions higher/i)).toBeNull();
+        expect(screen.queryByText(/positions lower/i)).toBeNull();
+        expect(screen.queryByText(/Same position/i)).toBeNull();
+    });
+
+    it('hides the delete control when CASL denies (non-owner viewer)', async () => {
         setupHooks({
             snapshots: [
                 {
@@ -358,9 +374,8 @@ describe('PredictionsPage', () => {
             .getAllByRole('button')
             .find((b) => /2026/.test(b.textContent ?? ''));
         fireEvent.click(historyButton!);
-
         await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
-        // Viewer is u-1 but the snapshot belongs to other-user; CASL denies.
+
         expect(screen.queryByRole('button', { name: /Delete this prediction/i })).toBeNull();
     });
 
@@ -397,21 +412,19 @@ describe('PredictionsPage', () => {
             .getAllByRole('button')
             .find((b) => /2026/.test(b.textContent ?? ''));
         fireEvent.click(historyButton!);
-
         await waitFor(() => screen.getByRole('button', { name: /Make Predictions/i }));
         fireEvent.click(screen.getByRole('button', { name: /Delete this prediction/i }));
 
-        // Confirm in the dialog.
         const confirmDelete = await screen.findByRole('button', { name: /^Delete$/i });
         fireEvent.click(confirmDelete);
 
         await waitFor(() => expect(deleteExec).toHaveBeenCalledWith({ id: 'p-1' }));
         await waitFor(() => expect(refetchHistory).toHaveBeenCalled());
-        // Back to draft mode after success.
         await waitFor(() =>
             expect(screen.queryByRole('button', { name: /Make Predictions/i })).toBeNull(),
         );
-        expect(screen.getByRole('button', { name: /Lock In/i })).toBeTruthy();
+        // Pool is back (draft mode).
+        expect(screen.getByTestId('pool')).toBeTruthy();
     });
 
     it('keeps the delete dialog open and surfaces the error on server failure', async () => {
@@ -460,9 +473,7 @@ describe('PredictionsPage', () => {
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/Forbidden/);
-        // Dialog stays open on failure (so the user can read the error).
-        // Make Predictions sits behind the modal overlay (aria-hidden), so
-        // assert the dialog's own Cancel button is still present instead.
+        // Dialog stays open — its Cancel button is still present.
         expect(screen.getByRole('button', { name: /Cancel/i })).toBeTruthy();
     });
 });

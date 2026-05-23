@@ -2,6 +2,8 @@ import type { PredictionType } from './queries';
 
 import React from 'react';
 
+import { cn } from '@/lib/utils';
+
 interface PredictionTypeItem {
     type: PredictionType;
     label: string;
@@ -25,11 +27,12 @@ const PredictionTypeNav: React.FC<PredictionTypeNavProps> = ({ selected, onSelec
                         type="button"
                         onClick={() => onSelect(item.type)}
                         aria-current={isActive ? 'page' : undefined}
-                        className={`text-left px-3 py-2 rounded-md text-[0.9rem] font-semibold transition-colors ${
+                        className={cn(
+                            'rounded-md px-3 py-2 text-sm font-medium text-left transition-colors',
                             isActive
-                                ? 'bg-accent-purple text-white'
-                                : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
-                        }`}
+                                ? 'bg-muted text-foreground'
+                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        )}
                     >
                         {item.label}
                     </button>

@@ -9,7 +9,10 @@ import { useMutation, useQuery } from 'urql';
 
 import PredictionHistoryPanel from '../components/predictions/PredictionHistoryPanel';
 import PredictionTypeNav from '../components/predictions/PredictionTypeNav';
-import ProjectedFinishTable from '../components/predictions/ProjectedFinishTable';
+import ProjectedFinishBoard, {
+    type MoveTarget,
+} from '../components/predictions/ProjectedFinishBoard';
+import { applyMove } from '../components/predictions/applyMove';
 import {
     DELETE_PREDICTION_SNAPSHOT_MUTATION,
     LOCK_IN_PREDICTION_MUTATION,
@@ -23,6 +26,18 @@ import { useViewer } from '../hooks/useViewer';
 
 type Mode = { kind: 'draft' } | { kind: 'viewing'; snapshotId: string };
 
+// Fisher-Yates shuffle. Used once per session to "jumble" the pool of teams
+// so the user isn't biased by the alphabetical / by-position order they're
+// trying to predict against.
+function shuffle<T>(input: readonly T[]): T[] {
+    const arr = [...input];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
 const PredictionsPage: React.FC = () => {
     const { activeLeague, activeSeason, isLoading: leagueLoading } = useLeague();
     const { viewer } = useViewer();
@@ -31,27 +46,37 @@ const PredictionsPage: React.FC = () => {
 
     const { standings, teamsMap, isLoading: standingsLoading } = useStandings(seasonId);
 
+    const teamIds = useMemo(() => standings.map((s) => s.teamId), [standings]);
+    const N = teamIds.length;
+    // Stable shuffle: only re-shuffles when the team *set* changes (joined
+    // key, not the standings reference). Live standings updates (scores,
+    // form) won't re-jumble the pool mid-session.
+    const teamSetKey = teamIds.join('|');
+    const poolOrder = useMemo(
+        () => shuffle(teamIds),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [teamSetKey],
+    );
+
     const [selectedType, setSelectedType] = useState<PredictionType>('PROJECTED_FINISH');
-    // `userDraftOrder` is null until the user has touched anything; the
-    // displayed draft falls back to `defaultOrder` (current standings) in
-    // that case. This shape lets "Make Predictions" / post-delete "restore
-    // pre-view order" pass null to mean "snap back to standings" without
-    // any synchronization effects.
-    const [userDraftOrder, setUserDraftOrder] = useState<string[] | null>(null);
-    const [preViewOrder, setPreViewOrder] = useState<string[] | null>(null);
+    // `userSlots` is null until the user touches anything; we then fall back
+    // to an all-empty slot array. This keeps "restore pre-view order" simple:
+    // pass null to mean "snap back to a blank draft."
+    const [userSlots, setUserSlots] = useState<(string | null)[] | null>(null);
+    const [preViewSlots, setPreViewSlots] = useState<(string | null)[] | null>(null);
     const [mode, setMode] = useState<Mode>({ kind: 'draft' });
-    const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
     const [lockInError, setLockInError] = useState<string | null>(null);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
-    const defaultOrder = useMemo(
-        () =>
-            [...standings]
-                .sort((a, b) => a.position - b.position)
-                .map((row) => row.teamId),
-        [standings],
-    );
-    const draftOrder = userDraftOrder ?? defaultOrder;
+    const emptySlots = useMemo(() => Array<string | null>(N).fill(null), [N]);
+    const draftSlots = userSlots ?? emptySlots;
+
+    const currentPositions = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const row of standings) m.set(row.teamId, row.position);
+        return m;
+    }, [standings]);
+    const seasonStarted = useMemo(() => standings.some((s) => s.played > 0), [standings]);
 
     const zones: ZoneArrays = useMemo(() => {
         const seasonMeta = (activeSeason?.metadata as Record<string, unknown>) ?? {};
@@ -86,15 +111,24 @@ const PredictionsPage: React.FC = () => {
     const viewingSnapshot =
         mode.kind === 'viewing' ? (snapshotResult.data?.predictionSnapshot ?? null) : null;
 
-    const viewingOrder = useMemo(() => {
-        if (!viewingSnapshot) return null;
-        return [...viewingSnapshot.entries]
-            .sort((a, b) => a.position - b.position)
-            .map((e) => e.teamId);
-    }, [viewingSnapshot]);
+    const viewingSlots = useMemo(() => {
+        if (!viewingSnapshot || N === 0) return null;
+        const arr = Array<string | null>(N).fill(null);
+        for (const entry of viewingSnapshot.entries) {
+            const idx = entry.position - 1;
+            if (idx >= 0 && idx < N) arr[idx] = entry.teamId;
+        }
+        return arr;
+    }, [viewingSnapshot, N]);
 
-    const displayedOrder =
-        mode.kind === 'viewing' ? (viewingOrder ?? draftOrder) : draftOrder;
+    const slots = mode.kind === 'viewing' ? (viewingSlots ?? emptySlots) : draftSlots;
+    const placedSet = useMemo(
+        () => new Set(slots.filter((id): id is string => !!id)),
+        [slots],
+    );
+    const poolTeamIds =
+        mode.kind === 'viewing' ? [] : poolOrder.filter((id) => !placedSet.has(id));
+    const allPlaced = N > 0 && slots.every((s) => s !== null);
 
     const [lockInState, lockIn] = useMutation<
         { lockInPrediction: PredictionSnapshot },
@@ -106,41 +140,37 @@ const PredictionsPage: React.FC = () => {
         { id: string }
     >(DELETE_PREDICTION_SNAPSHOT_MUTATION);
 
-    const moveTeam = (teamId: string, direction: 'up' | 'down') => {
-        const current = draftOrder;
-        const idx = current.indexOf(teamId);
-        if (idx < 0) return;
-        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-        if (newIdx < 0 || newIdx >= current.length) return;
-        const next = [...current];
-        [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
-        setUserDraftOrder(next);
+    const handleMove = (teamId: string, target: MoveTarget) => {
+        if (mode.kind !== 'draft') return;
+        setUserSlots((current) =>
+            applyMove(current ?? Array<string | null>(N).fill(null), teamId, target),
+        );
     };
 
     const handleSelectSnapshot = (id: string) => {
-        if (mode.kind === 'draft') setPreViewOrder(userDraftOrder);
+        if (mode.kind === 'draft') setPreViewSlots(userSlots);
         setMode({ kind: 'viewing', snapshotId: id });
-        setSelectedTeamId(null);
     };
 
     const handleMakePredictions = () => {
-        setUserDraftOrder(preViewOrder);
-        setPreViewOrder(null);
+        setUserSlots(preViewSlots);
+        setPreViewSlots(null);
         setMode({ kind: 'draft' });
         setDeleteError(null);
     };
 
     const handleLockIn = async () => {
-        if (!seasonId || draftOrder.length === 0) return;
+        if (!seasonId || !allPlaced || mode.kind !== 'draft') return;
         setLockInError(null);
+        const orderedTeamIds = slots.filter((id): id is string => id !== null);
         const result = await lockIn({
-            input: { seasonId, type: selectedType, orderedTeamIds: draftOrder },
+            input: { seasonId, type: selectedType, orderedTeamIds },
         });
         if (result.error) {
-            // urql wraps GraphQLErrors; surface the first one's message verbatim.
-            // For PREDICTION_LIMIT_REACHED the server already includes the
-            // honest "X/Y" framing — no extra hint about deleting old
-            // snapshots because soft-delete doesn't free capacity (issue #106).
+            // urql wraps GraphQLErrors. PREDICTION_LIMIT_REACHED message
+            // arrives pre-formatted as "X/Y" from the server (#108); no extra
+            // hint about deleting older snapshots because soft-delete doesn't
+            // free capacity.
             const msg = result.error.graphQLErrors[0]?.message ?? result.error.message;
             setLockInError(msg);
             return;
@@ -156,18 +186,16 @@ const PredictionsPage: React.FC = () => {
             setDeleteError(result.error.graphQLErrors[0]?.message ?? result.error.message);
             return false;
         }
-        // Success: exit viewing mode, restore the order the user had before
-        // opening the snapshot (null → fall back to current standings via
-        // defaultOrder), refresh history.
-        setUserDraftOrder(preViewOrder);
-        setPreViewOrder(null);
+        setUserSlots(preViewSlots);
+        setPreViewSlots(null);
         setMode({ kind: 'draft' });
         refetchHistory({ requestPolicy: 'network-only' });
         return true;
     };
 
     const canDeleteCurrent = !!(
-        viewingSnapshot && ability.can('delete', subject('Prediction', { userId: viewingSnapshot.userId }))
+        viewingSnapshot &&
+        ability.can('delete', subject('Prediction', { userId: viewingSnapshot.userId }))
     );
 
     const isLoading = leagueLoading || standingsLoading;
@@ -188,6 +216,8 @@ const PredictionsPage: React.FC = () => {
         );
     }
 
+    const placedCount = slots.filter((s) => s !== null).length;
+
     return (
         <div className="max-w-[1100px] mx-auto pt-5 pb-10">
             <Link
@@ -204,23 +234,33 @@ const PredictionsPage: React.FC = () => {
                     {activeLeague?.name ?? 'League'} — current season
                 </p>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_240px] gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8">
                 <PredictionTypeNav selected={selectedType} onSelect={setSelectedType} />
-                <ProjectedFinishTable
-                    orderedTeamIds={displayedOrder}
-                    teamsMap={teamsMap}
-                    zones={zones}
-                    readOnly={mode.kind === 'viewing'}
-                    selectedTeamId={selectedTeamId}
-                    onSelectTeam={setSelectedTeamId}
-                    onMoveTeam={moveTeam}
-                    onReorder={(next) => setUserDraftOrder(next)}
-                />
+                <div className="flex flex-col gap-2">
+                    {mode.kind === 'draft' && (
+                        <p className="text-sm text-text-muted">
+                            Drag each team into its predicted final position.{' '}
+                            <span className="text-text-secondary">
+                                {placedCount}/{N} placed
+                            </span>
+                        </p>
+                    )}
+                    <ProjectedFinishBoard
+                        poolTeamIds={poolTeamIds}
+                        slots={slots}
+                        teamsMap={teamsMap}
+                        zones={zones}
+                        currentPositions={currentPositions}
+                        seasonStarted={seasonStarted}
+                        readOnly={mode.kind === 'viewing'}
+                        onMove={handleMove}
+                    />
+                </div>
                 <PredictionHistoryPanel
                     snapshots={snapshots}
                     mode={mode.kind}
                     viewingSnapshotId={viewingId}
-                    canLockIn={draftOrder.length > 0}
+                    canLockIn={allPlaced && mode.kind === 'draft'}
                     isLocking={lockInState.fetching}
                     lockInError={lockInError}
                     canDeleteCurrent={canDeleteCurrent}
