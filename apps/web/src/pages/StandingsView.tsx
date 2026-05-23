@@ -57,7 +57,7 @@ const StandingsView: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => navigate('/predictions')}
-                            className="px-4 py-1.5 rounded-[20px] border border-accent-blue text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-blue text-white hover:brightness-110"
+                            className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-purple text-white hover:brightness-110"
                         >
                             Predictions
                         </button>
