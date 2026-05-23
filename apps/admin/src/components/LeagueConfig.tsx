@@ -121,7 +121,7 @@ export const LeagueConfig: React.FC<LeagueConfigProps> = ({
     const seasonSelected = configTab === 'season' && !!selectedConfigSeasonId;
 
     return (
-        <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box3 transition-all hover:border-slate-800">
+        <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden isolate group/box3 transition-all hover:border-slate-800">
             <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
             <div className="flex items-center justify-between relative z-10">
                 <div>

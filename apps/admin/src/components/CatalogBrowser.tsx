@@ -64,7 +64,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     const isInitializing = actionLoading === 'init-catalog';
     const isFetchingCountryLeagues = actionLoading === `country-${selectedCountry}`;
     return (
-        <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group/box1 transition-all hover:border-slate-800">
+        <section className="bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm space-y-8 relative overflow-hidden isolate group/box1 transition-all hover:border-slate-800">
             <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
             <div className="flex items-center justify-between relative z-10">
                 <div>
