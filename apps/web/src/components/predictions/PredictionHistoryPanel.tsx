@@ -58,7 +58,37 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     const currentSnapshot = snapshots.find((s) => s.id === viewingSnapshotId) ?? null;
 
     return (
-        <aside className="flex flex-col gap-4">
+        <aside className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3">
+                <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold">
+                    History
+                </h3>
+                {snapshots.length === 0 ? (
+                    <p className="text-sm text-text-muted">No predictions yet.</p>
+                ) : (
+                    <ul className="flex flex-col gap-1 max-h-[420px] overflow-y-auto pr-1">
+                        {snapshots.map((s) => {
+                            const isViewing = s.id === viewingSnapshotId;
+                            return (
+                                <li key={s.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelectSnapshot(s.id)}
+                                        className={`w-full text-left text-sm px-2 py-1.5 rounded-md transition-colors ${
+                                            isViewing
+                                                ? 'bg-white/[0.06] text-text-primary'
+                                                : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+                                        }`}
+                                    >
+                                        {formatTimestamp(s.lockedAt)}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
+
             {mode === 'draft' ? (
                 <div className="flex flex-col gap-2">
                     <div className="flex gap-2">
@@ -109,36 +139,6 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
                     )}
                 </div>
             )}
-
-            <div className="flex flex-col gap-1">
-                <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold mb-1">
-                    History
-                </h3>
-                {snapshots.length === 0 ? (
-                    <p className="text-sm text-text-muted">No predictions yet.</p>
-                ) : (
-                    <ul className="flex flex-col gap-1">
-                        {snapshots.map((s) => {
-                            const isViewing = s.id === viewingSnapshotId;
-                            return (
-                                <li key={s.id}>
-                                    <button
-                                        type="button"
-                                        onClick={() => onSelectSnapshot(s.id)}
-                                        className={`w-full text-left text-sm px-2 py-1.5 rounded-md transition-colors ${
-                                            isViewing
-                                                ? 'bg-white/[0.06] text-text-primary'
-                                                : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
-                                        }`}
-                                    >
-                                        {formatTimestamp(s.lockedAt)}
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </div>
 
             <AlertDialog
                 open={confirmDeleteOpen}
