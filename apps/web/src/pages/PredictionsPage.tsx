@@ -279,32 +279,24 @@ const PredictionsPage: React.FC = () => {
                     {activeLeague?.name ?? 'League'} — current season
                 </p>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8 items-stretch">
                 <PredictionTypeNav selected={selectedType} onSelect={setSelectedType} />
-                <div className="flex flex-col gap-2">
-                    {mode.kind === 'draft' && (
-                        <p className="text-sm text-text-muted">
-                            Drag each team into its predicted final position.{' '}
-                            <span className="text-text-secondary">
-                                {placedCount}/{N} placed
-                            </span>
-                        </p>
-                    )}
-                    <ProjectedFinishBoard
-                        poolTeamIds={poolTeamIds}
-                        slots={slots}
-                        teamsMap={teamsMap}
-                        zones={zones}
-                        currentPositions={currentPositions}
-                        seasonStarted={seasonStarted}
-                        readOnly={mode.kind === 'viewing'}
-                        onMove={handleMove}
-                    />
-                </div>
+                <ProjectedFinishBoard
+                    poolTeamIds={poolTeamIds}
+                    slots={slots}
+                    teamsMap={teamsMap}
+                    zones={zones}
+                    currentPositions={currentPositions}
+                    seasonStarted={seasonStarted}
+                    readOnly={mode.kind === 'viewing'}
+                    onMove={handleMove}
+                />
                 <PredictionHistoryPanel
                     snapshots={snapshots}
                     mode={mode.kind}
                     viewingSnapshotId={viewingId}
+                    placedCount={placedCount}
+                    totalCount={N}
                     canLockIn={allPlaced && mode.kind === 'draft'}
                     isLocking={lockInState.fetching}
                     lockInError={lockInError}

@@ -20,6 +20,8 @@ interface PredictionHistoryPanelProps {
     snapshots: PredictionSnapshot[];
     mode: 'draft' | 'viewing';
     viewingSnapshotId: string | null;
+    placedCount: number;
+    totalCount: number;
     canLockIn: boolean;
     isLocking: boolean;
     lockInError: string | null;
@@ -40,6 +42,8 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     snapshots,
     mode,
     viewingSnapshotId,
+    placedCount,
+    totalCount,
     canLockIn,
     isLocking,
     lockInError,
@@ -58,15 +62,15 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     const currentSnapshot = snapshots.find((s) => s.id === viewingSnapshotId) ?? null;
 
     return (
-        <aside className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3">
+        <aside className="flex flex-col gap-3 h-full">
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3 flex-1 min-h-0">
                 <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold">
                     History
                 </h3>
                 {snapshots.length === 0 ? (
                     <p className="text-sm text-text-muted">No predictions yet.</p>
                 ) : (
-                    <ul className="flex flex-col gap-1 max-h-[420px] overflow-y-auto pr-1">
+                    <ul className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto pr-1">
                         {snapshots.map((s) => {
                             const isViewing = s.id === viewingSnapshotId;
                             return (
@@ -91,6 +95,9 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
 
             {mode === 'draft' ? (
                 <div className="flex flex-col gap-2">
+                    <p className="text-[0.75rem] text-text-muted text-right">
+                        {placedCount}/{totalCount} placed
+                    </p>
                     <div className="flex gap-2">
                         <Button
                             type="button"
