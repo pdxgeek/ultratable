@@ -5,17 +5,18 @@ import type { MoveTarget } from './ProjectedFinishBoard';
  *
  * - Any → pool: unplace the team (its source slot, if any, goes null).
  * - Any → slot: place the team at the destination. If that slot is
- *   occupied, the displaced team bumps to the next slot. If THAT slot is
- *   also occupied, the bump cascades — each occupant pushes the next one
- *   down by one position until the cascade lands on an empty slot or runs
- *   off the end. A team pushed off the end falls back into the pool (i.e.
- *   simply absent from the new slots array).
+ *   occupied, the displaced team bumps one slot toward the source — up
+ *   when the user dragged DOWN (source above destination), down when the
+ *   user dragged UP (source below destination). The bump cascades
+ *   one-at-a-time until it lands on an empty slot.
  *
- *   When the source was itself a slot (slot→slot move), it's cleared FIRST,
- *   so a downward bump naturally terminates when it reaches the now-empty
- *   source position — meaning slot→slot reorders never push anyone to the
- *   pool. Only pool→slot moves can do that, and only when the destination
- *   and every slot below it are already full.
+ *   For slot→slot moves the cascade always terminates at the now-empty
+ *   source position (we clear it before cascading), so nobody falls out.
+ *
+ *   For pool→slot moves we don't have a source position; the cascade
+ *   defaults to bumping DOWN. If every slot from the destination to the
+ *   end of the list is already full the last team gets pushed off the end
+ *   and back into the pool (i.e. simply absent from the new slots array).
  *
  * Returns the original array (a copy) when the move is a no-op or invalid
  * so React can short-circuit re-renders.
@@ -35,14 +36,24 @@ export function applyMove(
 
     const destIdx = target.position - 1;
     if (destIdx < 0 || destIdx >= next.length) return [...slots];
+    if (sourceIdx === destIdx) return [...slots];
+
+    // Cascade direction:
+    //   - Slot source above destination (moving down) → cascade UP toward
+    //     source so the in-between items shift to fill the source's gap.
+    //   - Slot source below destination (moving up) → cascade DOWN toward
+    //     source.
+    //   - Pool source (no slot index) → cascade DOWN; if it runs off the
+    //     end of the list the last bumped team goes to the pool.
+    const step = sourceIdx !== -1 && sourceIdx < destIdx ? -1 : 1;
 
     let toPlace: string | null = teamId;
     let i = destIdx;
-    while (i < next.length && toPlace !== null) {
+    while (i >= 0 && i < next.length && toPlace !== null) {
         const displaced = next[i];
         next[i] = toPlace;
         toPlace = displaced;
-        i += 1;
+        i += step;
     }
     return next;
 }

@@ -15,21 +15,34 @@ describe('applyMove', () => {
         expect(next).toEqual([null, null, 't-1']);
     });
 
-    it('cascades occupants down by one when dropping on an occupied slot (slot→slot, moving up)', () => {
-        // Move t-3 from position 3 to position 1. t-1 and t-2 bump down by
-        // one. Source position 3 was the cascade's natural terminator.
+    it('slot→slot moving UP cascades down toward the source', () => {
+        // Move t-3 from position 3 to position 1. t-1 bumps to 2, t-2 bumps
+        // to 3 (the now-empty source). No pool spillover.
         const slots: (string | null)[] = ['t-1', 't-2', 't-3'];
         const next = applyMove(slots, 't-3', { kind: 'slot', position: 1 });
         expect(next).toEqual(['t-3', 't-1', 't-2']);
     });
 
-    it('cascade terminates at the source-emptied slot on slot→slot moves', () => {
-        // Move t-5 from position 5 to position 2. Cascade insert at 2, bump
-        // t-2→3, t-3→4, t-4→5 (lands in the now-empty source slot). No one
-        // falls off the end.
+    it('slot→slot moving DOWN cascades up toward the source', () => {
+        // Move t-1 from position 1 to position 4. t-4 bumps to 3, t-3 to 2,
+        // t-2 to 1 (the now-empty source). No pool spillover.
+        const slots: (string | null)[] = ['t-1', 't-2', 't-3', 't-4', 't-5'];
+        const next = applyMove(slots, 't-1', { kind: 'slot', position: 4 });
+        expect(next).toEqual(['t-2', 't-3', 't-4', 't-1', 't-5']);
+    });
+
+    it('slot→slot cascade terminates at the source-emptied slot in either direction', () => {
+        // Move t-5 (pos 5) → pos 2. Cascade DOWN: t-2→3, t-3→4, t-4→5
+        // (now-empty source).
         const slots: (string | null)[] = ['t-1', 't-2', 't-3', 't-4', 't-5'];
         const next = applyMove(slots, 't-5', { kind: 'slot', position: 2 });
         expect(next).toEqual(['t-1', 't-5', 't-2', 't-3', 't-4']);
+    });
+
+    it('slot→slot is a no-op when source and destination are the same slot', () => {
+        const slots: (string | null)[] = ['t-1', 't-2', 't-3'];
+        const next = applyMove(slots, 't-2', { kind: 'slot', position: 2 });
+        expect(next).toEqual(slots);
     });
 
     it('cascade stops at the first empty slot below the destination', () => {
