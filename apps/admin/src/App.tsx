@@ -279,7 +279,7 @@ const App: React.FC = () => {
 
             {/* Main Content */}
             <main className="flex-1 overflow-y-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900/40 via-[#020617] to-[#020617]">
-                <header className="h-20 border-b border-slate-800/40 flex items-center justify-between px-12 backdrop-blur-md sticky top-0 z-10 bg-[#020617]/50">
+                <header className="h-20 border-b border-slate-800/40 flex items-center justify-between px-12 backdrop-blur-md sticky top-0 z-40 bg-[#020617]/50">
                     <div>
                         <h1 className="text-sm font-medium text-slate-500 flex items-center gap-2">
                             Management <span className="text-slate-700">/</span>

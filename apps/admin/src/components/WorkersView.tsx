@@ -66,7 +66,7 @@ const WorkersView = ({
 
     return (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="flex justify-between items-center bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm relative overflow-hidden group">
+            <div className="flex justify-between items-center bg-[#0d1117] border border-slate-800/60 p-10 rounded-2xl shadow-sm relative overflow-hidden isolate group">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
                 <div className="relative z-10">
                     <h3 className="text-xl font-semibold text-white flex items-center gap-3">

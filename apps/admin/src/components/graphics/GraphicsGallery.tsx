@@ -28,7 +28,7 @@ export const GraphicsGallery: React.FC<Props> = ({
     onSelect,
 }) => {
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 isolate">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <Tabs
                     value={typeFilter}
