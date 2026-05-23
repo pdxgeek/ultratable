@@ -71,6 +71,19 @@ export interface Graphic {
     updatedAt: string;
 }
 
+export interface PredictionDraft {
+    // Composite key: `${userId}__${seasonId}__${type}`. Scopes drafts per
+    // (user, season, prediction type) so signing in/out, switching seasons,
+    // or adding new prediction types all stay cleanly separated.
+    id: string;
+    // Position-indexed slot array. `null` at index i means position (i+1)
+    // is unfilled. Length equals the season's team count at the time the
+    // draft was last saved — mismatched lengths are discarded on hydrate
+    // (the season's team set changed under us).
+    slots: (string | null)[];
+    updatedAt: string;
+}
+
 export class UltraWebDB extends Dexie {
     syncState!: Table<SyncState, string>;
     leagues!: Table<League, string>;
@@ -79,6 +92,7 @@ export class UltraWebDB extends Dexie {
     fixtures!: Table<Fixture, string>;
     venues!: Table<Venue, string>;
     graphics!: Table<Graphic, string>;
+    predictionDrafts!: Table<PredictionDraft, string>;
 
     constructor() {
         super('UltraWebDB');
@@ -92,6 +106,9 @@ export class UltraWebDB extends Dexie {
         });
         this.version(2).stores({
             venues: 'id, updatedAt',
+        });
+        this.version(3).stores({
+            predictionDrafts: 'id, updatedAt',
         });
     }
 }

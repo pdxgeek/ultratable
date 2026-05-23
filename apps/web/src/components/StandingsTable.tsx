@@ -5,6 +5,7 @@ import type { StandingsRow } from '../logic/formulas';
 import React, { useMemo, useState } from 'react';
 
 import { useSettings } from '../context/SettingsContext';
+import { zoneBorderClass } from '../lib/zones';
 import { FixtureDropdown } from './FixtureDropdown';
 import FormColumn from './FormColumn';
 import NextMatchBadge from './NextMatchBadge';
@@ -40,13 +41,6 @@ type SortKey =
     | 'points'
     | 'form';
 type SortDirection = 'asc' | 'desc';
-
-const zoneBorderClass = (zone: string): string => {
-    if (zone === 'promo') return 'border-l-2 border-accent-blue';
-    if (zone === 'playoff') return 'border-l-2 border-accent-yellow';
-    if (zone === 'rel') return 'border-l-2 border-accent-red';
-    return '';
-};
 
 function getTeamFixtures(teamId: string, fixtures: Fixture[]): Fixture[] {
     return fixtures
