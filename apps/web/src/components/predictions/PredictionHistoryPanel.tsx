@@ -62,15 +62,19 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
     const currentSnapshot = snapshots.find((s) => s.id === viewingSnapshotId) ?? null;
 
     return (
-        <aside className="flex flex-col gap-3 h-full">
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3 flex-1 min-h-0">
+        <aside className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3">
                 <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold">
                     History
                 </h3>
                 {snapshots.length === 0 ? (
                     <p className="text-sm text-text-muted">No predictions yet.</p>
                 ) : (
-                    <ul className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto pr-1">
+                    // ~10 rows before scrolling. Don't tie to the pool's
+                    // height (it shrinks as teams get placed) or the column
+                    // height (20 slots is way too tall); keep an arbitrary
+                    // visual size that feels right.
+                    <ul className="flex flex-col gap-1 max-h-[360px] overflow-y-auto pr-1">
                         {snapshots.map((s) => {
                             const isViewing = s.id === viewingSnapshotId;
                             return (

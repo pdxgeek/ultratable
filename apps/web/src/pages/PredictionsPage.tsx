@@ -279,7 +279,7 @@ const PredictionsPage: React.FC = () => {
                     {activeLeague?.name ?? 'League'} — current season
                 </p>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8 items-stretch">
+            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8 items-start">
                 <PredictionTypeNav selected={selectedType} onSelect={setSelectedType} />
                 <ProjectedFinishBoard
                     poolTeamIds={poolTeamIds}
