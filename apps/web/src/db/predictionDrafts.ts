@@ -11,8 +11,15 @@ export interface DraftKeyArgs {
 export const draftKey = ({ userId, seasonId, type }: DraftKeyArgs): string =>
     `${userId}__${seasonId}__${type}`;
 
-export const loadDraft = (key: string): Promise<PredictionDraft | undefined> =>
-    db.predictionDrafts.get(key);
+// Returns `null` (not `undefined`) when no row exists so callers using
+// `useLiveQuery` can distinguish "loading" (returns `undefined`) from
+// "loaded, no saved draft" (returns `null`). If both paths returned
+// `undefined`, the hydration gate in the page would never open for a
+// brand-new user and nothing would ever get persisted.
+export const loadDraft = async (key: string): Promise<PredictionDraft | null> => {
+    const row = await db.predictionDrafts.get(key);
+    return row ?? null;
+};
 
 export const saveDraft = async (key: string, slots: (string | null)[]): Promise<void> => {
     await db.predictionDrafts.put({

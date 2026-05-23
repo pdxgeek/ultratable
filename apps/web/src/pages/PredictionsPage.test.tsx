@@ -116,11 +116,12 @@ function setupHooks({
         isLoading: false,
         lastUpdated: undefined,
     });
-    // useLiveQuery returns `undefined` while loading, `PredictionDraft | undefined`
-    // once Dexie answers (undefined = no row, defined = saved row). We return the
-    // resolved value immediately so the hydration condition in the page fires
-    // synchronously during render.
-    (useLiveQuery as unknown as Mock).mockReturnValue(savedDraft ?? undefined);
+    // useLiveQuery returns `undefined` while loading and the query's resolved
+    // value otherwise. `loadDraft` returns `null` when no row exists so the
+    // hydration gate in the page can tell "loading" apart from "loaded, no
+    // draft." The mock mirrors that contract: `null` when no saved draft,
+    // `PredictionDraft` when present.
+    (useLiveQuery as unknown as Mock).mockReturnValue(savedDraft ?? null);
 
     const refetchHistory = vi.fn();
     (useQuery as unknown as Mock).mockImplementation((args: { query: string }) => {
@@ -266,6 +267,20 @@ describe('PredictionsPage', () => {
             expect(drafts.saveDraft).not.toHaveBeenCalled();
             expect(drafts.clearDraft).not.toHaveBeenCalled();
         });
+    });
+
+    it('completes hydration even when no draft is saved yet', async () => {
+        // Regression: useLiveQuery returns `undefined` while loading; if
+        // `loadDraft` ALSO returned `undefined` for "no row," the hydration
+        // gate could never tell them apart and persistence would never start.
+        // Our mock returns `null` to mirror loadDraft's real contract — assert
+        // the persistence effect runs (clearDraft fires on the initial null
+        // userSlots), proving hydration completed.
+        setupHooks();
+        renderPage();
+        await waitFor(() =>
+            expect(drafts.clearDraft).toHaveBeenCalledWith('u-1__s-1__PROJECTED_FINISH'),
+        );
     });
 
     it('renders the snapshot order in slots and hides the pool in view mode', async () => {

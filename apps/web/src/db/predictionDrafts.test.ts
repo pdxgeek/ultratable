@@ -51,7 +51,11 @@ describe('predictionDrafts module', () => {
         const key = draftKey({ userId: 'u-1', seasonId: 's-1', type: 'PROJECTED_FINISH' });
         await saveDraft(key, ['t-1', null, null]);
         await clearDraft(key);
-        expect(await loadDraft(key)).toBeUndefined();
+        expect(await loadDraft(key)).toBeNull();
+    });
+
+    it('loadDraft returns null (not undefined) when no row exists', async () => {
+        expect(await loadDraft('missing-key')).toBeNull();
     });
 
     describe('sanitizeDraftSlots', () => {
