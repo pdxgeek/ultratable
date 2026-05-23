@@ -261,6 +261,37 @@ describe('PredictionsPage', () => {
         });
     });
 
+    it('clears the working draft after a successful Lock In', async () => {
+        // Start with a fully-placed saved draft so Lock In is enabled.
+        setupHooks({
+            savedDraft: {
+                id: 'u-1__s-1__PROJECTED_FINISH',
+                slots: ['t-1', 't-2', 't-3'],
+                updatedAt: '2026-05-23T12:00:00.000Z',
+            },
+        });
+        renderPage();
+
+        await waitFor(() =>
+            expect(within(screen.getByTestId('slot-1')).getByText('Arsenal')).toBeTruthy(),
+        );
+
+        const lockIn = screen.getByRole('button', { name: /Lock In/i });
+        expect(lockIn.hasAttribute('disabled')).toBe(false);
+        fireEvent.click(lockIn);
+
+        // Board snaps back to empty (locked-in snapshot lives in history now;
+        // the working draft has done its job).
+        await waitFor(() =>
+            expect(
+                within(screen.getByTestId('slot-1')).getByText(/Drop a team here/i),
+            ).toBeTruthy(),
+        );
+        await waitFor(() =>
+            expect(drafts.clearDraft).toHaveBeenCalledWith('u-1__s-1__PROJECTED_FINISH'),
+        );
+    });
+
     it('completes hydration even when no draft is saved yet', async () => {
         // Regression: useLiveQuery returns `undefined` while loading; if
         // `loadDraft` ALSO returned `undefined` for "no row," the hydration

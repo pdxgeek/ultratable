@@ -222,6 +222,11 @@ const PredictionsPage: React.FC = () => {
             setLockInError(msg);
             return;
         }
+        // Locked-in prediction is now an immutable snapshot in history; the
+        // working draft has done its job. Clear it so the user lands on a
+        // fresh board ready for the next prediction. The persistence effect
+        // wipes the Dexie row in response to userSlots → null.
+        setUserSlots(null);
         refetchHistory({ requestPolicy: 'network-only' });
     };
 
