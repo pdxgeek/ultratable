@@ -1,13 +1,17 @@
 import type { StandingsFilter } from '../logic/dataCompiler';
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { Can } from '../auth/abilities';
 import StandingsTable from '../components/StandingsTable';
+import { Button } from '../components/ui/button';
 import { useLeague } from '../context/LeagueContext';
 import { useStandings } from '../hooks/useStandings';
 
 const StandingsView: React.FC = () => {
     const { activeLeague, activeSeason, isLoading } = useLeague();
+    const navigate = useNavigate();
     const [filter, setFilter] = useState<StandingsFilter>('all');
     const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', {
         filter,
@@ -42,11 +46,11 @@ const StandingsView: React.FC = () => {
                     )}
                     <span>{activeLeague?.name ?? 'League Table'}</span>
                 </h2>
-                {lastUpdated && (
-                    <span className="text-xs text-text-muted">
-                        Last synced: {new Date(lastUpdated).toLocaleTimeString()}
-                    </span>
-                )}
+                <Can I="create" a="Prediction">
+                    <Button size="sm" onClick={() => navigate('/predictions')}>
+                        Predictions
+                    </Button>
+                </Can>
             </div>
             <StandingsTable
                 standings={standings}
@@ -55,6 +59,13 @@ const StandingsView: React.FC = () => {
                 filter={filter}
                 onFilterChange={setFilter}
             />
+            {lastUpdated && (
+                <div className="mt-3 flex justify-center">
+                    <span className="text-xs text-text-muted">
+                        Last synced: {new Date(lastUpdated).toLocaleTimeString()}
+                    </span>
+                </div>
+            )}
         </main>
     );
 };

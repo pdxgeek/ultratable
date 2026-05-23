@@ -7,6 +7,7 @@ import AccountPage from './pages/account/AccountPage';
 import LoginPage from './pages/LoginPage';
 import MatchPage from './pages/MatchPage';
 import MissionPage from './pages/MissionPage';
+import PredictionsPage from './pages/PredictionsPage';
 import StandingsView from './pages/StandingsView';
 
 const App: React.FC = () => {
@@ -18,6 +19,7 @@ const App: React.FC = () => {
                     <Route path="/" element={<StandingsView />} />
                     <Route path="/match/:id" element={<MatchPage />} />
                     <Route path="/mission" element={<MissionPage />} />
+                    <Route path="/predictions" element={<PredictionsPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/account/*" element={<AccountPage />} />
                 </Routes>

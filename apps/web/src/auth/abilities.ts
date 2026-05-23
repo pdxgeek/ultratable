@@ -29,7 +29,13 @@ export type AppAction =
     | 'follow'
     | 'unfollow';
 
-export type AppSubject = 'Account' | 'Viewer' | 'League' | 'OwnedResource' | 'all';
+export type AppSubject =
+    | 'Account'
+    | 'Viewer'
+    | 'League'
+    | 'OwnedResource'
+    | 'Prediction'
+    | 'all';
 
 export type AppAbility = MongoAbility<[AppAction, AppSubject | object]>;
 
@@ -48,6 +54,11 @@ export function buildAbility(viewer: AbilityViewer | null | undefined): AppAbili
     can('read', 'Viewer');
     can(['follow', 'unfollow'], 'League');
     can('manage', 'OwnedResource', { ownerId: viewer.id });
+
+    if (viewer.roles.includes('predictions')) {
+        can('create', 'Prediction');
+        can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+    }
 
     for (const grant of viewer.myGrants ?? []) {
         if (grant.role === 'owner' || grant.role === 'admin') {
