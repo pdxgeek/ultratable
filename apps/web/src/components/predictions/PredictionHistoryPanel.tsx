@@ -1,0 +1,167 @@
+import type { PredictionSnapshot } from './queries';
+
+import React, { useState } from 'react';
+import { format } from 'date-fns';
+import { Trash2 } from 'lucide-react';
+
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '../ui/alert-dialog';
+import { Button } from '../ui/button';
+
+interface PredictionHistoryPanelProps {
+    snapshots: PredictionSnapshot[];
+    mode: 'draft' | 'viewing';
+    viewingSnapshotId: string | null;
+    canLockIn: boolean;
+    isLocking: boolean;
+    lockInError: string | null;
+    canDeleteCurrent: boolean;
+    isDeleting: boolean;
+    deleteError: string | null;
+    onLockIn: () => void;
+    onSelectSnapshot: (id: string) => void;
+    onMakePredictions: () => void;
+    onConfirmDelete: () => Promise<boolean>;
+}
+
+const formatTimestamp = (iso: string) => format(new Date(iso), 'MMM d, yyyy · h:mm a');
+
+const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
+    snapshots,
+    mode,
+    viewingSnapshotId,
+    canLockIn,
+    isLocking,
+    lockInError,
+    canDeleteCurrent,
+    isDeleting,
+    deleteError,
+    onLockIn,
+    onSelectSnapshot,
+    onMakePredictions,
+    onConfirmDelete,
+}) => {
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const currentSnapshot = snapshots.find((s) => s.id === viewingSnapshotId) ?? null;
+
+    return (
+        <aside className="flex flex-col gap-4">
+            {mode === 'draft' ? (
+                <div className="flex flex-col gap-2">
+                    <Button
+                        type="button"
+                        onClick={onLockIn}
+                        disabled={!canLockIn || isLocking}
+                        className="bg-accent-purple text-white hover:brightness-110"
+                    >
+                        {isLocking ? 'Locking in…' : 'Lock In'}
+                    </Button>
+                    {lockInError && (
+                        <p className="text-sm text-destructive" role="alert">
+                            {lockInError}
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    <Button
+                        type="button"
+                        onClick={onMakePredictions}
+                        className="bg-accent-purple text-white hover:brightness-110"
+                    >
+                        Make Predictions
+                    </Button>
+                    {canDeleteCurrent && currentSnapshot && (
+                        <button
+                            type="button"
+                            onClick={() => setConfirmOpen(true)}
+                            className="inline-flex items-center gap-1 self-start text-[0.75rem] text-text-muted hover:text-destructive transition-colors"
+                        >
+                            <Trash2 className="w-3 h-3" aria-hidden="true" />
+                            Delete this prediction
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className="flex flex-col gap-1">
+                <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold mb-1">
+                    History
+                </h3>
+                {snapshots.length === 0 ? (
+                    <p className="text-sm text-text-muted">No predictions yet.</p>
+                ) : (
+                    <ul className="flex flex-col gap-1">
+                        {snapshots.map((s) => {
+                            const isViewing = s.id === viewingSnapshotId;
+                            return (
+                                <li key={s.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelectSnapshot(s.id)}
+                                        className={`w-full text-left text-sm px-2 py-1.5 rounded-md transition-colors ${
+                                            isViewing
+                                                ? 'bg-white/[0.06] text-text-primary'
+                                                : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+                                        }`}
+                                    >
+                                        {formatTimestamp(s.lockedAt)}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
+
+            <AlertDialog
+                open={confirmOpen}
+                onOpenChange={(next) => {
+                    if (!isDeleting) setConfirmOpen(next);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this prediction?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {currentSnapshot
+                                ? `Delete this prediction from ${formatTimestamp(currentSnapshot.lockedAt)}? This cannot be undone.`
+                                : 'Delete this prediction? This cannot be undone.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {deleteError && (
+                        <p className="text-sm text-destructive" role="alert">
+                            {deleteError}
+                        </p>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void (async () => {
+                                    const ok = await onConfirmDelete();
+                                    if (ok) setConfirmOpen(false);
+                                })();
+                            }}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? 'Deleting…' : 'Delete'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </aside>
+    );
+};
+
+export default PredictionHistoryPanel;
