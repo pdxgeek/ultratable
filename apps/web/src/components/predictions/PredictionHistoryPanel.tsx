@@ -61,28 +61,31 @@ const PredictionHistoryPanel: React.FC<PredictionHistoryPanelProps> = ({
         <aside className="flex flex-col gap-4">
             {mode === 'draft' ? (
                 <div className="flex flex-col gap-2">
-                    <Button
-                        type="button"
-                        onClick={onLockIn}
-                        disabled={!canLockIn || isLocking}
-                        className="bg-accent-purple text-white hover:brightness-110"
-                    >
-                        {isLocking ? 'Locking in…' : 'Lock In'}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            type="button"
+                            onClick={onLockIn}
+                            disabled={!canLockIn || isLocking}
+                            className="flex-1 bg-accent-purple text-white hover:brightness-110"
+                        >
+                            {isLocking ? 'Locking in…' : 'Lock In'}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setConfirmResetOpen(true)}
+                            disabled={!canReset}
+                            title="Clear all placements"
+                            aria-label="Reset placements"
+                        >
+                            <RotateCcw aria-hidden="true" />
+                            Reset
+                        </Button>
+                    </div>
                     {lockInError && (
                         <p className="text-sm text-destructive" role="alert">
                             {lockInError}
                         </p>
-                    )}
-                    {canReset && (
-                        <button
-                            type="button"
-                            onClick={() => setConfirmResetOpen(true)}
-                            className="inline-flex items-center gap-1 self-start text-[0.75rem] text-text-muted hover:text-text-primary transition-colors"
-                        >
-                            <RotateCcw className="w-3 h-3" aria-hidden="true" />
-                            Reset
-                        </button>
                     )}
                 </div>
             ) : (

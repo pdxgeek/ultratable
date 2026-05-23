@@ -226,35 +226,27 @@ describe('PredictionsPage', () => {
         await waitFor(() =>
             expect(within(screen.getByTestId('slot-1')).getByText('Arsenal')).toBeTruthy(),
         );
-        fireEvent.click(screen.getByRole('button', { name: /^Reset$/i }));
-
-        const confirm = await screen.findByRole('button', {
-            name: /^Reset$/i,
-            // Wait until the AlertDialog's Reset button shows up (different from
-            // the trigger; both have name "Reset"). Pick the one inside an alert
-            // dialog by waiting for the dialog to render.
-        });
-        // Click the *last* Reset button — the one inside the dialog footer.
-        const resets = screen.getAllByRole('button', { name: /^Reset$/i });
-        fireEvent.click(resets[resets.length - 1]);
+        // Trigger has aria-label "Reset placements"; dialog confirm has just
+        // visible text "Reset" — easy to disambiguate.
+        fireEvent.click(screen.getByRole('button', { name: /Reset placements/i }));
+        const confirm = await screen.findByRole('button', { name: /^Reset$/i });
+        fireEvent.click(confirm);
 
         await waitFor(() =>
             expect(drafts.clearDraft).toHaveBeenCalledWith('u-1__s-1__PROJECTED_FINISH'),
         );
-        // Board snaps back to empty.
         await waitFor(() =>
             expect(
                 within(screen.getByTestId('slot-1')).getByText(/Drop a team here/i),
             ).toBeTruthy(),
         );
-        // Bind `confirm` so TS doesn't warn it's unused.
-        expect(confirm).toBeTruthy();
     });
 
-    it('hides the Reset button when no slots are placed', () => {
+    it('disables (but still shows) the Reset button when no slots are placed', () => {
         setupHooks();
         renderPage();
-        expect(screen.queryByRole('button', { name: /^Reset$/i })).toBeNull();
+        const reset = screen.getByRole('button', { name: /Reset placements/i });
+        expect(reset.hasAttribute('disabled')).toBe(true);
     });
 
     it('skips Dexie persistence when no viewer is signed in', async () => {
