@@ -7,6 +7,7 @@ import { PostgresFixturesRepository } from './fixtures.repository';
 import { PostgresGraphicsRepository } from './graphics.repository';
 import { PostgresLeaguesRepository } from './leagues.repository';
 import { PostgresPlayersRepository } from './players.repository';
+import { PostgresPredictionsRepository } from './predictions.repository';
 import { PostgresTeamsRepository } from './teams.repository';
 import { PostgresUsersRepository } from './users.repository';
 import { PostgresWorkersRepository } from './workers.repository';
@@ -21,6 +22,7 @@ export {
     PostgresPlayersRepository,
     PostgresGraphicsRepository,
     PostgresUsersRepository,
+    PostgresPredictionsRepository,
 };
 
 /**
@@ -42,5 +44,6 @@ export function createPostgresRepository(providerOverride?: IFootballProvider): 
         players: new PostgresPlayersRepository(provider),
         graphics: new PostgresGraphicsRepository(),
         users: new PostgresUsersRepository(),
+        predictions: new PostgresPredictionsRepository(),
     };
 }

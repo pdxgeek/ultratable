@@ -2,6 +2,7 @@ import DataLoader from 'dataloader';
 
 import * as schema from '../db/schema';
 import { repository } from '../repositories';
+import type { PredictionSnapshotEntryRow } from '../repositories/predictions';
 
 type Team = typeof schema.teams.$inferSelect;
 type Venue = typeof schema.venues.$inferSelect;
@@ -31,6 +32,14 @@ export function createLoaders() {
             const rows = await repository.leagues.getLeaguesByIds(ids);
             return byId(rows, ids);
         }),
+        // Batches `PredictionSnapshot.entries` so listing N snapshots issues
+        // one entry-fetch instead of N. Per-request, so no cross-request leak.
+        predictionEntriesLoader: new DataLoader<string, PredictionSnapshotEntryRow[]>(
+            async (ids) => {
+                const map = await repository.predictions.listSnapshotEntriesByIds(ids);
+                return ids.map((id) => map.get(id) ?? []);
+            },
+        ),
     };
 }
 

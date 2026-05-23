@@ -20,6 +20,7 @@ import type { FixturesRepository } from '../fixtures';
 import type { GraphicsRepository } from '../graphics';
 import type { LeaguesRepository } from '../leagues';
 import type { PlayersRepository } from '../players';
+import type { PredictionsRepository } from '../predictions';
 import type { IRepository } from '../repository';
 import type { TeamsRepository } from '../teams';
 import type { UsersRepository } from '../users';
@@ -158,6 +159,29 @@ export function buildMockUsers(overrides: Partial<UsersRepository> = {}): UsersR
     };
 }
 
+export function buildMockPredictions(
+    overrides: Partial<PredictionsRepository> = {},
+): PredictionsRepository {
+    return {
+        createSnapshot: vi.fn().mockResolvedValue({
+            id: 'snap-1',
+            userId: 'user-1',
+            seasonId: 'season-1',
+            type: 'projected_finish',
+            lockedAt: new Date(),
+            deletedAt: null,
+        }),
+        listSnapshots: vi.fn().mockResolvedValue([]),
+        getSnapshotById: vi.fn().mockResolvedValue(null),
+        listSnapshotEntries: vi.fn().mockResolvedValue([]),
+        listSnapshotEntriesByIds: vi.fn().mockResolvedValue(new Map()),
+        softDeleteSnapshot: vi.fn().mockResolvedValue(null),
+        countSnapshotsInScope: vi.fn().mockResolvedValue(0),
+        countGameweeksInSeason: vi.fn().mockResolvedValue(0),
+        ...overrides,
+    };
+}
+
 export type RepositoryOverrides = {
     [K in keyof IRepository]?: Partial<IRepository[K]>;
 };
@@ -173,5 +197,6 @@ export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepos
         config: buildMockConfig(overrides.config),
         workers: buildMockWorkers(overrides.workers),
         users: buildMockUsers(overrides.users),
+        predictions: buildMockPredictions(overrides.predictions),
     };
 }

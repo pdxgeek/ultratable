@@ -32,6 +32,7 @@ import './schema/catalog';
 import './schema/config';
 import './schema/football';
 import './schema/graphics';
+import './schema/predictions';
 import './schema/viewer';
 import './schema/workers';
 
