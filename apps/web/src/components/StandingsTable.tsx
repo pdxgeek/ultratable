@@ -24,6 +24,7 @@ interface StandingsTableProps {
     teamsMap: Map<string, Team>;
     filter?: StandingsFilter;
     onFilterChange?: (filter: StandingsFilter) => void;
+    toolbarActions?: React.ReactNode;
 }
 
 type SortKey =
@@ -65,6 +66,7 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
     teamsMap,
     filter = 'all',
     onFilterChange,
+    toolbarActions,
 }) => {
     const { settings } = useSettings();
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
@@ -162,20 +164,23 @@ const StandingsTable: React.FC<StandingsTableProps> = ({
 
     return (
         <div className="flex flex-col gap-4">
-            <div className="flex gap-2">
-                {(['all', 'home', 'away'] as const).map((f) => (
-                    <button
-                        key={f}
-                        onClick={() => onFilterChange?.(f)}
-                        className={`px-4 py-1.5 rounded-[20px] border border-border text-[0.85rem] font-semibold cursor-pointer capitalize transition-all ${
-                            filter === f
-                                ? 'bg-accent-blue text-white'
-                                : 'bg-bg-secondary text-text-primary'
-                        }`}
-                    >
-                        {f}
-                    </button>
-                ))}
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex gap-2">
+                    {(['all', 'home', 'away'] as const).map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => onFilterChange?.(f)}
+                            className={`px-4 py-1.5 rounded-[20px] border border-border text-[0.85rem] font-semibold cursor-pointer capitalize transition-all ${
+                                filter === f
+                                    ? 'bg-accent-blue text-white'
+                                    : 'bg-bg-secondary text-text-primary'
+                            }`}
+                        >
+                            {f}
+                        </button>
+                    ))}
+                </div>
+                {toolbarActions ? <div className="flex gap-2">{toolbarActions}</div> : null}
             </div>
 
             <div className="bg-glass-bg backdrop-blur-md border border-glass-border rounded-lg shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-visible">

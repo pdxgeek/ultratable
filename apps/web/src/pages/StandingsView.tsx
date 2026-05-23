@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { Can } from '../auth/abilities';
 import StandingsTable from '../components/StandingsTable';
-import { Button } from '../components/ui/button';
 import { useLeague } from '../context/LeagueContext';
 import { useStandings } from '../hooks/useStandings';
 
@@ -35,7 +34,7 @@ const StandingsView: React.FC = () => {
 
     return (
         <main>
-            <div className="flex justify-between items-end mt-6 mb-4">
+            <div className="mt-6 mb-4">
                 <h2 className="text-xl m-0 flex items-center gap-2">
                     {activeLeague?.countryFlag && (
                         <img
@@ -46,11 +45,6 @@ const StandingsView: React.FC = () => {
                     )}
                     <span>{activeLeague?.name ?? 'League Table'}</span>
                 </h2>
-                <Can I="create" a="Prediction">
-                    <Button size="sm" onClick={() => navigate('/predictions')}>
-                        Predictions
-                    </Button>
-                </Can>
             </div>
             <StandingsTable
                 standings={standings}
@@ -58,6 +52,17 @@ const StandingsView: React.FC = () => {
                 teamsMap={teamsMap}
                 filter={filter}
                 onFilterChange={setFilter}
+                toolbarActions={
+                    <Can I="create" a="Prediction">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/predictions')}
+                            className="px-4 py-1.5 rounded-[20px] border border-accent-blue text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-blue text-white hover:brightness-110"
+                        >
+                            Predictions
+                        </button>
+                    </Can>
+                }
             />
             {lastUpdated && (
                 <div className="mt-3 flex justify-center">
