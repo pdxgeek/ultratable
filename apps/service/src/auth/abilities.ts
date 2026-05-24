@@ -73,6 +73,7 @@ export type AppSubject =
     | 'League'
     | 'OwnedResource'
     | 'Prediction'
+    | 'TierList'
     | 'all';
 
 export type AppAbility = MongoAbility<[AppAction, AppSubject | object]>;
@@ -116,6 +117,14 @@ export function buildAbility(viewer: ViewerCtx | undefined, grants: GrantRow[] =
     if (viewer.roles.includes('predictions')) {
         can('create', 'Prediction');
         can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+    }
+
+    // Tier Lists. Same shape as Predictions: `create` is unconditional for
+    // anyone with the 'tier-lists' role, owner-scoped read/update/delete via
+    // userId match. Guests never get it; admins bypass via 'manage all'.
+    if (viewer.roles.includes('tier-lists')) {
+        can('create', 'TierList');
+        can(['read', 'update', 'delete'], 'TierList', { userId: viewer.id });
     }
 
     // Grant-based rules. Each grant translates to one `can(...)` call.

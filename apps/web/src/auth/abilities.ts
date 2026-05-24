@@ -35,6 +35,7 @@ export type AppSubject =
     | 'League'
     | 'OwnedResource'
     | 'Prediction'
+    | 'TierList'
     | 'all';
 
 export type AppAbility = MongoAbility<[AppAction, AppSubject | object]>;
@@ -58,6 +59,11 @@ export function buildAbility(viewer: AbilityViewer | null | undefined): AppAbili
     if (viewer.roles.includes('predictions')) {
         can('create', 'Prediction');
         can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+    }
+
+    if (viewer.roles.includes('tier-lists')) {
+        can('create', 'TierList');
+        can(['read', 'update', 'delete'], 'TierList', { userId: viewer.id });
     }
 
     for (const grant of viewer.myGrants ?? []) {

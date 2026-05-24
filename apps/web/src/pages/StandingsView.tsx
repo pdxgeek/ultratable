@@ -53,15 +53,26 @@ const StandingsView: React.FC = () => {
                 filter={filter}
                 onFilterChange={setFilter}
                 toolbarActions={
-                    <Can I="create" a="Prediction">
-                        <button
-                            type="button"
-                            onClick={() => navigate('/predictions')}
-                            className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-purple text-white hover:brightness-110"
-                        >
-                            Predictions
-                        </button>
-                    </Can>
+                    <>
+                        <Can I="create" a="Prediction">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/predictions')}
+                                className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-purple text-white hover:brightness-110"
+                            >
+                                Predictions
+                            </button>
+                        </Can>
+                        <Can I="create" a="TierList">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/tier-lists')}
+                                className="px-4 py-1.5 rounded-[20px] border border-accent-green text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-green text-white hover:brightness-110"
+                            >
+                                Tier Lists
+                            </button>
+                        </Can>
+                    </>
                 }
             />
             {lastUpdated && (
