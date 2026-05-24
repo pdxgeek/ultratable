@@ -9,7 +9,6 @@ import MatchPage from './pages/MatchPage';
 import MissionPage from './pages/MissionPage';
 import PredictionsPage from './pages/PredictionsPage';
 import StandingsView from './pages/StandingsView';
-import TierListsPage from './pages/TierListsPage';
 
 const App: React.FC = () => {
     return (
@@ -21,7 +20,6 @@ const App: React.FC = () => {
                     <Route path="/match/:id" element={<MatchPage />} />
                     <Route path="/mission" element={<MissionPage />} />
                     <Route path="/predictions" element={<PredictionsPage />} />
-                    <Route path="/tier-lists" element={<TierListsPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/account/*" element={<AccountPage />} />
                 </Routes>

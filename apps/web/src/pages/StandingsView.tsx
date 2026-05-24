@@ -1,9 +1,10 @@
+import type { AppAbility } from '../auth/abilities';
 import type { StandingsFilter } from '../logic/dataCompiler';
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Can } from '../auth/abilities';
+import { useAbility } from '../auth/abilities';
 import StandingsTable from '../components/StandingsTable';
 import { useLeague } from '../context/LeagueContext';
 import { useStandings } from '../hooks/useStandings';
@@ -11,6 +12,9 @@ import { useStandings } from '../hooks/useStandings';
 const StandingsView: React.FC = () => {
     const { activeLeague, activeSeason, isLoading } = useLeague();
     const navigate = useNavigate();
+    const ability = useAbility<AppAbility>();
+    const canVisitRankings =
+        ability.can('create', 'Prediction') || ability.can('create', 'TierList');
     const [filter, setFilter] = useState<StandingsFilter>('all');
     const { standings, fixtures, teamsMap, lastUpdated } = useStandings(activeSeason?.id || '', {
         filter,
@@ -53,26 +57,15 @@ const StandingsView: React.FC = () => {
                 filter={filter}
                 onFilterChange={setFilter}
                 toolbarActions={
-                    <>
-                        <Can I="create" a="Prediction">
-                            <button
-                                type="button"
-                                onClick={() => navigate('/predictions')}
-                                className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-purple text-white hover:brightness-110"
-                            >
-                                Predictions
-                            </button>
-                        </Can>
-                        <Can I="create" a="TierList">
-                            <button
-                                type="button"
-                                onClick={() => navigate('/tier-lists')}
-                                className="px-4 py-1.5 rounded-[20px] border border-accent-green text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-green text-white hover:brightness-110"
-                            >
-                                Tier Lists
-                            </button>
-                        </Can>
-                    </>
+                    canVisitRankings ? (
+                        <button
+                            type="button"
+                            onClick={() => navigate('/predictions')}
+                            className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold cursor-pointer transition-all bg-accent-purple text-white hover:brightness-110"
+                        >
+                            Predictions &amp; Rankings
+                        </button>
+                    ) : null
                 }
             />
             {lastUpdated && (
