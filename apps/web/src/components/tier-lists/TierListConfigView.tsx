@@ -14,6 +14,7 @@ import {
     UPDATE_TIER_LIST_DISPLAY_CONFIG_MUTATION,
     UPDATE_TIER_LIST_TIERS_MUTATION,
     UPDATE_TIER_LIST_TITLE_MUTATION,
+    UPDATE_TIER_RANKABLE_ITEM_OVERRIDES_MUTATION,
 } from './queries';
 import { colorForTierIndex } from './tierColors';
 
@@ -76,6 +77,48 @@ const TierListConfigView: React.FC<Props> = ({
     const [, updateDisplayConfig] = useMutation(UPDATE_TIER_LIST_DISPLAY_CONFIG_MUTATION);
     const [, setLocked] = useMutation(SET_TIER_LIST_LOCKED_MUTATION);
     const [, deleteList] = useMutation(DELETE_TIER_LIST_MUTATION);
+    const [, updateItemOverrides] = useMutation(
+        UPDATE_TIER_RANKABLE_ITEM_OVERRIDES_MUTATION,
+    );
+
+    // Inline rename: at most one item is in edit mode at a time. Empty
+    // input on commit clears the override (falls back to the recipe's
+    // snapshot name).
+    const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
+    const [renameDraft, setRenameDraft] = useState('');
+
+    const startRename = (itemId: string, currentName: string) => {
+        setRenamingItemId(itemId);
+        setRenameDraft(currentName);
+    };
+
+    const commitRename = async () => {
+        if (!renamingItemId) return;
+        const itemId = renamingItemId;
+        const trimmed = renameDraft.trim();
+        const original = list.items.find((i) => i.id === itemId);
+        setRenamingItemId(null);
+        if (!original) return;
+        // Empty input → clear the override. Non-empty + unchanged
+        // (matches displayName) → no-op.
+        if (trimmed === '' && original.nameOverride === null) return;
+        if (trimmed === original.displayName) return;
+        const result = await updateItemOverrides({
+            input: {
+                itemId,
+                nameOverride: trimmed === '' ? null : trimmed,
+            },
+        });
+        if (result.error) {
+            setError(result.error.graphQLErrors[0]?.message ?? result.error.message);
+            return;
+        }
+        onChanged();
+    };
+
+    const cancelRename = () => {
+        setRenamingItemId(null);
+    };
 
     // Set-state-during-render: re-sync drafts when the server-returned
     // values change (after our own save or an out-of-band refetch). The
@@ -279,11 +322,41 @@ const TierListConfigView: React.FC<Props> = ({
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-medium truncate">
-                                        {it.displayName}
-                                    </div>
+                                    {renamingItemId === it.id ? (
+                                        <Input
+                                            autoFocus
+                                            value={renameDraft}
+                                            placeholder={it.name}
+                                            onChange={(e) => setRenameDraft(e.target.value)}
+                                            onBlur={() => void commitRename()}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') void commitRename();
+                                                if (e.key === 'Escape') cancelRename();
+                                            }}
+                                            maxLength={120}
+                                            className="h-7 text-xs px-1.5"
+                                        />
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            disabled={list.isLocked}
+                                            onClick={() => startRename(it.id, it.displayName)}
+                                            className="text-xs font-medium truncate text-left w-full enabled:cursor-text enabled:hover:bg-muted/40 rounded-sm px-1 -mx-1"
+                                            title="Click to rename"
+                                        >
+                                            {it.displayName}
+                                            {it.nameOverride && (
+                                                <span
+                                                    className="ml-1 text-text-muted"
+                                                    title={`Original: ${it.name}`}
+                                                >
+                                                    *
+                                                </span>
+                                            )}
+                                        </button>
+                                    )}
                                     {it.team?.name && (
-                                        <div className="text-[0.65rem] text-text-muted truncate">
+                                        <div className="text-[0.65rem] text-text-muted truncate px-1 -mx-1">
                                             {it.team.name}
                                         </div>
                                     )}
@@ -336,18 +409,24 @@ const TierListConfigView: React.FC<Props> = ({
                     <Button
                         type="button"
                         variant="outline"
+                        size="icon"
                         onClick={addTier}
                         disabled={draftTiers.length >= MAX_TIERS}
+                        aria-label="Add tier at bottom"
+                        title="Add tier at bottom"
                     >
-                        + Add tier (bottom)
+                        +
                     </Button>
                     <Button
                         type="button"
                         variant="outline"
+                        size="icon"
                         onClick={removeBottomTier}
                         disabled={draftTiers.length <= MIN_TIERS}
+                        aria-label="Remove bottom tier"
+                        title="Remove bottom tier"
                     >
-                        − Remove bottom tier
+                        −
                     </Button>
                 </div>
             </section>
