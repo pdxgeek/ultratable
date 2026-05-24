@@ -555,6 +555,16 @@ export const tierLists = pgTable(
         // reference `key`, not `name`, so renames don't touch them. Bounds
         // (MIN_TIERS..MAX_TIERS) are enforced by the resolver.
         tiers: jsonb('tiers').notNull(),
+        // Per-list display toggles (e.g. `showTeamNames`). Stored as JSONB
+        // so new toggles can land without a migration. See
+        // [[../config/tier-lists.ts]] for the canonical shape.
+        displayConfig: jsonb('display_config')
+            .notNull()
+            .default(sql`'{"showTeamNames": true}'::jsonb`),
+        // User-flipped read-only flag. When true, the resolver rejects edit
+        // mutations with `TIER_LIST_LOCKED` and the editor renders
+        // read-only. Never auto-set; the same user can flip it back any time.
+        isLocked: boolean('is_locked').notNull().default(false),
         createdAt: utcTimestamp('created_at').defaultNow().notNull(),
         updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
         // Soft-delete marker. Null = live; set to now() on delete. Caps

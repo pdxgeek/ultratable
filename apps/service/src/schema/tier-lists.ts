@@ -28,6 +28,7 @@ import {
     MAX_TIERS,
     MAX_TITLE_LENGTH,
     MIN_TIERS,
+    normaliseDisplayConfig,
 } from '../config/tier-lists';
 import { repository } from '../repositories';
 import type {
@@ -49,6 +50,25 @@ const TierRef = builder.simpleObject('Tier', {
     fields: (t) => ({
         key: t.string({ description: 'Stable short id for this tier within its parent.' }),
         name: t.string({ description: 'Display label.' }),
+    }),
+});
+
+const TierListDisplayConfigRef = builder.simpleObject('TierListDisplayConfig', {
+    description:
+        "Per-tier-list display preferences. New toggles land here additively — the underlying storage is JSONB so a future toggle doesn't need a migration.",
+    fields: (t) => ({
+        showTeamNames: t.boolean({
+            description:
+                "When true, the editor renders the team name label under each item thumbnail.",
+        }),
+    }),
+});
+
+const TierListDisplayConfigInput = builder.inputType('TierListDisplayConfigInput', {
+    description:
+        "Patch for `updateTierListDisplayConfig`. Pass the full desired shape — server normalises and persists.",
+    fields: (t) => ({
+        showTeamNames: t.boolean({ required: true }),
     }),
 });
 
@@ -96,6 +116,16 @@ builder.objectType(TierListRef, {
             type: [TierRef],
             description: 'Ordered tier scheme, top-to-bottom. Items reference `tier.key`.',
             resolve: (parent) => parent.tiers,
+        }),
+        displayConfig: t.field({
+            type: TierListDisplayConfigRef,
+            description:
+                'Per-list display preferences (e.g. `showTeamNames`). Always returned with every key populated.',
+            resolve: (parent) => parent.displayConfig,
+        }),
+        isLocked: t.exposeBoolean('isLocked', {
+            description:
+                'User-flipped read-only flag. When true, the editor renders read-only and all edit mutations on this list (and its items) throw `TIER_LIST_LOCKED`. The same user can flip it back any time via `setTierListLocked`.',
         }),
         items: t.field({
             type: [TierRankableItemRef],
@@ -249,6 +279,14 @@ function assertViewer(ctx: AbilityCtx): { id: string; roles: string[] } {
         throw new GraphQLError('Unauthenticated', { extensions: { http: { status: 401 } } });
     }
     return ctx.user;
+}
+
+function assertNotLocked(parent: { isLocked: boolean }): void {
+    if (parent.isLocked) {
+        throw new GraphQLError('Tier list is locked', {
+            extensions: { code: 'TIER_LIST_LOCKED', http: { status: 409 } },
+        });
+    }
 }
 
 function validateTitle(title: string): void {
@@ -409,6 +447,7 @@ builder.mutationField('updateTierListTitle', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(existing);
             validateTitle(title);
             const updated = await repository.tierLists.updateTierListTitle(
                 id as string,
@@ -449,6 +488,7 @@ builder.mutationField('updateTierListTiers', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(existing);
 
             if (tiers.length < MIN_TIERS || tiers.length > MAX_TIERS) {
                 throw new GraphQLError(
@@ -485,6 +525,88 @@ builder.mutationField('updateTierListTiers', (t) =>
             const updated = await repository.tierLists.updateTierListTiers(
                 id as string,
                 resolved,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('updateTierListDisplayConfig', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            'Patch the per-list display preferences (e.g. `showTeamNames`). Locked lists reject this with `TIER_LIST_LOCKED`.',
+        args: {
+            id: t.arg.id({ required: true }),
+            displayConfig: t.arg({ type: TierListDisplayConfigInput, required: true }),
+        },
+        resolve: async (_root, { id, displayConfig }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            assertNotLocked(existing);
+            const normalised = normaliseDisplayConfig({
+                showTeamNames: displayConfig.showTeamNames,
+            });
+            const updated = await repository.tierLists.updateTierListDisplayConfig(
+                id as string,
+                normalised,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('setTierListLocked', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            "Flip the user-controlled read-only flag. Lock is never permanent — the same user (or admin) can unlock the list any time. Locked lists reject every other edit mutation with `TIER_LIST_LOCKED`, so this mutation deliberately does NOT check the flag itself (otherwise locking would be a one-way door).",
+        args: {
+            id: t.arg.id({ required: true }),
+            locked: t.arg.boolean({ required: true }),
+        },
+        resolve: async (_root, { id, locked }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            const updated = await repository.tierLists.setTierListLocked(
+                id as string,
+                locked,
             );
             if (!updated) {
                 throw new GraphQLError('Tier list not found', {
@@ -554,6 +676,7 @@ builder.mutationField('addTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
 
             if (input.tierRankableTypeId !== parent.tierRankableTypeId) {
                 throw new GraphQLError(
@@ -662,6 +785,7 @@ builder.mutationField('updateTierRankableItemOverrides', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
             const updated = await repository.tierLists.updateTierRankableItemOverrides({
                 itemId: item.id,
                 nameOverride: input.nameOverride === undefined ? undefined : input.nameOverride,
@@ -712,6 +836,7 @@ builder.mutationField('removeTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
             const deletedId = await repository.tierLists.softDeleteTierRankableItem(item.id);
             return deletedId ?? item.id;
         },
@@ -752,6 +877,7 @@ builder.mutationField('moveTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
 
             if (tierKey !== null && tierKey !== undefined) {
                 const known = parent.tiers.some((t) => t.key === tierKey);

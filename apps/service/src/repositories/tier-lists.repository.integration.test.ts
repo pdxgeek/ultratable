@@ -165,7 +165,7 @@ describe('PostgresTierListsRepository — integration', () => {
         expect(it.position).toBe(1.0);
     });
 
-    it('two items in the same list with the same recipe + naturalKey are allowed', async () => {
+    it('re-adding the same (tierListId, naturalKey) while live returns the same row (no duplicate)', async () => {
         const s = await buildScaffold(3);
         const tl = await repository.tierLists.createTierList({
             userId: s.user.id,
@@ -185,8 +185,109 @@ describe('PostgresTierListsRepository — integration', () => {
             name: 'Pep Guardiola', imageUrl: null, teamId: s.teamA.id,
             sourceType: null, sourceId: null, sourcePath: null,
         });
-        expect(first.id).not.toBe(second.id);
-        expect(first.naturalKey).toBe(second.naturalKey);
+        // Re-running a pool search must not double-insert. Within a list,
+        // naturalKey is the dedup contract; the second add is a no-op
+        // returning the existing row.
+        expect(second.id).toBe(first.id);
+        expect(second.naturalKey).toBe(first.naturalKey);
+
+        // Cross-user / cross-list, the same naturalKey IS allowed — the
+        // DB has no UNIQUE, and aggregates depend on this collision.
+        const s2 = await buildScaffold(31);
+        const tl2 = await repository.tierLists.createTierList({
+            userId: s2.user.id,
+            seasonId: s2.season.id,
+            tierRankableTypeId: 'coach',
+            title: 'other-user',
+            tiers: DEFAULT_TIERS,
+        });
+        const otherUserSameKey = await repository.tierLists.addTierRankableItem({
+            tierListId: tl2.id, tierRankableTypeId: 'coach', naturalKey,
+            name: 'Pep Guardiola', imageUrl: null, teamId: s.teamA.id,
+            sourceType: null, sourceId: null, sourcePath: null,
+        });
+        expect(otherUserSameKey.id).not.toBe(first.id);
+    });
+
+    it('re-adding a soft-deleted item restores it (clears deletedAt, preserves overrides)', async () => {
+        const s = await buildScaffold(32);
+        const tl = await repository.tierLists.createTierList({
+            userId: s.user.id,
+            seasonId: s.season.id,
+            tierRankableTypeId: 'coach',
+            title: 'restore',
+            tiers: DEFAULT_TIERS,
+        });
+        const naturalKey = `${s.teamA.id}|pep guardiola`;
+        const first = await repository.tierLists.addTierRankableItem({
+            tierListId: tl.id, tierRankableTypeId: 'coach', naturalKey,
+            name: 'Pep Guardiola', imageUrl: null, teamId: s.teamA.id,
+            sourceType: null, sourceId: null, sourcePath: null,
+        });
+        // Customise then move into a tier so we can prove overrides
+        // survive but tierKey is reset to pool (intentional — re-added
+        // items land back in the pool, not in some stale tier).
+        await repository.tierLists.updateTierRankableItemOverrides({
+            itemId: first.id,
+            nameOverride: 'The Boss',
+            subtitle: 'Manager',
+        });
+        await repository.tierLists.moveTierRankableItem({
+            itemId: first.id,
+            tierKey: 'tier-s',
+            position: 1.0,
+        });
+        await repository.tierLists.softDeleteTierRankableItem(first.id);
+
+        // Re-search restores
+        const restored = await repository.tierLists.addTierRankableItem({
+            tierListId: tl.id, tierRankableTypeId: 'coach', naturalKey,
+            name: 'Pep Guardiola (refreshed)', imageUrl: 'new.png', teamId: s.teamA.id,
+            sourceType: null, sourceId: null, sourcePath: null,
+        });
+        expect(restored.id).toBe(first.id);
+        expect(restored.deletedAt).toBeNull();
+        expect(restored.tierKey).toBeNull(); // back in the pool
+        // Snapshot fields refreshed from the new input
+        expect(restored.name).toBe('Pep Guardiola (refreshed)');
+        expect(restored.imageUrl).toBe('new.png');
+        // Per-user overrides preserved deliberately
+        expect(restored.nameOverride).toBe('The Boss');
+        expect(restored.subtitle).toBe('Manager');
+    });
+
+    it('createTierList initialises displayConfig + isLocked defaults', async () => {
+        const s = await buildScaffold(33);
+        const tl = await repository.tierLists.createTierList({
+            userId: s.user.id,
+            seasonId: s.season.id,
+            tierRankableTypeId: 'coach',
+            title: 'defaults',
+            tiers: DEFAULT_TIERS,
+        });
+        expect(tl.displayConfig).toEqual({ showTeamNames: true });
+        expect(tl.isLocked).toBe(false);
+    });
+
+    it('updateTierListDisplayConfig + setTierListLocked persist + return the patched row', async () => {
+        const s = await buildScaffold(34);
+        const tl = await repository.tierLists.createTierList({
+            userId: s.user.id,
+            seasonId: s.season.id,
+            tierRankableTypeId: 'coach',
+            title: 'config',
+            tiers: DEFAULT_TIERS,
+        });
+        const patched = await repository.tierLists.updateTierListDisplayConfig(tl.id, {
+            showTeamNames: false,
+        });
+        expect(patched?.displayConfig).toEqual({ showTeamNames: false });
+
+        const locked = await repository.tierLists.setTierListLocked(tl.id, true);
+        expect(locked?.isLocked).toBe(true);
+
+        const unlocked = await repository.tierLists.setTierListLocked(tl.id, false);
+        expect(unlocked?.isLocked).toBe(false);
     });
 
     it('CHECK rejects partial source pointer', async () => {

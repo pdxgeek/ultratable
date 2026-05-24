@@ -11,6 +11,7 @@
 import { repository } from '../../repositories';
 import { coachRecipe } from './coach';
 import type { TierRankableTypeRecipe } from './recipe';
+import { venueRecipe } from './venue';
 
 /**
  * Every registered recipe. Indexed by id for resolver dispatch.
@@ -23,6 +24,7 @@ import type { TierRankableTypeRecipe } from './recipe';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const recipes: Record<string, TierRankableTypeRecipe<any>> = {
     [coachRecipe.id]: coachRecipe,
+    [venueRecipe.id]: venueRecipe,
 };
 
 export function getRecipe(id: string): TierRankableTypeRecipe<unknown> | undefined {
@@ -76,4 +78,4 @@ export async function assertRecipeRegistryMatchesDb(): Promise<void> {
     }
 }
 
-export { coachRecipe };
+export { coachRecipe, venueRecipe };
