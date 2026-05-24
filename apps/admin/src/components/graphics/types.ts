@@ -1,6 +1,6 @@
-export type GraphicType = 'team' | 'venue' | 'player' | 'league';
+export type GraphicType = 'team' | 'venue' | 'player' | 'league' | 'coach';
 
-export const GRAPHIC_TYPES: GraphicType[] = ['team', 'venue', 'player', 'league'];
+export const GRAPHIC_TYPES: GraphicType[] = ['team', 'venue', 'player', 'league', 'coach'];
 
 export interface Graphic {
     id: string;
