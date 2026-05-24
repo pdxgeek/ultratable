@@ -30,6 +30,9 @@ import {
     MIN_TIERS,
     normaliseDisplayConfig,
 } from '../config/tier-lists';
+import { coachRecipe } from '../entities/tier-rankable-types/coach';
+import type { TierRankableTypeProjection } from '../entities/tier-rankable-types/recipe';
+import { venueRecipe } from '../entities/tier-rankable-types/venue';
 import { repository } from '../repositories';
 import type {
     Tier,
@@ -37,6 +40,7 @@ import type {
     TierRankableItemRow,
     TierRankableTypeRow,
 } from '../repositories/tier-lists';
+import { cacheService, TTL } from '../services/cache.service';
 import { abilityOf, builder } from './builder';
 import { TeamRef } from './football';
 
@@ -69,6 +73,58 @@ const TierListDisplayConfigInput = builder.inputType('TierListDisplayConfigInput
         "Patch for `updateTierListDisplayConfig`. Pass the full desired shape — server normalises and persists.",
     fields: (t) => ({
         showTeamNames: t.boolean({ required: true }),
+    }),
+});
+
+/**
+ * One candidate the pool add drawer can show, ready to feed back into
+ * `addTierRankableItem`. The shape mirrors `AddTierRankableItemInput`
+ * (sans `tierListId`) plus a couple of display extras (`subtitle`,
+ * `team`) so the drawer can render an informative row without a second
+ * round-trip. Returned by `tierRankableItemCandidates`.
+ */
+interface CandidateShape {
+    tierRankableTypeId: string;
+    naturalKey: string;
+    name: string;
+    imageUrl: string | null;
+    teamId: string | null;
+    sourceType: string | null;
+    sourceId: string | null;
+    sourcePath: unknown | null;
+    subtitle: string | null;
+}
+
+const TierRankableItemCandidateRef =
+    builder.objectRef<CandidateShape>('TierRankableItemCandidate');
+
+builder.objectType(TierRankableItemCandidateRef, {
+    description:
+        "One candidate the pool add drawer can offer. The shape mirrors `AddTierRankableItemInput` minus `tierListId` — submit it via `addTierRankableItem` to add. Re-adding a previously-removed item with the same `(tierRankableTypeId, naturalKey)` restores it server-side rather than duplicating.",
+    fields: (t) => ({
+        tierRankableTypeId: t.exposeString('tierRankableTypeId'),
+        naturalKey: t.exposeString('naturalKey'),
+        name: t.exposeString('name'),
+        imageUrl: t.exposeString('imageUrl', { nullable: true }),
+        teamId: t.exposeID('teamId', { nullable: true }),
+        sourceType: t.exposeString('sourceType', { nullable: true }),
+        sourceId: t.exposeID('sourceId', { nullable: true }),
+        sourcePath: t.field({
+            type: 'JSON',
+            nullable: true,
+            resolve: (parent) => parent.sourcePath,
+        }),
+        subtitle: t.exposeString('subtitle', {
+            nullable: true,
+            description: 'Optional secondary line (e.g. venue city + capacity).',
+        }),
+        team: t.field({
+            type: TeamRef,
+            nullable: true,
+            description: 'Team this candidate is associated with. Resolved from `teamId` via DataLoader.',
+            resolve: (parent, _args, ctx) =>
+                parent.teamId ? ctx.loaders.teamLoader.load(parent.teamId) : null,
+        }),
     }),
 });
 
@@ -307,6 +363,137 @@ function newTierKey(): string {
 }
 
 // ----------------------------------------------------------------------
+// Pool-candidate discovery
+// ----------------------------------------------------------------------
+
+/**
+ * Project a recipe projection onto the candidate shape (adds the
+ * display-only `subtitle` field with a recipe-specific default of null).
+ */
+function toCandidate(
+    projection: TierRankableTypeProjection,
+    subtitle: string | null = null,
+): CandidateShape {
+    return {
+        tierRankableTypeId: '',
+        naturalKey: projection.naturalKey,
+        name: projection.name,
+        imageUrl: projection.imageUrl,
+        teamId: projection.teamId,
+        sourceType: projection.sourceType,
+        sourceId: projection.sourceId,
+        sourcePath: projection.sourcePath,
+        subtitle,
+    };
+}
+
+/**
+ * Coach discovery: reads from the first-class `coaches` table.
+ *
+ * Cold cache: for any team in the season that doesn't yet have a coach
+ * row, fetch it via `/coachs?team=<sourceId>` and upsert. Calls are
+ * parallelised but bounded to one per uncached team, so a 24-team
+ * season is at most 24 upstream calls (vs. one per fixture under the
+ * old lineup-scraping path).
+ *
+ * Warm cache: pure DB read. The result is also cached in-memory at
+ * TTL.STABLE so repeated drawer opens don't even touch the DB.
+ */
+async function discoverCoachCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:coach:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const teams = await repository.teams.getTeamsBySeasonId(seasonId);
+    if (teams.length === 0) {
+        cacheService.set(cacheKey, [], TTL.STABLE);
+        return [];
+    }
+
+    const existingCoaches = await repository.coaches.getCoachesBySeasonId(seasonId);
+    const coachByTeamId = new Map(existingCoaches.map((c) => [c.teamId, c]));
+
+    // Lazy-sync any team missing a coach row. Parallelised so a cold
+    // cache fills in roughly one round-trip rather than 24.
+    const missingTeams = teams.filter((t) => !coachByTeamId.has(t.id));
+    if (missingTeams.length > 0) {
+        const synced = await Promise.all(
+            missingTeams.map((t) =>
+                repository.coaches.getOrSyncCoachForTeam(t.id, t.sourceId),
+            ),
+        );
+        for (const c of synced) {
+            if (c?.teamId) coachByTeamId.set(c.teamId, c);
+        }
+    }
+
+    const candidates: CandidateShape[] = [];
+    for (const coach of coachByTeamId.values()) {
+        if (!coach.teamId) continue;
+        try {
+            const projection = await coachRecipe.project(
+                {
+                    coachId: coach.id,
+                    teamId: coach.teamId,
+                    name: coach.name,
+                    photo: coach.photo,
+                },
+                // The coach recipe doesn't use the context any more.
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const candidate = toCandidate(projection);
+            candidate.tierRankableTypeId = 'coach';
+            candidates.push(candidate);
+        } catch {
+            // Coach without a name slips through here — skip.
+        }
+    }
+
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
+}
+
+/**
+ * Venue discovery: venues are first-class rows we already store, so
+ * this is just a DB query + projection. No upstream calls.
+ */
+async function discoverVenueCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:venue:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const venues = await repository.teams.getVenuesBySeasonId(seasonId);
+    const candidates: CandidateShape[] = [];
+    for (const v of venues) {
+        try {
+            const projection = await venueRecipe.project(
+                {
+                    venueId: v.id,
+                    name: v.name,
+                    image: v.image,
+                    city: v.city,
+                    capacity: v.capacity,
+                },
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const subtitle =
+                v.city && v.capacity
+                    ? `${v.city} · ${v.capacity.toLocaleString()} seats`
+                    : (v.city ?? (v.capacity ? `${v.capacity.toLocaleString()} seats` : null));
+            const candidate = toCandidate(projection, subtitle);
+            candidate.tierRankableTypeId = 'venue';
+            candidates.push(candidate);
+        } catch {
+            // skip malformed venues
+        }
+    }
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
+}
+
+// ----------------------------------------------------------------------
 // Queries
 // ----------------------------------------------------------------------
 
@@ -339,6 +526,39 @@ builder.queryField('myTierLists', (t) =>
                 seasonId: seasonId as string,
                 tierRankableTypeId: tierRankableTypeId ?? undefined,
             });
+        },
+    }),
+);
+
+builder.queryField('tierRankableItemCandidates', (t) =>
+    t.field({
+        type: [TierRankableItemCandidateRef],
+        description:
+            "Discover pool candidates for a (season, recipe). The server walks the recipe's source data — for `coach`, a bounded set of recent fixtures' lineups; for `venue`, the season's venues — and returns ready-to-submit projections. Drives the pool add drawer. Results are cached (TTL.STABLE) so repeated drawer opens don't hammer the upstream provider.",
+        args: {
+            seasonId: t.arg.id({ required: true }),
+            tierRankableTypeId: t.arg.string({ required: true }),
+        },
+        resolve: async (_root, { seasonId, tierRankableTypeId }, ctx) => {
+            assertViewer(ctx);
+            const seasonIdStr = seasonId as string;
+            switch (tierRankableTypeId) {
+                case 'coach':
+                    return discoverCoachCandidates(seasonIdStr);
+                case 'venue':
+                    return discoverVenueCandidates(seasonIdStr);
+                default:
+                    throw new GraphQLError(
+                        `Unknown tier rankable type: ${tierRankableTypeId}`,
+                        {
+                            extensions: {
+                                code: 'UNKNOWN_TIER_RANKABLE_TYPE',
+                                http: { status: 400 },
+                                tierRankableTypeId,
+                            },
+                        },
+                    );
+            }
         },
     }),
 );

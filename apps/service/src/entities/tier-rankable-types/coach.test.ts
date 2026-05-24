@@ -2,89 +2,78 @@
  * Coach recipe unit tests. Pins the projection contract: every required
  * tier-rankable-item field is populated, the natural key is
  * `<teamId>|<lowercased name>`, and the source pointer captures the
- * fixture id + lineup selector.
+ * coach UUID.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { coachRecipe, type CoachSourceRow } from './coach';
 import type { RecipeContext } from './recipe';
 
-const FIXTURE_ID = '00000000-0000-0000-0000-0000000000e1';
+const COACH_ID = '00000000-0000-0000-0000-0000000000c1';
 const TEAM_ID = '00000000-0000-0000-0000-0000000000d1';
-const TEAM_SOURCE_ID = 50;
-const SOURCE_NAME = 'api-football';
 
-function ctxWithTeam(teamId: string | null = TEAM_ID): RecipeContext {
-    return {
-        resolveTeamIdsBySource: vi.fn(async (_src, ids) => {
-            const map = new Map<number, string>();
-            if (teamId) for (const id of ids) map.set(id, teamId);
-            return map;
-        }),
-    };
-}
+// The coach recipe doesn't need a reverse team lookup any more —
+// teams are pre-resolved by the caller. A throwing helper proves the
+// recipe stays decoupled from team resolution.
+const NOOP_CTX: RecipeContext = {
+    resolveTeamIdsBySource: async () => {
+        throw new Error('coach recipe must not call resolveTeamIdsBySource');
+    },
+};
 
 function source(overrides: Partial<CoachSourceRow> = {}): CoachSourceRow {
     return {
-        fixtureId: FIXTURE_ID,
-        teamSourceId: TEAM_SOURCE_ID,
-        sourceName: SOURCE_NAME,
-        coachName: 'Pep Guardiola',
-        coachPhoto: 'https://example.com/pep.png',
+        coachId: COACH_ID,
+        teamId: TEAM_ID,
+        name: 'Pep Guardiola',
+        photo: 'https://example.com/pep.png',
         ...overrides,
     };
 }
 
 describe('coachRecipe', () => {
-    it('registers as the coach recipe over fixture lineups', () => {
+    it('registers as the coach recipe over coach source rows', () => {
         expect(coachRecipe.id).toBe('coach');
         expect(coachRecipe.name).toBe('Coach');
-        expect(coachRecipe.sourceType).toBe('fixture');
+        expect(coachRecipe.sourceType).toBe('coach');
     });
 
     it('projects all required item fields', async () => {
-        const result = await coachRecipe.project(source(), ctxWithTeam());
+        const result = await coachRecipe.project(source(), NOOP_CTX);
         expect(result).toEqual({
             name: 'Pep Guardiola',
             imageUrl: 'https://example.com/pep.png',
             teamId: TEAM_ID,
             naturalKey: `${TEAM_ID}|pep guardiola`,
-            sourceType: 'fixture',
-            sourceId: FIXTURE_ID,
-            sourcePath: { teamSourceId: TEAM_SOURCE_ID, sourceName: SOURCE_NAME },
+            sourceType: 'coach',
+            sourceId: COACH_ID,
+            sourcePath: null,
         });
     });
 
     it('normalises name into the natural key (trim + lowercase)', async () => {
         const result = await coachRecipe.project(
-            source({ coachName: '  Pep GUARDIOLA  ' }),
-            ctxWithTeam(),
+            source({ name: '  Pep GUARDIOLA  ' }),
+            NOOP_CTX,
         );
         expect(result.name).toBe('Pep GUARDIOLA');
         expect(result.naturalKey).toBe(`${TEAM_ID}|pep guardiola`);
     });
 
     it('dedups two callers with the same coach + team (same naturalKey)', async () => {
-        const a = await coachRecipe.project(source(), ctxWithTeam());
-        const b = await coachRecipe.project(source(), ctxWithTeam());
+        const a = await coachRecipe.project(source(), NOOP_CTX);
+        const b = await coachRecipe.project(source(), NOOP_CTX);
         expect(a.naturalKey).toBe(b.naturalKey);
     });
 
-    it('throws when the source lineup has no coachName', async () => {
-        await expect(
-            coachRecipe.project(source({ coachName: null }), ctxWithTeam()),
-        ).rejects.toThrow(/no coachName/);
+    it('passes through null photo gracefully', async () => {
+        const result = await coachRecipe.project(source({ photo: null }), NOOP_CTX);
+        expect(result.imageUrl).toBeNull();
     });
 
-    it('throws when the teamSourceId has no local team mapping', async () => {
+    it('throws when the source coach has no name', async () => {
         await expect(
-            coachRecipe.project(source(), ctxWithTeam(null)),
-        ).rejects.toThrow(/no local team/);
-    });
-
-    it('uses the supplied reverse-lookup helper (no repo coupling)', async () => {
-        const ctx = ctxWithTeam();
-        await coachRecipe.project(source(), ctx);
-        expect(ctx.resolveTeamIdsBySource).toHaveBeenCalledWith(SOURCE_NAME, [TEAM_SOURCE_ID]);
+            coachRecipe.project(source({ name: '   ' }), NOOP_CTX),
+        ).rejects.toThrow(/no name/);
     });
 });

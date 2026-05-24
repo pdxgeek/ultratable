@@ -1,4 +1,5 @@
 import { CatalogRepository } from './catalog';
+import { CoachesRepository } from './coaches';
 import { ConfigRepository } from './config';
 import { FixturesRepository } from './fixtures';
 import { GraphicsRepository } from './graphics';
@@ -27,4 +28,5 @@ export interface IRepository {
     users: UsersRepository;
     predictions: PredictionsRepository;
     tierLists: TierListsRepository;
+    coaches: CoachesRepository;
 }

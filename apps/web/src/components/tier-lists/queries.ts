@@ -248,72 +248,56 @@ export const MOVE_TIER_RANKABLE_ITEM_MUTATION = gql`
 `;
 
 // ----------------------------------------------------------------------
-// Pool source queries — feed the recipe-driven add drawers
+// Pool-candidate query — feeds the recipe-driven add drawer
 // ----------------------------------------------------------------------
 
-export interface CoachDrawerLineup {
-    teamSourceId: number;
-    coachName: string | null;
-    coachPhoto: string | null;
-}
-
-export interface CoachDrawerFixture {
-    id: string;
-    lineups: CoachDrawerLineup[];
-}
-
-export interface CoachDrawerTeam {
-    id: string;
+export interface TierRankableItemCandidate {
+    tierRankableTypeId: string;
+    naturalKey: string;
     name: string;
-    logo: string | null;
-    sourceId: number;
-    metadata: { sourceName: string } | null;
+    imageUrl: string | null;
+    teamId: string | null;
+    sourceType: string | null;
+    sourceId: string | null;
+    sourcePath: unknown | null;
+    subtitle: string | null;
+    team: {
+        id: string;
+        name: string;
+        logo: string | null;
+    } | null;
 }
 
 /**
- * Coach drawer source. Pulls every fixture in the active season with
- * lineups + the season's teams (so the client can resolve
- * `lineup.teamSourceId` → local `team.id`). Coach uniqueness is
- * computed client-side as `(teamId, lowercased name)` to mirror the
- * server's coach recipe natural key.
+ * Server-side discovery for pool candidates. The server walks the
+ * recipe's source data (lineups for coach, venues for venue) and
+ * returns ready-to-submit projections — the drawer doesn't need to
+ * fetch fixtures + lineups + teams and stitch them together. Bounded
+ * upstream calls + result caching live on the server.
  */
-export const COACH_DRAWER_SOURCES_QUERY = gql`
-    query CoachDrawerSources($seasonId: String!) {
-        fixtures(seasonId: $seasonId) {
-            id
-            lineups {
-                teamSourceId
-                coachName
-                coachPhoto
-            }
-        }
-        teams(seasonId: $seasonId) {
-            id
+export const TIER_RANKABLE_ITEM_CANDIDATES_QUERY = gql`
+    query TierRankableItemCandidates(
+        $seasonId: ID!
+        $tierRankableTypeId: String!
+    ) {
+        tierRankableItemCandidates(
+            seasonId: $seasonId
+            tierRankableTypeId: $tierRankableTypeId
+        ) {
+            tierRankableTypeId
+            naturalKey
             name
-            logo
+            imageUrl
+            teamId
+            sourceType
             sourceId
-            metadata { sourceName }
-        }
-    }
-`;
-
-export interface VenueDrawerVenue {
-    id: string;
-    name: string;
-    city: string | null;
-    capacity: number | null;
-    image: string | null;
-}
-
-/** Venue drawer source. Returns every venue used by a fixture in the season. */
-export const VENUE_DRAWER_SOURCES_QUERY = gql`
-    query VenueDrawerSources($seasonId: String!) {
-        venues(seasonId: $seasonId) {
-            id
-            name
-            city
-            capacity
-            image
+            sourcePath
+            subtitle
+            team {
+                id
+                name
+                logo
+            }
         }
     }
 `;

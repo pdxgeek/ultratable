@@ -248,6 +248,18 @@ export type RepositoryOverrides = {
     [K in keyof IRepository]?: Partial<IRepository[K]>;
 };
 
+function buildMockCoaches(
+    overrides: Partial<IRepository['coaches']> = {},
+): IRepository['coaches'] {
+    return {
+        getCoachesBySeasonId: vi.fn().mockResolvedValue([]),
+        getCoachByTeamId: vi.fn().mockResolvedValue(null),
+        upsertCoach: vi.fn().mockResolvedValue(null),
+        getOrSyncCoachForTeam: vi.fn().mockResolvedValue(null),
+        ...overrides,
+    };
+}
+
 export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepository {
     return {
         leagues: buildMockLeagues(overrides.leagues),
@@ -261,5 +273,6 @@ export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepos
         users: buildMockUsers(overrides.users),
         predictions: buildMockPredictions(overrides.predictions),
         tierLists: buildMockTierLists(overrides.tierLists),
+        coaches: buildMockCoaches(overrides.coaches),
     };
 }
