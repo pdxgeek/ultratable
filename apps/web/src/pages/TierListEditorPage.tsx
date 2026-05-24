@@ -137,7 +137,6 @@ const TierListEditorPage: React.FC = () => {
                 <TierListBoard
                     list={list}
                     onMoveItem={handleMove}
-                    onRemoveItem={handleRemove}
                     onOpenItemEditor={(itemId) => setEditingItemId(itemId)}
                 />
             )}

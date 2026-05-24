@@ -30,7 +30,6 @@ import { colorForTierIndex } from './tierColors';
 interface Props {
     list: TierListEditorRow;
     onMoveItem: (itemId: string, tierKey: string | null, position: number) => void;
-    onRemoveItem: (itemId: string) => void;
     onOpenItemEditor: (itemId: string) => void;
 }
 
@@ -146,7 +145,6 @@ function DropRow({
 const TierListBoard: React.FC<Props> = ({
     list,
     onMoveItem,
-    onRemoveItem,
     onOpenItemEditor,
 }) => {
     // Optimistic local mirror of list.items. Drag drops update this
@@ -316,6 +314,11 @@ const TierListBoard: React.FC<Props> = ({
                                                     {...attributes}
                                                     {...listeners}
                                                 >
+                                                    {/* Removal happens in the
+                                                        Settings view only —
+                                                        the main board is for
+                                                        ranking, not pool
+                                                        composition. */}
                                                     <TierItemCard
                                                         item={it}
                                                         showTeamName={
@@ -325,7 +328,6 @@ const TierListBoard: React.FC<Props> = ({
                                                             list.displayConfig.showTeamLogos
                                                         }
                                                         isLocked={list.isLocked}
-                                                        onRemove={() => onRemoveItem(it.id)}
                                                         onEdit={() => onOpenItemEditor(it.id)}
                                                     />
                                                 </div>
