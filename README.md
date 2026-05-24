@@ -2,7 +2,7 @@
 
 > **First-class football stats for clubs, fans, and streamers — built end-to-end by one engineer + AI agents.**
 
-UltraTable is a real-time fantasy-sports platform with two products in one codebase: a **stats surface** for football clubs and fans (live league tables, match detail, lineups, event timelines) and a **streamer utility** for TikTok / YouTube broadcasts (Predictions, Tier Lists, and Stream Overlays on the roadmap). It's a TypeScript monorepo — Fastify + GraphQL Yoga + Drizzle on the back, two React 19 SPAs on the front, deployed across Fly.io and Vercel.
+UltraTable is two products in one codebase: a **first-class stats surface** for football clubs of all sizes (live league tables, match detail, lineups, event timelines) and a **streamer engagement utility** for TikTok / YouTube broadcasts (Predictions, Tier Lists, and Stream Overlays on the roadmap). It's a TypeScript monorepo — Fastify + GraphQL Yoga + Drizzle on the back, two React 19 SPAs on the front, deployed across Fly.io and Vercel.
 
 This README is also my portfolio. If you're evaluating me for a senior / principal back-end or full-stack role, the [Engineering](#engineering--the-decisions-behind-the-product) section is where I show my work — the architectural decisions, the load-bearing constraints, and the trade-offs I made deliberately. The features below exist to show you what those decisions are in service of.
 
@@ -56,9 +56,6 @@ The wedge for the paid product. Streamers want to make a prediction live on came
   ![Predictions / Projected Finish board](docs/screenshots/web-predictions.png)
 
 - **Lock-in and history**. When the streamer hits *Lock in*, the prediction becomes an immutable snapshot. The history panel lets them re-load a previous snapshot to compare against the live table.
-
-  ![Dragging a team into a predicted finishing slot](docs/screenshots/web-predictions-drag.gif)
-
 - **Tier Lists** (recipe-registry-backed; see [apps/service/src/schema/tier-lists.ts](apps/service/src/schema/tier-lists.ts)) — the same drag-and-drop primitive, now generalized so any `TierRankableType` (teams, players, fixtures, future entities) plugs in.
 - **Stream Overlays** are next on the roadmap — thin, low-latency overlay renderers that read from the same GraphQL surface. The data layer is already designed for them; see [Roadmap](#roadmap).
 
@@ -121,7 +118,10 @@ These are the **non-negotiable rules** I codified for the codebase. Every one of
 
 ### Backend craft
 
-- **GraphQL surface is split by domain** ([football.ts](apps/service/src/schema/football.ts), [predictions.ts](apps/service/src/schema/predictions.ts), [tier-lists.ts](apps/service/src/schema/tier-lists.ts), [catalog.ts](apps/service/src/schema/catalog.ts), [graphics.ts](apps/service/src/schema/graphics.ts), [workers.ts](apps/service/src/schema/workers.ts), [viewer.ts](apps/service/src/schema/viewer.ts), [account.ts](apps/service/src/schema/account.ts), [config.ts](apps/service/src/schema/config.ts), [seasonConfig.ts](apps/service/src/schema/seasonConfig.ts)). One Pothos builder, multiple modules — no 5000-line god-schema.
+- **GraphQL surface is split by domain** ([football.ts](apps/service/src/schema/football.ts), [predictions.ts](apps/service/src/schema/predictions.ts), [tier-lists.ts](apps/service/src/schema/tier-lists.ts), [catalog.ts](apps/service/src/schema/catalog.ts), [graphics.ts](apps/service/src/schema/graphics.ts), [workers.ts](apps/service/src/schema/workers.ts), [viewer.ts](apps/service/src/schema/viewer.ts), [account.ts](apps/service/src/schema/account.ts), [config.ts](apps/service/src/schema/config.ts), [seasonConfig.ts](apps/service/src/schema/seasonConfig.ts)). One Pothos builder, multiple modules — no 5000-line god-schema. The playground is mounted in non-prod for hands-on exploration:
+
+  ![GraphQL Yoga playground with viewer + leagues query](docs/screenshots/graphql-playground.png)
+
 - **Cache isolation pattern.** Raw API responses live in an LRU keyed by `[endpoint]_[remoteId]_[season]`. Mapped domain lists live in a separate cache keyed by **internal UUID** (`domain_fixtures_<uuid>`). Deleting + recreating a league instantly clears the domain cache for that instance without touching the raw cache, so we don't re-pay the upstream API call. The two never collide. ([AI_README_FIRST.MD §3–4](AI_README_FIRST.MD))
 - **Workers are first-class.** Job + execution rows are real entities in the schema with their own resolvers, so the admin console doesn't need a side-channel — it queries the same GraphQL. Execution records carry `processedCount` / `totalCount` / `apiCallsCount` so I can see exactly how expensive an import was.
 - **Recipe registry for ranking types.** The Tier Lists feature is built on a `TierRankableType` registry rather than a switch statement. Adding "rank players by goals" is a registration, not a schema migration.

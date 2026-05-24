@@ -1,29 +1,33 @@
 # Screenshots
 
-The top-level [README.md](../../README.md) references the filenames below. Drop PNGs (or animated GIFs / MP4s for the motion ones) here under exactly these names and they'll render in place — no further edits needed.
+PNGs in this directory back the image references in the top-level [README.md](../../README.md). Captured at 1600×1000 via headless Chrome against a local `npm run dev` stack — see [`scripts/capture-screenshots.mjs`](../../scripts/capture-screenshots.mjs) (puppeteer-core driving the user's system Chrome, dev-login + sessionStorage to hide the floating Dev Auth Tools panel before each shot).
 
-Suggested capture target: **1600 × 1000** for desktop UI, **750 × 1334** for any mobile shots, exported as PNG. For motion (drag-and-drop, live-updating tables) record a short GIF at the same resolution.
+## Currently captured
 
-## Required
+| File                       | What it shows                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `hero-standings.png`       | Web home — live league table (Championship 2025) with form column, GD/PTS, next opponent.    |
+| `web-match-detail.png`     | A match page (Man City 0–2 Tottenham): stadium hero, lineups columns, events timeline.       |
+| `web-predictions.png`      | Projected Finish board mid-draft, unranked team pool + numbered drop slots.                  |
+| `web-account.png`          | Account page — profile, connected identities (Credential), roles.                            |
+| `web-login.png`            | Sign-in screen with "Continue with Google" CTA.                                              |
+| `admin-dashboard.png`      | Admin Overview — status cards (Postgres / Supabase / API-Football), System Health panels.    |
+| `admin-leagues.png`        | Admin Inventory — Catalog Browser with England selected, Championship marked Active.         |
+| `admin-workers.png`        | Admin Workers — active jobs, recent execution history with records + API call counts.        |
+| `admin-graphics.png`       | Admin Graphics — gallery of registered team / venue / league / player crests.                |
+| `graphql-playground.png`   | Yoga GraphiQL playground with a viewer + leagues query.                                      |
 
-| File                          | What to capture                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `hero-standings.png`          | Web app home — the live league table for a current season. Hero image at the top of the README.          |
-| `web-match-detail.png`        | A match page (`/match/:id`) showing the lineups column, events timeline, and header.                     |
-| `web-predictions.png`         | The Projected Finish board mid-draft, with the unranked team pool visible.                               |
-| `web-predictions-drag.gif`    | A short clip of dragging a team into a slot on the predictions board. Shows DnD + draft persistence.     |
-| `web-account.png`             | The account page with the linked-identities panel and league-follows panel visible.                      |
-| `admin-dashboard.png`         | Admin app overview — the dashboard with stat cards and the connection-status sidebar lit green.          |
-| `admin-leagues.png`           | Admin Inventory view (Leagues Management) — the season importer + league config panel.                   |
-| `admin-workers.png`           | Admin Workers view — running jobs, recent executions, and success/failure counts.                        |
-| `admin-graphics.png`          | Admin Graphics view — the gallery with uploaded assets.                                                  |
-| `graphql-playground.png`      | `http://localhost:8080/graphql` Yoga playground with a non-trivial query open (e.g. standings + viewer). |
+## Refreshing the screenshots
 
-## Optional / nice-to-have
+```bash
+# 1. Make sure the stack is up
+npm run dev
 
-| File                          | What to capture                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `web-login.png`               | The Google sign-in screen on the web app.                                                                |
-| `admin-access-denied.png`     | The fail-whale "Access Denied" screen when a non-admin signs in.                                         |
-| `architecture-diagram.png`    | A hand-drawn or excalidraw diagram of the three apps + Postgres + API-Football flow.                     |
-| `auth-flow-diagram.png`       | Sequence diagram of the ID-token sign-in flow (browser → GIS → service → Better Auth → session cookie).  |
+# 2. Once-only: install puppeteer-core somewhere on NODE_PATH
+cd /tmp && npm install puppeteer-core
+
+# 3. Run the capture (overwrites PNGs in this directory)
+NODE_PATH=/tmp/node_modules node scripts/capture-screenshots.mjs
+```
+
+If the README starts referencing a new screenshot, add a row to the table above and a capture block to [`scripts/capture-screenshots.mjs`](../../scripts/capture-screenshots.mjs) — keep this directory the source of truth for "what's actually in the README."
