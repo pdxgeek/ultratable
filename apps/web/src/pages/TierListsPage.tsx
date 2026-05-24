@@ -128,9 +128,9 @@ const TierListsPage: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setShowNewDialog(true)}
-                                className="px-4 py-1.5 rounded-[20px] border border-accent-green text-[0.85rem] font-semibold bg-accent-green text-white hover:brightness-110"
+                                className="px-4 py-1.5 rounded-[20px] border border-accent-purple text-[0.85rem] font-semibold bg-accent-purple text-white hover:brightness-110"
                             >
-                                + New Tier List
+                                + New List
                             </button>
                         </Can>
                     </div>
