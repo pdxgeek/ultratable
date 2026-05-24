@@ -70,13 +70,20 @@ async function findOrphansForThisRepo() {
             // Skip the start-all.js process itself and its direct children we just spawned.
             if (Number(pid) === process.pid) continue;
 
-            // Confirm the process belongs to this repo by checking its cwd via lsof.
-            // `lsof -p PID -d cwd -F n` prints the cwd path on a line prefixed with `n`.
+            // Confirm the process belongs to this repo. Try two signals:
+            //   1. Its cwd is inside REPO_ROOT (lsof -d cwd).
+            //   2. Its command-line contains the REPO_ROOT path (typical for
+            //      `node /path/to/repo/node_modules/.bin/ts-node ...`).
+            // We need the OR because an orphan whose launching shell died
+            // ends up with cwd=`/`, which fails signal #1 — but its command
+            // line still references the repo, so signal #2 saves it.
             const { stdout: lsofOut } = await execP(`lsof -p ${pid} -d cwd -F n 2>/dev/null`);
             const cwdLine = lsofOut.split('\n').find((l) => l.startsWith('n'));
             const cwd = cwdLine ? cwdLine.slice(1) : '';
 
-            if (cwd.startsWith(REPO_ROOT)) {
+            const { stdout: cmdLine } = await execP(`ps -o command= -p ${pid} 2>/dev/null`);
+
+            if (cwd.startsWith(REPO_ROOT) || cmdLine.includes(REPO_ROOT)) {
                 orphans.add(pid);
             }
         }
