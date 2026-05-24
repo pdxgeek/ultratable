@@ -10,7 +10,7 @@
     > - **BFF (Back-end for Front-end)**: We are currently building a new GraphQL service and Postgres database in `/apps/service`.
     > - **Rewriting Strategy**: When building new frontends, we use `/src` as a blueprint but rewrite it natively from scratch in a new `/apps/[app-name]` directory.
     >
-    > **LOCAL DEV PORTS**
+    > **LOCAL DEV PORTS** (defaults — overridable via `SERVICE_PORT` / `ADMIN_PORT` / `WEB_PORT` in the root `.env`, written by `npm run setup`)
     >
     > - **Service (GraphQL)**: `http://localhost:8080` — Fastify + Yoga GraphQL endpoint
     > - **Web App**: `http://localhost:5175` — Vite React frontend for end users

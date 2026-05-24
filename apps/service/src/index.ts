@@ -210,14 +210,18 @@ server.register(fastifyRateLimit, {
 });
 
 // Build the set of allowed origins from env.
-// In dev (ALLOWED_ORIGINS not set), localhost Vite ports are accepted.
-// In production, only explicitly listed origins pass.
-const DEV_ORIGINS = [
-    'http://localhost:5174',
-    'http://localhost:5175',
-    'http://127.0.0.1:5174',
-    'http://127.0.0.1:5175',
-];
+// In dev (ALLOWED_ORIGINS not set), localhost Vite ports are accepted; the
+// admin/web ports come from ADMIN_PORT/WEB_PORT env vars so that operator
+// overrides (see issue #120) flow into CORS without code changes.
+const ADMIN_PORT = Number(process.env.ADMIN_PORT) || 5174;
+const WEB_PORT = Number(process.env.WEB_PORT) || 5175;
+// Same SERVICE_PORT > PORT precedence as the listen call below — kept in
+// sync so the CORS allowlist matches whichever port the service actually
+// binds to.
+const DEV_ORIGINS = [ADMIN_PORT, WEB_PORT].flatMap((port) => [
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+]);
 const allowedOrigins = new Set(
     process.env.ALLOWED_ORIGINS
         ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
@@ -477,7 +481,9 @@ const start = async () => {
     try {
         await preflightSchemaCheck();
         const host = process.env.HOST || '0.0.0.0';
-        const port = Number(process.env.PORT) || 8080;
+        // SERVICE_PORT (workspace-wide override, see issue #120) wins over PORT
+        // (PaaS convention; what apps/service/.env writes). Falls back to 8080.
+        const port = Number(process.env.SERVICE_PORT) || Number(process.env.PORT) || 8080;
         await server.listen({ host, port });
         globalLogger.info({ host, port }, `🚀 Server listening on http://${host}:${port}`);
         await seedRankingFormulas();

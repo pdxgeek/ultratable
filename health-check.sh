@@ -1,9 +1,24 @@
 #!/bin/bash
 
-# Define the ports
-SERVICE_PORT=8080
-ADMIN_PORT=5174
-WEB_PORT=5175
+# Ports: process env wins, then root .env (written by scripts/setup.mjs),
+# then the historical defaults — see issue #120.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+    while IFS='=' read -r key value; do
+        case "$key" in
+            SERVICE_PORT | ADMIN_PORT | WEB_PORT)
+                if [ -z "${!key}" ]; then
+                    export "$key=$value"
+                fi
+                ;;
+        esac
+    done < <(grep -E '^(SERVICE_PORT|ADMIN_PORT|WEB_PORT)=' "$ENV_FILE")
+fi
+
+SERVICE_PORT="${SERVICE_PORT:-8080}"
+ADMIN_PORT="${ADMIN_PORT:-5174}"
+WEB_PORT="${WEB_PORT:-5175}"
 
 # Colors for output
 GREEN='\033[0;32m'

@@ -1,4 +1,5 @@
 import { exec, spawn } from 'child_process';
+import { readFileSync } from 'fs';
 import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,9 +7,32 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-const API_PORT = 8080;
-const ADMIN_PORT = 5174;
-const WEB_PORT = 5175;
+// Ports are sourced from the root .env (written by scripts/setup.mjs), with
+// process-env taking precedence and the historical numbers as the final
+// fallback — see issue #120.
+function loadRootEnv() {
+    try {
+        const text = readFileSync(path.join(REPO_ROOT, '.env'), 'utf8');
+        const env = {};
+        for (const raw of text.split('\n')) {
+            const line = raw.trim();
+            if (!line || line.startsWith('#')) continue;
+            const eq = line.indexOf('=');
+            if (eq === -1) continue;
+            env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+        }
+        return env;
+    } catch {
+        return {};
+    }
+}
+const rootEnv = loadRootEnv();
+function readPort(name, fallback) {
+    return Number(process.env[name] || rootEnv[name]) || fallback;
+}
+const API_PORT = readPort('SERVICE_PORT', 8080);
+const ADMIN_PORT = readPort('ADMIN_PORT', 5174);
+const WEB_PORT = readPort('WEB_PORT', 5175);
 const ALL_PORTS = [API_PORT, ADMIN_PORT, WEB_PORT];
 
 // Process patterns that we consider "ours" — anything matching one of these
