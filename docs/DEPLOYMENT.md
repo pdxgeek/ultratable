@@ -24,18 +24,48 @@ This phase details the target architecture and the steps to deploy the applicati
 
 ### Required Environment Variables (Fly)
 
-- `NODE_ENV=production`
-- `PORT=8080`
-- `BETTER_AUTH_SECRET=...` (≥32 chars)
-- `ALLOWED_ORIGINS=https://ultratable.io,https://admin.ultratable.io` (every frontend origin)
-- `SUPABASE_URL=...`
-- `SUPABASE_SERVICE_ROLE_KEY=...`
-- `DATABASE_URL=...`
-- `API_FOOTBALL_KEY=...`
-- (optional, per-frontend) `GOOGLE_CLIENT_ID_ADMIN`, `GOOGLE_CLIENT_SECRET_ADMIN`, `GOOGLE_CLIENT_ID_WEB`, `GOOGLE_CLIENT_SECRET_WEB`
+All variables are set as Fly secrets. See [`apps/service/.env.example`](../apps/service/.env.example) for full descriptions.
+
+| Variable                     | Required | Description                                                                                                                                                          |
+| ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                   | ✅       | Set to `production`                                                                                                                                                  |
+| `PORT`                       | ✅       | `8080` (Fly default)                                                                                                                                                 |
+| `HOST`                       | ✅       | `0.0.0.0`                                                                                                                                                            |
+| `DATABASE_URL`               | ✅       | Postgres connection string (Supabase pooler or direct)                                                                                                               |
+| `SUPABASE_URL`               | ✅       | Supabase project URL                                                                                                                                                 |
+| `SUPABASE_ANON_KEY`          | ✅       | Supabase anon/public key                                                                                                                                             |
+| `SUPABASE_SERVICE_ROLE_KEY`  | ✅       | Supabase service role key (server-side storage uploads)                                                                                                              |
+| `API_FOOTBALL_KEY`           | ✅       | API-Football.com API key                                                                                                                                             |
+| `BETTER_AUTH_SECRET`         | ✅       | Session signing secret (≥32 chars)                                                                                                                                   |
+| `ALLOWED_ORIGINS`            | ✅       | Comma-separated list of every frontend origin. Feeds both Fastify CORS and Better Auth's `trustedOrigins`. e.g. `https://ultratable.io,https://admin.ultratable.io`  |
+| `LOG_LEVEL`                  | Optional | Log verbosity: `trace\|debug\|info\|warn\|error\|fatal`. Defaults to `info` in production. Set to `warn` for minimal noise. Debug-level logs never hit the database. |
+| `GOOGLE_CLIENT_ID_ADMIN`     | Optional | Admin frontend's Google OAuth client ID. Same value as `VITE_GOOGLE_CLIENT_ID` in `apps/admin/.env`.                                                                 |
+| `GOOGLE_CLIENT_SECRET_ADMIN` | Optional | Admin frontend's Google OAuth client secret. Stays server-side only.                                                                                                 |
+| `GOOGLE_CLIENT_ID_WEB`       | Optional | Web frontend's Google OAuth client ID. Same value as `VITE_GOOGLE_CLIENT_ID` in `apps/web/.env`.                                                                     |
+| `GOOGLE_CLIENT_SECRET_WEB`   | Optional | Web frontend's Google OAuth client secret. Stays server-side only.                                                                                                   |
 
 > [!IMPORTANT]
 > **Do NOT set `BETTER_AUTH_URL` in production.** With it unset, Better Auth derives the base URL per request from `X-Forwarded-Host` (sent by each frontend's edge rewrite), so the OAuth redirect URI lives on the frontend's own hostname. Pinning `BETTER_AUTH_URL` overrides this and forces every sign-in to bounce through the service domain. See [auth-architecture.md § Per-frontend OAuth redirect URIs](./auth-architecture.md#per-frontend-oauth-redirect-uris-production).
+
+### Deploying to Fly.io
+
+```bash
+# First time
+fly apps create ultratable-api
+fly secrets set NODE_ENV=production PORT=8080 HOST=0.0.0.0 \
+  DATABASE_URL=... SUPABASE_URL=... SUPABASE_ANON_KEY=... \
+  SUPABASE_SERVICE_ROLE_KEY=... API_FOOTBALL_KEY=... \
+  BETTER_AUTH_SECRET=... \
+  ALLOWED_ORIGINS=https://ultratable.io,https://admin.ultratable.io
+# NOTE: BETTER_AUTH_URL is intentionally not set in prod — Better Auth
+# derives the base URL per request from X-Forwarded-Host.
+
+# Deploy
+fly deploy
+
+# Subsequent deploys
+fly deploy
+```
 
 ## Step 2: Deploy Web + Admin to Vercel
 
@@ -44,9 +74,14 @@ Two separate Vercel projects:
 - **ultratable-web** → `/apps/web` (Domain: `ultratable.io`)
 - **ultratable-admin** → `/apps/admin` (Domain: `admin.ultratable.io`)
 
-### Environment Variable (Vercel)
+### Frontend Environment Variables (Vercel)
 
-- `VITE_API_URL=https://api.ultratable.io`
+Set in each Vercel project's settings.
+
+| Variable                | Project    | Description                                                                                       |
+| ----------------------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| `VITE_API_URL`          | web, admin | `https://api.ultratable.io` (absolute URL for production builds)                                  |
+| `VITE_GOOGLE_CLIENT_ID` | web, admin | Public Google OAuth client ID — one per frontend, different value for each. Bundled into the JS. |
 
 ### Required `vercel.json` rewrite (per frontend)
 
