@@ -144,8 +144,7 @@ const TierListsPage: React.FC = () => {
                     ) : lists.length === 0 ? (
                         <div className="rounded-lg border border-glass-border bg-glass-bg p-8 text-center">
                             <p className="text-sm text-text-secondary">
-                                You don&apos;t have any tier lists this season yet. Use{' '}
-                                <strong>+ New Tier List</strong> to create one.
+                                You don&apos;t have any tier lists this season yet.
                             </p>
                         </div>
                     ) : (
