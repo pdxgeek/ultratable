@@ -269,8 +269,8 @@ server.post('/api/auth/dev-login', async (request, reply) => {
 
     const { role } = request.body as { role: string };
     const rolesForSlug: Record<string, string[]> = {
-        admin: ['admin', 'predictions'],
-        user: ['user', 'predictions'],
+        admin: ['admin', 'predictions', 'tier-lists'],
+        user: ['user', 'predictions', 'tier-lists'],
         guest: ['guest'],
     };
 
@@ -328,8 +328,8 @@ server.post('/api/auth/dev-login', async (request, reply) => {
 
     // Always force the requested role — the bootstrap hook seeds defaults,
     // and re-runs of dev-login may flip an existing dev account (admin →
-    // guest, etc.). Non-guest dev users carry 'predictions' so they can
-    // exercise the gated UI.
+    // guest, etc.). Non-guest dev users carry the additive feature roles
+    // ('predictions', 'tier-lists') so they can exercise the gated UI.
     const updated = await repository.users.setDomainUserRoles(
         domainUser.id,
         rolesForSlug[role],

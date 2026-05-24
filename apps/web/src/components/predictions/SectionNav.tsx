@@ -1,31 +1,34 @@
-import type { PredictionType } from './queries';
-
 import React from 'react';
 
 import { cn } from '@/lib/utils';
 
-interface PredictionTypeItem {
-    type: PredictionType;
+export interface SectionItem<Id extends string = string> {
+    id: Id;
     label: string;
 }
 
-const ITEMS: PredictionTypeItem[] = [{ type: 'PROJECTED_FINISH', label: 'Projected Finish' }];
-
-interface PredictionTypeNavProps {
-    selected: PredictionType;
-    onSelect: (type: PredictionType) => void;
+interface SectionNavProps<Id extends string> {
+    items: SectionItem<Id>[];
+    selected: Id;
+    onSelect: (id: Id) => void;
+    ariaLabel?: string;
 }
 
-const PredictionTypeNav: React.FC<PredictionTypeNavProps> = ({ selected, onSelect }) => {
+function SectionNav<Id extends string>({
+    items,
+    selected,
+    onSelect,
+    ariaLabel,
+}: SectionNavProps<Id>): React.ReactElement {
     return (
-        <nav aria-label="Prediction types" className="flex flex-col gap-1">
-            {ITEMS.map((item) => {
-                const isActive = item.type === selected;
+        <nav aria-label={ariaLabel} className="flex flex-col gap-1">
+            {items.map((item) => {
+                const isActive = item.id === selected;
                 return (
                     <button
-                        key={item.type}
+                        key={item.id}
                         type="button"
-                        onClick={() => onSelect(item.type)}
+                        onClick={() => onSelect(item.id)}
                         aria-current={isActive ? 'page' : undefined}
                         className={cn(
                             'rounded-md px-3 py-2 text-sm font-medium text-left transition-colors',
@@ -40,6 +43,6 @@ const PredictionTypeNav: React.FC<PredictionTypeNavProps> = ({ selected, onSelec
             })}
         </nav>
     );
-};
+}
 
-export default PredictionTypeNav;
+export default SectionNav;

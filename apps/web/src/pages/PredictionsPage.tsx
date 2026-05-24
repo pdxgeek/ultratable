@@ -9,10 +9,10 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
 import PredictionHistoryPanel from '../components/predictions/PredictionHistoryPanel';
-import PredictionTypeNav from '../components/predictions/PredictionTypeNav';
 import ProjectedFinishBoard, {
     type MoveTarget,
 } from '../components/predictions/ProjectedFinishBoard';
+import SectionNav, { type SectionItem } from '../components/predictions/SectionNav';
 import { applyMove } from '../components/predictions/applyMove';
 import {
     DELETE_PREDICTION_SNAPSHOT_MUTATION,
@@ -64,7 +64,10 @@ const PredictionsPage: React.FC = () => {
     );
     const validTeamIds = useMemo(() => new Set(teamIds), [teamIds]);
 
-    const [selectedType, setSelectedType] = useState<PredictionType>('PROJECTED_FINISH');
+    type Section = PredictionType | 'TIER_LISTS';
+    const [section, setSection] = useState<Section>('PROJECTED_FINISH');
+    const selectedType: PredictionType =
+        section === 'TIER_LISTS' ? 'PROJECTED_FINISH' : section;
     const [userSlots, setUserSlots] = useState<(string | null)[] | null>(null);
     const [mode, setMode] = useState<Mode>({ kind: 'draft' });
     const [lockInError, setLockInError] = useState<string | null>(null);
@@ -268,6 +271,11 @@ const PredictionsPage: React.FC = () => {
 
     const placedCount = slots.filter((s) => s !== null).length;
 
+    const navItems: SectionItem<Section>[] = [{ id: 'PROJECTED_FINISH', label: 'Projected Finish' }];
+    if (ability.can('create', 'TierList')) {
+        navItems.push({ id: 'TIER_LISTS', label: 'Tier Lists' });
+    }
+
     return (
         <div className="max-w-[1100px] mx-auto pt-5 pb-10">
             <Link
@@ -278,43 +286,57 @@ const PredictionsPage: React.FC = () => {
             </Link>
             <header className="mb-8">
                 <h1 className="text-[2rem] max-sm:text-[1.6rem] font-extrabold tracking-tight">
-                    Predictions
+                    Predictions &amp; Rankings
                 </h1>
                 <p className="text-sm text-text-muted">
                     {activeLeague?.name ?? 'League'} — current season
                 </p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8 items-start">
-                <PredictionTypeNav selected={selectedType} onSelect={setSelectedType} />
-                <ProjectedFinishBoard
-                    poolTeamIds={poolTeamIds}
-                    slots={slots}
-                    teamsMap={teamsMap}
-                    zones={zones}
-                    currentPositions={currentPositions}
-                    seasonStarted={seasonStarted}
-                    readOnly={mode.kind === 'viewing'}
-                    onMove={handleMove}
+                <SectionNav
+                    items={navItems}
+                    selected={section}
+                    onSelect={setSection}
+                    ariaLabel="Predictions and rankings sections"
                 />
-                <PredictionHistoryPanel
-                    snapshots={snapshots}
-                    mode={mode.kind}
-                    viewingSnapshotId={viewingId}
-                    placedCount={placedCount}
-                    totalCount={N}
-                    canLockIn={allPlaced && mode.kind === 'draft'}
-                    isLocking={lockInState.fetching}
-                    lockInError={lockInError}
-                    canReset={hasAnyPlacement}
-                    onReset={handleReset}
-                    canDeleteCurrent={canDeleteCurrent}
-                    isDeleting={deleteState.fetching}
-                    deleteError={deleteError}
-                    onLockIn={handleLockIn}
-                    onSelectSnapshot={handleSelectSnapshot}
-                    onMakePredictions={handleMakePredictions}
-                    onConfirmDelete={handleConfirmDelete}
-                />
+                {section === 'TIER_LISTS' ? (
+                    <div className="md:col-span-2 rounded-lg border border-glass-border bg-glass-bg p-8 text-center">
+                        <h2 className="text-lg font-semibold mb-2">Tier Lists</h2>
+                        <p className="text-sm text-text-secondary">Coming soon.</p>
+                    </div>
+                ) : (
+                    <>
+                        <ProjectedFinishBoard
+                            poolTeamIds={poolTeamIds}
+                            slots={slots}
+                            teamsMap={teamsMap}
+                            zones={zones}
+                            currentPositions={currentPositions}
+                            seasonStarted={seasonStarted}
+                            readOnly={mode.kind === 'viewing'}
+                            onMove={handleMove}
+                        />
+                        <PredictionHistoryPanel
+                            snapshots={snapshots}
+                            mode={mode.kind}
+                            viewingSnapshotId={viewingId}
+                            placedCount={placedCount}
+                            totalCount={N}
+                            canLockIn={allPlaced && mode.kind === 'draft'}
+                            isLocking={lockInState.fetching}
+                            lockInError={lockInError}
+                            canReset={hasAnyPlacement}
+                            onReset={handleReset}
+                            canDeleteCurrent={canDeleteCurrent}
+                            isDeleting={deleteState.fetching}
+                            deleteError={deleteError}
+                            onLockIn={handleLockIn}
+                            onSelectSnapshot={handleSelectSnapshot}
+                            onMakePredictions={handleMakePredictions}
+                            onConfirmDelete={handleConfirmDelete}
+                        />
+                    </>
+                )}
             </div>
         </div>
     );

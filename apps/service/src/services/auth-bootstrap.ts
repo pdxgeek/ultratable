@@ -36,7 +36,7 @@ export async function bootstrapDomainUserFromAuthUser(authUser: NewAuthUser): Pr
                 email: authUser.email,
                 emailVerified: authUser.emailVerified,
                 image: authUser.image ?? null,
-                roles: ['user', 'predictions'],
+                roles: ['user', 'predictions', 'tier-lists'],
             })
             .returning();
         await db.insert(schema.authLinks).values({

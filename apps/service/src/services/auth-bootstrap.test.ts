@@ -58,7 +58,7 @@ describe('bootstrapDomainUserFromAuthUser', () => {
             email: 'ada@example.com',
             emailVerified: true,
             image: 'https://example.com/ada.png',
-            roles: ['user', 'predictions'],
+            roles: ['user', 'predictions', 'tier-lists'],
         });
         expect(authLinksValuesMock).toHaveBeenCalledWith({
             authUserId: 'auth-1',
@@ -66,7 +66,7 @@ describe('bootstrapDomainUserFromAuthUser', () => {
         });
     });
 
-    it("seeds new users with the 'predictions' role alongside 'user'", async () => {
+    it("seeds new users with the 'predictions' and 'tier-lists' roles alongside 'user'", async () => {
         returningMock.mockResolvedValueOnce([{ id: 'domain-uuid-roles' }]);
         authLinksValuesMock.mockResolvedValueOnce(undefined);
 
@@ -78,7 +78,7 @@ describe('bootstrapDomainUserFromAuthUser', () => {
         });
 
         expect(usersValuesMock).toHaveBeenCalledWith(
-            expect.objectContaining({ roles: ['user', 'predictions'] }),
+            expect.objectContaining({ roles: ['user', 'predictions', 'tier-lists'] }),
         );
     });
 
