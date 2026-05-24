@@ -3,6 +3,7 @@ import DataLoader from 'dataloader';
 import * as schema from '../db/schema';
 import { repository } from '../repositories';
 import type { PredictionSnapshotEntryRow } from '../repositories/predictions';
+import type { TierRankableItemRow, TierRankableTypeRow } from '../repositories/tier-lists';
 
 type Team = typeof schema.teams.$inferSelect;
 type Venue = typeof schema.venues.$inferSelect;
@@ -38,6 +39,28 @@ export function createLoaders() {
             async (ids) => {
                 const map = await repository.predictions.listSnapshotEntriesByIds(ids);
                 return ids.map((id) => map.get(id) ?? []);
+            },
+        ),
+        // Batches `TierList.items` so listing N tier lists in one query
+        // issues one item-fetch instead of N. Live items only — the
+        // repository filters `deletedAt IS NULL`.
+        tierRankableItemsLoader: new DataLoader<string, TierRankableItemRow[]>(
+            async (ids) => {
+                const map = await repository.tierLists.listItemsByTierListIds(ids);
+                return ids.map((id) => map.get(id) ?? []);
+            },
+        ),
+        // Batches `TierRankableItem.tierRankableType` (and `TierList.tierRankableType`)
+        // — every item / tier list resolves its recipe row for display name +
+        // formula seam. With ~3 recipe rows total the data is small, but the
+        // loader still saves N+1 round-trips when the editor query touches
+        // dozens of items.
+        tierRankableTypeLoader: new DataLoader<string, TierRankableTypeRow | null>(
+            async (ids) => {
+                const rows = await Promise.all(
+                    ids.map((id) => repository.tierLists.getTierRankableTypeById(id)),
+                );
+                return rows;
             },
         ),
     };

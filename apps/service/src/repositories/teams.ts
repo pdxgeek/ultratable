@@ -17,6 +17,17 @@ export interface TeamsRepository {
         since?: Date,
     ): Promise<Array<typeof schema.teams.$inferSelect>>;
     countTeamsInSeason(seasonId: string): Promise<number>;
+    /**
+     * Reverse provider-id lookup. Maps `(sourceName, sourceId)` pairs back to
+     * internal `teams.id` UUIDs. Returns a Map keyed by source id so callers
+     * can batch lookups (e.g. resolving every `lineup.teamSourceId` in a
+     * fixture to a local team uuid in one query). Missing source ids are
+     * simply absent from the result map.
+     */
+    getTeamIdsBySourceIds(
+        sourceName: string,
+        sourceIds: readonly number[],
+    ): Promise<Map<number, string>>;
     syncTeams(
         leagueSourceId: number,
         seasonYear: number,

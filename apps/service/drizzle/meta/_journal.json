@@ -1,132 +1,139 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1771736360184,
-      "tag": "0000_mushy_millenium_guard",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1771737071191,
-      "tag": "0001_orange_red_skull",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1771738568414,
-      "tag": "0002_steady_giant_girl",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1771738732853,
-      "tag": "0003_greedy_red_wolf",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1771739042074,
-      "tag": "0004_amusing_sauron",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1771739274955,
-      "tag": "0005_shiny_romulus",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1771739900162,
-      "tag": "0006_yielding_sir_ram",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1771740523386,
-      "tag": "0007_wild_kylun",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1771868646372,
-      "tag": "0008_cute_starhawk",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1772079329278,
-      "tag": "0009_needy_stone_men",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1772139010236,
-      "tag": "0010_pale_wraith",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1772400664026,
-      "tag": "0011_hard_the_anarchist",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1772651432101,
-      "tag": "0012_peaceful_bucky",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1779474207938,
-      "tag": "0013_harsh_ironclad",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1779487497966,
-      "tag": "0014_breezy_meggan",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1779538633506,
-      "tag": "0015_backfill_predictions_role",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1779542145679,
-      "tag": "0016_wakeful_blindfold",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1779800000000,
-      "tag": "0017_backfill_tier_lists_role",
-      "breakpoints": true
-    }
-  ]
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+        {
+            "idx": 0,
+            "version": "7",
+            "when": 1771736360184,
+            "tag": "0000_mushy_millenium_guard",
+            "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "7",
+            "when": 1771737071191,
+            "tag": "0001_orange_red_skull",
+            "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1771738568414,
+            "tag": "0002_steady_giant_girl",
+            "breakpoints": true
+        },
+        {
+            "idx": 3,
+            "version": "7",
+            "when": 1771738732853,
+            "tag": "0003_greedy_red_wolf",
+            "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1771739042074,
+            "tag": "0004_amusing_sauron",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1771739274955,
+            "tag": "0005_shiny_romulus",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1771739900162,
+            "tag": "0006_yielding_sir_ram",
+            "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1771740523386,
+            "tag": "0007_wild_kylun",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1771868646372,
+            "tag": "0008_cute_starhawk",
+            "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "7",
+            "when": 1772079329278,
+            "tag": "0009_needy_stone_men",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "7",
+            "when": 1772139010236,
+            "tag": "0010_pale_wraith",
+            "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "7",
+            "when": 1772400664026,
+            "tag": "0011_hard_the_anarchist",
+            "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1772651432101,
+            "tag": "0012_peaceful_bucky",
+            "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "7",
+            "when": 1779474207938,
+            "tag": "0013_harsh_ironclad",
+            "breakpoints": true
+        },
+        {
+            "idx": 14,
+            "version": "7",
+            "when": 1779487497966,
+            "tag": "0014_breezy_meggan",
+            "breakpoints": true
+        },
+        {
+            "idx": 15,
+            "version": "7",
+            "when": 1779538633506,
+            "tag": "0015_backfill_predictions_role",
+            "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1779542145679,
+            "tag": "0016_wakeful_blindfold",
+            "breakpoints": true
+        },
+        {
+            "idx": 17,
+            "version": "7",
+            "when": 1779800000000,
+            "tag": "0017_backfill_tier_lists_role",
+            "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "7",
+            "when": 1779900000000,
+            "tag": "0018_lethal_star_brand",
+            "breakpoints": true
+        }
+    ]
 }

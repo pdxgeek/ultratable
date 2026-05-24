@@ -89,6 +89,25 @@ export class PostgresTeamsRepository implements TeamsRepository {
             .where(inArray(schema.teams.id, [...teamIds]));
     }
 
+    async getTeamIdsBySourceIds(
+        sourceName: string,
+        sourceIds: readonly number[],
+    ): Promise<Map<number, string>> {
+        const result = new Map<number, string>();
+        if (!db || sourceIds.length === 0) return result;
+        const rows = await db
+            .select({ id: schema.teams.id, sourceId: schema.teams.sourceId })
+            .from(schema.teams)
+            .where(
+                and(
+                    eq(schema.teams.sourceName, sourceName),
+                    inArray(schema.teams.sourceId, [...sourceIds]),
+                ),
+            );
+        for (const r of rows) result.set(r.sourceId, r.id);
+        return result;
+    }
+
     async getTeamsBySeasonId(
         seasonId: string,
         since?: Date,

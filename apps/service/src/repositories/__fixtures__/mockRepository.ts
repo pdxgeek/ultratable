@@ -23,6 +23,7 @@ import type { PlayersRepository } from '../players';
 import type { PredictionsRepository } from '../predictions';
 import type { IRepository } from '../repository';
 import type { TeamsRepository } from '../teams';
+import type { TierListsRepository } from '../tier-lists';
 import type { UsersRepository } from '../users';
 import type { WorkersRepository } from '../workers';
 
@@ -56,6 +57,7 @@ export function buildMockTeams(overrides: Partial<TeamsRepository> = {}): TeamsR
         getAllTeams: vi.fn().mockResolvedValue([]),
         getTeamById: vi.fn().mockResolvedValue(null),
         getTeamsByIds: vi.fn().mockResolvedValue([]),
+        getTeamIdsBySourceIds: vi.fn().mockResolvedValue(new Map()),
         getTeamsBySeasonId: vi.fn().mockResolvedValue([]),
         countTeamsInSeason: vi.fn().mockResolvedValue(0),
         syncTeams: vi.fn().mockResolvedValue([]),
@@ -182,6 +184,62 @@ export function buildMockPredictions(
     };
 }
 
+export function buildMockTierLists(
+    overrides: Partial<TierListsRepository> = {},
+): TierListsRepository {
+    const now = new Date();
+    const tierListStub = {
+        id: 'tier-list-1',
+        userId: 'user-1',
+        seasonId: 'season-1',
+        tierRankableTypeId: 'coach',
+        title: 'Mock Tier List',
+        tiers: [],
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+    };
+    const coachRow = { id: 'coach', name: 'Coach', defaultFormulaId: null };
+    return {
+        getTierRankableTypeById: vi.fn().mockResolvedValue(coachRow),
+        listTierRankableTypes: vi.fn().mockResolvedValue([coachRow]),
+        createTierList: vi.fn().mockResolvedValue(tierListStub),
+        listTierLists: vi.fn().mockResolvedValue([]),
+        getTierListById: vi.fn().mockResolvedValue(null),
+        updateTierListTitle: vi.fn().mockResolvedValue(null),
+        updateTierListTiers: vi.fn().mockResolvedValue(null),
+        softDeleteTierList: vi.fn().mockResolvedValue(null),
+        countTierListsInScope: vi.fn().mockResolvedValue(0),
+        addTierRankableItem: vi.fn().mockResolvedValue({
+            id: 'item-1',
+            tierListId: 'tier-list-1',
+            tierRankableTypeId: 'coach',
+            naturalKey: 'mock-key',
+            tierKey: null,
+            position: 1,
+            name: 'Mock Item',
+            imageUrl: null,
+            teamId: null,
+            sourceType: null,
+            sourceId: null,
+            sourcePath: null,
+            nameOverride: null,
+            imageUrlOverride: null,
+            subtitle: null,
+            addedAt: now,
+            deletedAt: null,
+        }),
+        updateTierRankableItemOverrides: vi.fn().mockResolvedValue(null),
+        softDeleteTierRankableItem: vi.fn().mockResolvedValue(null),
+        moveTierRankableItem: vi.fn().mockResolvedValue(null),
+        listItemsForTierList: vi.fn().mockResolvedValue([]),
+        listItemsByTierListIds: vi.fn().mockResolvedValue(new Map()),
+        getTierRankableItemById: vi.fn().mockResolvedValue(null),
+        countItemsForTierList: vi.fn().mockResolvedValue(0),
+        ...overrides,
+    };
+}
+
 export type RepositoryOverrides = {
     [K in keyof IRepository]?: Partial<IRepository[K]>;
 };
@@ -198,5 +256,6 @@ export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepos
         workers: buildMockWorkers(overrides.workers),
         users: buildMockUsers(overrides.users),
         predictions: buildMockPredictions(overrides.predictions),
+        tierLists: buildMockTierLists(overrides.tierLists),
     };
 }

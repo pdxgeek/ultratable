@@ -20,6 +20,7 @@ import { auth } from './api/auth';
 import { abilityFor } from './auth/abilities';
 import { db } from './db';
 import * as schema from './db/schema';
+import { assertRecipeRegistryMatchesDb } from './entities/tier-rankable-types/registry';
 import { createLoaders } from './loaders';
 import { repository } from './repositories';
 import { builder } from './schema/builder';
@@ -33,6 +34,7 @@ import './schema/config';
 import './schema/football';
 import './schema/graphics';
 import './schema/predictions';
+import './schema/tier-lists';
 import './schema/viewer';
 import './schema/workers';
 
@@ -454,6 +456,10 @@ async function preflightSchemaCheck() {
             })
             .from(schema.authUsers)
             .limit(0);
+        // Tier Lists: assert the rankable-entity recipe registry matches
+        // the DB rows. Loud failure if a recipe row exists without a
+        // registered TS resolver (or vice versa).
+        await assertRecipeRegistryMatchesDb();
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (/column .* does not exist/i.test(message)) {

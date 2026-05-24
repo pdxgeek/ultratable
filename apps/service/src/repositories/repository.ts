@@ -6,6 +6,7 @@ import { LeaguesRepository } from './leagues';
 import { PlayersRepository } from './players';
 import { PredictionsRepository } from './predictions';
 import { TeamsRepository } from './teams';
+import { TierListsRepository } from './tier-lists';
 import { UsersRepository } from './users';
 import { WorkersRepository } from './workers';
 
@@ -25,4 +26,5 @@ export interface IRepository {
     graphics: GraphicsRepository;
     users: UsersRepository;
     predictions: PredictionsRepository;
+    tierLists: TierListsRepository;
 }

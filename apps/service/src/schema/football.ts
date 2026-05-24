@@ -7,7 +7,7 @@ import { builder, requireAdmin } from './builder';
 
 // Define object refs first
 export const LeagueRef = builder.objectRef<typeof schema.leagues.$inferSelect>('League');
-const TeamRef = builder.objectRef<typeof schema.teams.$inferSelect>('Team');
+export const TeamRef = builder.objectRef<typeof schema.teams.$inferSelect>('Team');
 export const SeasonRef = builder.objectRef<typeof schema.seasons.$inferSelect>('Season');
 const FixtureRef = builder.objectRef<typeof schema.fixtures.$inferSelect>('Fixture');
 const VenueRef = builder.objectRef<typeof schema.venues.$inferSelect>('Venue');

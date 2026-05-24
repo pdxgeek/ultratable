@@ -1,0 +1,782 @@
+/**
+ * Tier-lists GraphQL surface (umbrella #110, backend slice #112).
+ *
+ * Domain model:
+ *   - `TierRankableType` is a *recipe* — a small registry of categories
+ *     the product can rank (`coach`, `player`, `venue`). Each row pairs
+ *     with a server-side recipe resolver (see
+ *     [[../entities/tier-rankable-types/]]) that projects source data
+ *     onto the tier-rankable-item display contract. v1 ships the
+ *     `coach` recipe.
+ *   - `TierList` is bound to one recipe via `tierRankableTypeId`. Its
+ *     items can only be projected by that recipe.
+ *   - `TierRankableItem` carries the recipe's projection snapshot plus
+ *     per-user overrides. `(tierRankableTypeId, naturalKey)` is the
+ *     cross-user identity for an instance.
+ *
+ * Authorization goes through CASL only — see [[../auth/abilities.ts]].
+ * Item mutations gate on the parent tier-list ability. Recipe rows are
+ * app-wide read-only data — any authenticated viewer can query them.
+ */
+import { subject } from '@casl/ability';
+import { GraphQLError } from 'graphql';
+
+import {
+    DEFAULT_TIERS,
+    MAX_ITEMS_PER_TIER_LIST,
+    MAX_TIER_LISTS_PER_USER_PER_SEASON,
+    MAX_TIERS,
+    MAX_TITLE_LENGTH,
+    MIN_TIERS,
+} from '../config/tier-lists';
+import { repository } from '../repositories';
+import type {
+    Tier,
+    TierListRow,
+    TierRankableItemRow,
+    TierRankableTypeRow,
+} from '../repositories/tier-lists';
+import { abilityOf, builder } from './builder';
+import { TeamRef } from './football';
+
+// ----------------------------------------------------------------------
+// Object refs
+// ----------------------------------------------------------------------
+
+const TierRef = builder.simpleObject('Tier', {
+    description:
+        'One row of a tier list\'s tier scheme. Items reference `key`, not `name`, so renaming "S" to "GOAT" does not touch them.',
+    fields: (t) => ({
+        key: t.string({ description: 'Stable short id for this tier within its parent.' }),
+        name: t.string({ description: 'Display label.' }),
+    }),
+});
+
+const TierRankableTypeRef = builder.objectRef<TierRankableTypeRow>('TierRankableType');
+const TierListRef = builder.objectRef<TierListRow>('TierList');
+const TierRankableItemRef = builder.objectRef<TierRankableItemRow>('TierRankableItem');
+
+builder.objectType(TierRankableTypeRef, {
+    description:
+        "A *recipe* — declares that a ranking category exists (e.g. `coach`, `player`, `venue`) and pairs with a server-side resolver that projects source data into tier-rankable items. Not a per-instance row; the registry is small (~3 rows in v1).",
+    fields: (t) => ({
+        id: t.exposeID('id', {
+            description: 'Stable identifier (e.g. `coach`, `player`, `venue`).',
+        }),
+        name: t.exposeString('name', { description: 'Display label.' }),
+        defaultFormulaId: t.exposeID('defaultFormulaId', {
+            nullable: true,
+            description:
+                'References `ranking_formulas.id`. Null in v1 — the formula seam is wired so a future PR can flip on objective ranking without a migration.',
+        }),
+    }),
+});
+
+builder.objectType(TierListRef, {
+    description:
+        'A live-editable ranking. Identified by a stable UUID — share this id, not the internal numeric position.',
+    fields: (t) => ({
+        id: t.exposeID('id'),
+        userId: t.exposeID('userId', {
+            description: 'Owner (domain user UUID). Only the owner or an admin can read this tier list.',
+        }),
+        seasonId: t.exposeID('seasonId', { description: 'Season this tier list is scoped to.' }),
+        tierRankableTypeId: t.exposeString('tierRankableTypeId', {
+            description: 'Which recipe this list ranks against. FK to `TierRankableType.id`.',
+        }),
+        tierRankableType: t.field({
+            type: TierRankableTypeRef,
+            nullable: true,
+            description: 'The recipe row this list ranks against. Batched via DataLoader.',
+            resolve: (parent, _args, ctx) =>
+                ctx.loaders.tierRankableTypeLoader.load(parent.tierRankableTypeId),
+        }),
+        title: t.exposeString('title', { description: 'Display title.' }),
+        tiers: t.field({
+            type: [TierRef],
+            description: 'Ordered tier scheme, top-to-bottom. Items reference `tier.key`.',
+            resolve: (parent) => parent.tiers,
+        }),
+        items: t.field({
+            type: [TierRankableItemRef],
+            description:
+                'Live items belonging to this tier list, ordered by `(tierKey, position)`. Items with `tierKey = null` are in the pool row.',
+            resolve: (parent, _args, ctx) =>
+                ctx.loaders.tierRankableItemsLoader.load(parent.id),
+        }),
+        createdAt: t.expose('createdAt', { type: 'DateTime' }),
+        updatedAt: t.expose('updatedAt', {
+            type: 'DateTime',
+            description: 'Last-modified time — surface this as "Edited HH:MM" in the editor.',
+        }),
+        deletedAt: t.expose('deletedAt', {
+            type: 'DateTime',
+            nullable: true,
+            description:
+                'Set when the tier list was soft-deleted. Live queries filter these out — surfaced here for admin tooling.',
+        }),
+    }),
+});
+
+builder.objectType(TierRankableItemRef, {
+    description:
+        'One item in a tier list. Carries the recipe\'s projection snapshot (`name`, `imageUrl`, `team`, source pointer) plus per-user overrides. `(tierRankableTypeId, naturalKey)` is the cross-user identity for an instance.',
+    fields: (t) => ({
+        id: t.exposeID('id'),
+        tierKey: t.exposeString('tierKey', {
+            nullable: true,
+            description: 'null = in the pool. Non-null = in that tier on the parent.',
+        }),
+        position: t.exposeFloat('position', {
+            description:
+                'Float per row. Reorder by midpoint — insert between A=1.0 and B=2.0 by writing 1.5.',
+        }),
+        tierRankableTypeId: t.exposeString('tierRankableTypeId', {
+            description: "Recipe this item was projected by. Matches parent tier list's recipe.",
+        }),
+        tierRankableType: t.field({
+            type: TierRankableTypeRef,
+            nullable: true,
+            description: "The recipe row. Batched via DataLoader.",
+            resolve: (parent, _args, ctx) =>
+                ctx.loaders.tierRankableTypeLoader.load(parent.tierRankableTypeId),
+        }),
+        naturalKey: t.exposeString('naturalKey', {
+            description:
+                "Recipe-derived stable instance id (e.g. `<teamId>|pep guardiola`). `(tierRankableTypeId, naturalKey)` groups items across users.",
+        }),
+        name: t.exposeString('name', {
+            description:
+                "Canonical display name snapshotted at add time. Refresh-from-source overwrites this; items can override per-user.",
+        }),
+        imageUrl: t.exposeString('imageUrl', { nullable: true }),
+        team: t.field({
+            type: TeamRef,
+            nullable: true,
+            description: 'Team this item is associated with. Resolved from `teamId` via DataLoader.',
+            resolve: (parent, _args, ctx) =>
+                parent.teamId ? ctx.loaders.teamLoader.load(parent.teamId) : null,
+        }),
+        sourceType: t.exposeString('sourceType', { nullable: true }),
+        sourceId: t.exposeID('sourceId', { nullable: true }),
+        sourcePath: t.field({
+            type: 'JSON',
+            nullable: true,
+            resolve: (parent) => parent.sourcePath,
+        }),
+        nameOverride: t.exposeString('nameOverride', {
+            nullable: true,
+            description: "User's custom name. Null = use the snapshot. Display: `nameOverride ?? name`.",
+        }),
+        imageUrlOverride: t.exposeString('imageUrlOverride', {
+            nullable: true,
+            description: "User's custom image. Null = use the snapshot.",
+        }),
+        subtitle: t.exposeString('subtitle', {
+            nullable: true,
+            description: 'Per-user secondary line (e.g. striker position, venue capacity).',
+        }),
+        displayName: t.string({
+            description: 'Convenience: `nameOverride ?? name`.',
+            resolve: (parent) => parent.nameOverride ?? parent.name,
+        }),
+        displayImageUrl: t.string({
+            nullable: true,
+            description: 'Convenience: `imageUrlOverride ?? imageUrl`.',
+            resolve: (parent) => parent.imageUrlOverride ?? parent.imageUrl,
+        }),
+        addedAt: t.expose('addedAt', { type: 'DateTime' }),
+    }),
+});
+
+// ----------------------------------------------------------------------
+// Inputs
+// ----------------------------------------------------------------------
+
+const TierInput = builder.inputType('TierInput', {
+    description:
+        'A tier in a tier list\'s scheme. `key` is optional — leave null for new tiers and the server will mint a fresh stable key. For existing tiers, pass the key back to preserve identity.',
+    fields: (t) => ({
+        key: t.string({ required: false }),
+        name: t.string({ required: true }),
+    }),
+});
+
+const AddTierRankableItemInput = builder.inputType('AddTierRankableItemInput', {
+    description:
+        "Payload for `addTierRankableItem`. The client (editor add-drawer) runs the recipe over a source row to compute the projection, then passes it here. The server stores it verbatim. Recipe id must match the parent tier list's `tierRankableTypeId`.",
+    fields: (t) => ({
+        tierListId: t.id({ required: true }),
+        tierRankableTypeId: t.string({
+            required: true,
+            description: "Must match parent tier list's recipe.",
+        }),
+        naturalKey: t.string({
+            required: true,
+            description: 'Recipe-derived stable instance id. Drives cross-user aggregates.',
+        }),
+        name: t.string({ required: true }),
+        imageUrl: t.string({ required: false }),
+        teamId: t.id({ required: false }),
+        sourceType: t.string({ required: false }),
+        sourceId: t.id({ required: false }),
+        sourcePath: t.field({ type: 'JSON', required: false }),
+    }),
+});
+
+const UpdateTierRankableItemOverridesInput = builder.inputType(
+    'UpdateTierRankableItemOverridesInput',
+    {
+        description:
+            'Per-user override patch. Fields left undefined are not changed. Pass `null` explicitly to clear an override (fall back to the snapshot).',
+        fields: (t) => ({
+            itemId: t.id({ required: true }),
+            nameOverride: t.string({ required: false }),
+            imageUrlOverride: t.string({ required: false }),
+            subtitle: t.string({ required: false }),
+        }),
+    },
+);
+
+// ----------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------
+
+type AbilityCtx = Parameters<typeof abilityOf>[0];
+
+function assertViewer(ctx: AbilityCtx): { id: string; roles: string[] } {
+    if (!ctx.user) {
+        throw new GraphQLError('Unauthenticated', { extensions: { http: { status: 401 } } });
+    }
+    return ctx.user;
+}
+
+function validateTitle(title: string): void {
+    if (title.trim().length === 0) {
+        throw new GraphQLError('Title cannot be blank', {
+            extensions: { code: 'INVALID_TITLE', http: { status: 400 } },
+        });
+    }
+    if (title.length > MAX_TITLE_LENGTH) {
+        throw new GraphQLError(`Title exceeds ${MAX_TITLE_LENGTH} characters`, {
+            extensions: { code: 'INVALID_TITLE', http: { status: 400 } },
+        });
+    }
+}
+
+function newTierKey(): string {
+    return `tier-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36).slice(-4)}`;
+}
+
+// ----------------------------------------------------------------------
+// Queries
+// ----------------------------------------------------------------------
+
+builder.queryField('tierRankableTypes', (t) =>
+    t.field({
+        type: [TierRankableTypeRef],
+        description:
+            'All registered recipes. Drives the create-tier-list category picker on the client.',
+        resolve: () => repository.tierLists.listTierRankableTypes(),
+    }),
+);
+
+builder.queryField('myTierLists', (t) =>
+    t.field({
+        type: [TierListRef],
+        description:
+            "The viewer's tier lists for a season, newest first. Returns [] for unauthenticated callers so the overview page can render a signed-out state without error handling.",
+        args: {
+            seasonId: t.arg.id({ required: true }),
+            tierRankableTypeId: t.arg.string({
+                required: false,
+                description: "Optional recipe filter (e.g. 'coach'). Omit to list all.",
+            }),
+        },
+        resolve: async (_root, { seasonId, tierRankableTypeId }, ctx) => {
+            if (!ctx.user) return [];
+            if (abilityOf(ctx).cannot('read', 'TierList')) return [];
+            return repository.tierLists.listTierLists({
+                userId: ctx.user.id,
+                seasonId: seasonId as string,
+                tierRankableTypeId: tierRankableTypeId ?? undefined,
+            });
+        },
+    }),
+);
+
+builder.queryField('tierList', (t) =>
+    t.field({
+        type: TierListRef,
+        nullable: true,
+        description:
+            'Returns the tier list when the viewer is the owner or an admin, otherwise null. Soft-deleted rows are treated as non-existent.',
+        args: { id: t.arg.id({ required: true }) },
+        resolve: async (_root, { id }, ctx) => {
+            const row = await repository.tierLists.getTierListById({ id: id as string });
+            if (!row) return null;
+            if (abilityOf(ctx).cannot('read', subject('TierList', { userId: row.userId }))) {
+                return null;
+            }
+            return row;
+        },
+    }),
+);
+
+// ----------------------------------------------------------------------
+// Tier-list mutations
+// ----------------------------------------------------------------------
+
+builder.mutationField('createTierList', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            "Create a new tier list for the viewer. Initialises the default S/A/B/C/D/F tier scheme. Enforces the per-(user, season) cap that counts soft-deleted rows. `tierRankableTypeId` must reference a registered recipe.",
+        args: {
+            seasonId: t.arg.id({ required: true }),
+            tierRankableTypeId: t.arg.string({ required: true }),
+            title: t.arg.string({ required: true }),
+        },
+        resolve: async (_root, { seasonId, tierRankableTypeId, title }, ctx) => {
+            const viewer = assertViewer(ctx);
+            if (abilityOf(ctx).cannot('create', 'TierList')) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            validateTitle(title);
+
+            const recipe = await repository.tierLists.getTierRankableTypeById(tierRankableTypeId);
+            if (!recipe) {
+                throw new GraphQLError(`Unknown tier rankable type: ${tierRankableTypeId}`, {
+                    extensions: {
+                        code: 'UNKNOWN_TIER_RANKABLE_TYPE',
+                        http: { status: 400 },
+                        tierRankableTypeId,
+                    },
+                });
+            }
+
+            const seasonIdStr = seasonId as string;
+            const count = await repository.tierLists.countTierListsInScope({
+                userId: viewer.id,
+                seasonId: seasonIdStr,
+            });
+            if (count >= MAX_TIER_LISTS_PER_USER_PER_SEASON) {
+                throw new GraphQLError(
+                    `Tier list limit reached for this season (${count}/${MAX_TIER_LISTS_PER_USER_PER_SEASON})`,
+                    {
+                        extensions: {
+                            code: 'TIER_LIST_LIMIT_REACHED',
+                            http: { status: 409 },
+                            count,
+                            limit: MAX_TIER_LISTS_PER_USER_PER_SEASON,
+                        },
+                    },
+                );
+            }
+
+            return repository.tierLists.createTierList({
+                userId: viewer.id,
+                seasonId: seasonIdStr,
+                tierRankableTypeId,
+                title,
+                tiers: DEFAULT_TIERS.map((t) => ({ ...t })),
+            });
+        },
+    }),
+);
+
+builder.mutationField('updateTierListTitle', (t) =>
+    t.field({
+        type: TierListRef,
+        description: 'Owner-only title update. Validates length.',
+        args: {
+            id: t.arg.id({ required: true }),
+            title: t.arg.string({ required: true }),
+        },
+        resolve: async (_root, { id, title }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            validateTitle(title);
+            const updated = await repository.tierLists.updateTierListTitle(
+                id as string,
+                title,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('updateTierListTiers', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            'Replace the tier scheme. Existing tier keys are preserved on rename; new tiers (those with no `key` in the input) get fresh keys. Items whose tier was removed are atomically rebased to `tierKey = null` (returned to the pool).',
+        args: {
+            id: t.arg.id({ required: true }),
+            tiers: t.arg({ type: [TierInput], required: true }),
+        },
+        resolve: async (_root, { id, tiers }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+
+            if (tiers.length < MIN_TIERS || tiers.length > MAX_TIERS) {
+                throw new GraphQLError(
+                    `Tier count must be between ${MIN_TIERS} and ${MAX_TIERS} (got ${tiers.length})`,
+                    {
+                        extensions: {
+                            code: 'INVALID_TIER_COUNT',
+                            http: { status: 400 },
+                            min: MIN_TIERS,
+                            max: MAX_TIERS,
+                            received: tiers.length,
+                        },
+                    },
+                );
+            }
+
+            const seenKeys = new Set<string>();
+            const resolved: Tier[] = tiers.map((t) => {
+                const key = t.key ?? newTierKey();
+                if (seenKeys.has(key)) {
+                    throw new GraphQLError(`Duplicate tier key: ${key}`, {
+                        extensions: { code: 'INVALID_TIER_COUNT', http: { status: 400 } },
+                    });
+                }
+                seenKeys.add(key);
+                if (t.name.trim().length === 0) {
+                    throw new GraphQLError('Tier name cannot be blank', {
+                        extensions: { code: 'INVALID_TIER_COUNT', http: { status: 400 } },
+                    });
+                }
+                return { key, name: t.name };
+            });
+
+            const updated = await repository.tierLists.updateTierListTiers(
+                id as string,
+                resolved,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('deleteTierList', (t) =>
+    t.id({
+        description:
+            'Soft-delete a tier list (sets `deletedAt`). Idempotent on already-deleted rows. Owner or admin only. Returns the tier list id.',
+        args: { id: t.arg.id({ required: true }) },
+        resolve: async (_root, { id }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({
+                id: id as string,
+                includeDeleted: true,
+            });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'delete',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            const deletedId = await repository.tierLists.softDeleteTierList(existing.id);
+            return deletedId ?? existing.id;
+        },
+    }),
+);
+
+// ----------------------------------------------------------------------
+// TierRankableItem mutations
+// ----------------------------------------------------------------------
+
+builder.mutationField('addTierRankableItem', (t) =>
+    t.field({
+        type: TierRankableItemRef,
+        description:
+            "Append a new item to the parent tier list. The client runs the recipe over a source row (fixture lineup for a coach, player row for a striker, …) to compute the projection and passes it here. Server validates the recipe match, source-pointer integrity, `teamId` FK, and the cap, then inserts the slot verbatim.",
+        args: { input: t.arg({ type: AddTierRankableItemInput, required: true }) },
+        resolve: async (_root, { input }, ctx) => {
+            assertViewer(ctx);
+            const parent = await repository.tierLists.getTierListById({
+                id: input.tierListId as string,
+            });
+            if (!parent) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: parent.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+
+            if (input.tierRankableTypeId !== parent.tierRankableTypeId) {
+                throw new GraphQLError(
+                    `Recipe '${input.tierRankableTypeId}' does not match tier list recipe '${parent.tierRankableTypeId}'`,
+                    {
+                        extensions: { code: 'RECIPE_MISMATCH', http: { status: 400 } },
+                    },
+                );
+            }
+
+            if (input.name.trim().length === 0) {
+                throw new GraphQLError('Item name cannot be blank', {
+                    extensions: { code: 'INVALID_ITEM', http: { status: 400 } },
+                });
+            }
+            if (input.naturalKey.trim().length === 0) {
+                throw new GraphQLError('Natural key cannot be blank', {
+                    extensions: { code: 'INVALID_ITEM', http: { status: 400 } },
+                });
+            }
+
+            // Source-pointer contract: both null or both set. Surfaced as a
+            // typed error so the client can show a meaningful message rather
+            // than a generic 23514 CHECK violation from Postgres.
+            const sourceTypeSet =
+                input.sourceType !== null && input.sourceType !== undefined;
+            const sourceIdSet = input.sourceId !== null && input.sourceId !== undefined;
+            if (sourceTypeSet !== sourceIdSet) {
+                throw new GraphQLError(
+                    'sourceType and sourceId must be set together (or both null for a freeform item)',
+                    {
+                        extensions: { code: 'INVALID_SOURCE_POINTER', http: { status: 400 } },
+                    },
+                );
+            }
+
+            const teamId = (input.teamId as string | null | undefined) ?? null;
+            if (teamId) {
+                const team = await ctx.loaders.teamLoader.load(teamId);
+                if (!team) {
+                    throw new GraphQLError('teamId does not reference a known team', {
+                        extensions: { code: 'TEAM_NOT_FOUND', http: { status: 400 } },
+                    });
+                }
+            }
+
+            const count = await repository.tierLists.countItemsForTierList(parent.id);
+            if (count >= MAX_ITEMS_PER_TIER_LIST) {
+                throw new GraphQLError(
+                    `Item limit reached for this tier list (${count}/${MAX_ITEMS_PER_TIER_LIST})`,
+                    {
+                        extensions: {
+                            code: 'ITEM_LIMIT_REACHED',
+                            http: { status: 409 },
+                            count,
+                            limit: MAX_ITEMS_PER_TIER_LIST,
+                        },
+                    },
+                );
+            }
+
+            return repository.tierLists.addTierRankableItem({
+                tierListId: parent.id,
+                tierRankableTypeId: input.tierRankableTypeId,
+                naturalKey: input.naturalKey,
+                name: input.name,
+                imageUrl: input.imageUrl ?? null,
+                teamId,
+                sourceType: input.sourceType ?? null,
+                sourceId: (input.sourceId as string | null | undefined) ?? null,
+                sourcePath: input.sourcePath ?? null,
+            });
+        },
+    }),
+);
+
+builder.mutationField('updateTierRankableItemOverrides', (t) =>
+    t.field({
+        type: TierRankableItemRef,
+        description:
+            'Update the per-user overrides on a tier rankable item (name, image, subtitle). Pass `null` to clear an override, omit the field to leave it untouched. Owner only.',
+        args: {
+            input: t.arg({ type: UpdateTierRankableItemOverridesInput, required: true }),
+        },
+        resolve: async (_root, { input }, ctx) => {
+            assertViewer(ctx);
+            const item = await repository.tierLists.getTierRankableItemById({
+                itemId: input.itemId as string,
+            });
+            if (!item) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            const parent = await repository.tierLists.getTierListById({ id: item.tierListId });
+            if (!parent) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: parent.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            const updated = await repository.tierLists.updateTierRankableItemOverrides({
+                itemId: item.id,
+                nameOverride: input.nameOverride === undefined ? undefined : input.nameOverride,
+                imageUrlOverride:
+                    input.imageUrlOverride === undefined ? undefined : input.imageUrlOverride,
+                subtitle: input.subtitle === undefined ? undefined : input.subtitle,
+            });
+            if (!updated) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('removeTierRankableItem', (t) =>
+    t.id({
+        description:
+            'Soft-delete an item (sets `deletedAt`). Idempotent on already-deleted items. Returns the item id.',
+        args: { itemId: t.arg.id({ required: true }) },
+        resolve: async (_root, { itemId }, ctx) => {
+            assertViewer(ctx);
+            const item = await repository.tierLists.getTierRankableItemById({
+                itemId: itemId as string,
+                includeDeleted: true,
+            });
+            if (!item) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            const parent = await repository.tierLists.getTierListById({
+                id: item.tierListId,
+                includeDeleted: true,
+            });
+            if (!parent) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: parent.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            const deletedId = await repository.tierLists.softDeleteTierRankableItem(item.id);
+            return deletedId ?? item.id;
+        },
+    }),
+);
+
+builder.mutationField('moveTierRankableItem', (t) =>
+    t.field({
+        type: TierRankableItemRef,
+        description:
+            'Move an item to a new (tierKey, position). `tierKey = null` puts it back in the pool. Handles all four cases: pool→tier, tier→tier, tier→pool, reorder within row.',
+        args: {
+            itemId: t.arg.id({ required: true }),
+            tierKey: t.arg.string({ required: false }),
+            position: t.arg.float({ required: true }),
+        },
+        resolve: async (_root, { itemId, tierKey, position }, ctx) => {
+            assertViewer(ctx);
+            const item = await repository.tierLists.getTierRankableItemById({
+                itemId: itemId as string,
+            });
+            if (!item) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            const parent = await repository.tierLists.getTierListById({ id: item.tierListId });
+            if (!parent) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: parent.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+
+            if (tierKey !== null && tierKey !== undefined) {
+                const known = parent.tiers.some((t) => t.key === tierKey);
+                if (!known) {
+                    throw new GraphQLError(`Unknown tier key: ${tierKey}`, {
+                        extensions: {
+                            code: 'UNKNOWN_TIER_KEY',
+                            http: { status: 400 },
+                            tierKey,
+                        },
+                    });
+                }
+            }
+
+            const moved = await repository.tierLists.moveTierRankableItem({
+                itemId: item.id,
+                tierKey: tierKey ?? null,
+                position,
+            });
+            if (!moved) {
+                throw new GraphQLError('Item not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return moved;
+        },
+    }),
+);
