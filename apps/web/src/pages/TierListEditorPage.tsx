@@ -13,7 +13,6 @@ import {
     MOVE_TIER_RANKABLE_ITEM_MUTATION,
     REMOVE_TIER_RANKABLE_ITEM_MUTATION,
     TIER_LIST_QUERY,
-    UPDATE_TIER_LIST_TITLE_MUTATION,
 } from '../components/tier-lists/queries';
 
 type EditorView = 'board' | 'config';
@@ -42,7 +41,6 @@ const TierListEditorPage: React.FC = () => {
 
     const list = result.data?.tierList ?? null;
 
-    const [, updateTitleMutation] = useMutation(UPDATE_TIER_LIST_TITLE_MUTATION);
     const [, moveItemMutation] = useMutation(MOVE_TIER_RANKABLE_ITEM_MUTATION);
     const [, removeItemMutation] = useMutation(REMOVE_TIER_RANKABLE_ITEM_MUTATION);
 
@@ -85,10 +83,6 @@ const TierListEditorPage: React.FC = () => {
 
     const refetchList = () => refetch({ requestPolicy: 'network-only' });
 
-    const handleRenameTitle = async (title: string) => {
-        await updateTitleMutation({ id: list.id, title });
-    };
-
     const handleMove = async (itemId: string, tierKey: string | null, position: number) => {
         setMoveError(null);
         const result = await moveItemMutation({ itemId, tierKey, position });
@@ -122,8 +116,6 @@ const TierListEditorPage: React.FC = () => {
                 view={view}
                 onOpenConfig={() => setView('config')}
                 onBackToBoard={() => setView('board')}
-                onRenameTitle={handleRenameTitle}
-                onToggleLock={refetchList}
             />
             {moveError && (
                 <div
