@@ -156,54 +156,71 @@ const TierListBoard: React.FC<Props> = ({
 
         const overId = String(over.id);
 
-        // Resolve the destination tier (null = pool) and the row's
-        // siblings sorted by position. Two cases:
-        //   1. Drop on a row container ("__pool__" / "tier:X") — append
-        //      to that row.
-        //   2. Drop on another item — insert at that item's position.
+        // Resolve the destination row + where in it the item should land
+        // as `(targetTierKey, siblings, insertAt)` where `siblings` is
+        // the destination row WITHOUT the active item.
+        //
+        // Three cases:
+        //   1. Drop on a row container ("__pool__" / "tier:X") → append.
+        //   2. Drop on an item in a DIFFERENT row → insert at that
+        //      item's slot (pushes over-item to the right).
+        //   3. Drop on an item in the SAME row → reorder. The drop side
+        //      is inferred from the active vs. over index direction:
+        //      dragging right-onto inserts AFTER over, dragging left-
+        //      onto inserts BEFORE over. Matches @dnd-kit/sortable's
+        //      arrayMove convention so the visual slide-out during
+        //      drag matches the saved order on drop.
         let targetTierKey: string | null;
-        let siblingsBeforeRemove: TierRankableItem[];
-        let insertIndex: number;
+        let siblings: TierRankableItem[];
+        let insertAt: number;
 
-        if (overId === POOL_DROP_ID) {
-            targetTierKey = null;
-            siblingsBeforeRemove = pool;
-            insertIndex = pool.length;
-        } else if (overId.startsWith('tier:')) {
-            targetTierKey = overId.slice('tier:'.length);
-            siblingsBeforeRemove = byTier.get(targetTierKey) ?? [];
-            insertIndex = siblingsBeforeRemove.length;
+        if (overId === POOL_DROP_ID || overId.startsWith('tier:')) {
+            targetTierKey = overId === POOL_DROP_ID ? null : overId.slice('tier:'.length);
+            const destItems =
+                targetTierKey === null ? pool : (byTier.get(targetTierKey) ?? []);
+            siblings = destItems.filter((i) => i.id !== item.id);
+            insertAt = siblings.length;
         } else {
-            // Dropped on another item — pick its row + index.
             const overItem = itemsById.get(overId);
             if (!overItem) return;
+            // Dropping on yourself is always a no-op (also catches the
+            // pointer-up-without-moving case from the activation gap).
+            if (overItem.id === item.id) return;
+
             targetTierKey = overItem.tierKey;
-            siblingsBeforeRemove =
-                targetTierKey === null
-                    ? pool
-                    : (byTier.get(targetTierKey) ?? []);
-            insertIndex = siblingsBeforeRemove.findIndex((i) => i.id === overItem.id);
-            if (insertIndex < 0) insertIndex = siblingsBeforeRemove.length;
+            const destItems =
+                targetTierKey === null ? pool : (byTier.get(targetTierKey) ?? []);
+            const overIdx = destItems.findIndex((i) => i.id === overItem.id);
+            if (overIdx < 0) return;
+
+            if (item.tierKey === targetTierKey) {
+                // Same-row reorder: trim self, compute insertion side.
+                const activeIdx = destItems.findIndex((i) => i.id === item.id);
+                if (activeIdx === overIdx) return;
+                siblings = destItems.filter((_, i) => i !== activeIdx);
+                const overInTrimmed = overIdx > activeIdx ? overIdx - 1 : overIdx;
+                // Dragging from the left onto over → land AFTER over.
+                // Dragging from the right onto over → land BEFORE over.
+                insertAt = activeIdx < overIdx ? overInTrimmed + 1 : overInTrimmed;
+            } else {
+                // Cross-row drop on an item — take that slot, pushing
+                // the over-item right.
+                siblings = destItems;
+                insertAt = overIdx;
+            }
         }
 
-        // For position math we need siblings as they'd look AFTER the
-        // active item is removed from its current row. Same-row drags
-        // also need their target index adjusted: if the active item
-        // was at i < insertIndex in the original list, the index in
-        // the trimmed list shifts down by one.
-        const siblings = siblingsBeforeRemove.filter((i) => i.id !== item.id);
-        const originalIndex = siblingsBeforeRemove.findIndex((i) => i.id === item.id);
-        let adjustedIndex = insertIndex;
-        if (item.tierKey === targetTierKey && originalIndex >= 0 && originalIndex < insertIndex) {
-            adjustedIndex -= 1;
-        }
+        const nextPosition = positionForInsert(siblings, insertAt);
 
-        // No-op: dropped on its own current slot.
-        if (item.tierKey === targetTierKey && originalIndex === adjustedIndex) {
+        // No-op detection (cross-row drops are always real moves; only
+        // same-row needs this guard).
+        if (
+            item.tierKey === targetTierKey &&
+            Math.abs(item.position - nextPosition) < Number.EPSILON
+        ) {
             return;
         }
 
-        const nextPosition = positionForInsert(siblings, adjustedIndex);
         onMoveItem(item.id, targetTierKey, nextPosition);
     };
 
@@ -299,12 +316,15 @@ const TierListBoard: React.FC<Props> = ({
                                             {...attributes}
                                             {...listeners}
                                         >
+                                            {/* Pool items on the main page are not
+                                                removable — pool composition lives in
+                                                the config view. Drag into a tier
+                                                here; remove from config. */}
                                             <TierItemCard
                                                 item={it}
                                                 showTeamName={list.displayConfig.showTeamNames}
                                                 showTeamLogo={list.displayConfig.showTeamLogos}
                                                 isLocked={list.isLocked}
-                                                onRemove={() => onRemoveItem(it.id)}
                                                 onEdit={() => onOpenItemEditor(it.id)}
                                             />
                                         </div>

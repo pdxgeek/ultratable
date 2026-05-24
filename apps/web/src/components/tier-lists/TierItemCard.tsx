@@ -62,7 +62,7 @@ const TierItemCard: React.FC<Props> = ({
                 <img
                     src={item.team.logo}
                     alt=""
-                    className="pointer-events-none absolute -top-5 -left-5 w-10 h-10 rounded-full bg-white ring-1 ring-black/10 object-contain shadow-md"
+                    className="pointer-events-none absolute -top-[15px] -left-[15px] w-[30px] h-[30px] rounded-full bg-white ring-1 ring-black/10 object-contain shadow-md"
                     draggable={false}
                 />
             )}
