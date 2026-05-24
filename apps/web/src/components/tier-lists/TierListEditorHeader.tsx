@@ -1,8 +1,7 @@
 import type { TierListEditorRow } from './queries';
 
 import React from 'react';
-
-import { Button } from '../ui/button';
+import { ArrowLeft, Settings } from 'lucide-react';
 
 interface Props {
     list: TierListEditorRow;
@@ -25,11 +24,14 @@ function formatRelative(iso: string): string {
 }
 
 /**
- * Top row of the editor — title + meta + Config/Back toggle. Display-only;
- * every list-level edit (title rename, recipe display, tier scheme,
- * display toggles, lock, delete) lives in the config view. The header
- * surfaces the lock state for awareness but the toggle itself is in
- * config — keeps "all edits in one place" honest.
+ * Top row of the editor — title + meta + a subtle gear icon on the left
+ * for config. Display-only otherwise; every list-level edit lives in
+ * the config view. The lock state surfaces in the meta line for
+ * awareness but the toggle itself is in config — keeps "all edits in
+ * one place" honest.
+ *
+ * Layout: icon button on the left, title + meta to its right. In the
+ * config view the icon flips to an arrow-left to return to the board.
  */
 const TierListEditorHeader: React.FC<Props> = ({
     list,
@@ -37,8 +39,18 @@ const TierListEditorHeader: React.FC<Props> = ({
     onOpenConfig,
     onBackToBoard,
 }) => {
+    const isConfig = view === 'config';
     return (
-        <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <header className="mb-6 flex items-start gap-3">
+            <button
+                type="button"
+                onClick={isConfig ? onBackToBoard : onOpenConfig}
+                aria-label={isConfig ? 'Back to tier list' : 'Open list config'}
+                title={isConfig ? 'Back to tier list' : 'Open list config'}
+                className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-muted/40 hover:text-foreground"
+            >
+                {isConfig ? <ArrowLeft className="h-4 w-4" /> : <Settings className="h-4 w-4" />}
+            </button>
             <div className="flex-1 min-w-0">
                 <h1 className="text-[2rem] max-sm:text-[1.6rem] font-extrabold tracking-tight break-words">
                     {list.title}
@@ -59,17 +71,6 @@ const TierListEditorHeader: React.FC<Props> = ({
                         </>
                     )}
                 </div>
-            </div>
-            <div className="flex gap-2 shrink-0">
-                {view === 'config' ? (
-                    <Button type="button" variant="outline" onClick={onBackToBoard}>
-                        ← Back to list
-                    </Button>
-                ) : (
-                    <Button type="button" variant="outline" onClick={onOpenConfig}>
-                        Config
-                    </Button>
-                )}
             </div>
         </header>
     );
