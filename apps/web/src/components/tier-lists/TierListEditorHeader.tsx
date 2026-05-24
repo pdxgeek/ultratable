@@ -24,14 +24,15 @@ function formatRelative(iso: string): string {
 }
 
 /**
- * Top row of the editor — title + meta + a subtle gear icon on the left
- * for config. Display-only otherwise; every list-level edit lives in
- * the config view. The lock state surfaces in the meta line for
- * awareness but the toggle itself is in config — keeps "all edits in
- * one place" honest.
+ * Top row of the editor — title + meta line. Display-only otherwise;
+ * every list-level edit lives in the config view. The lock state
+ * surfaces in the meta line for awareness but the toggle itself is
+ * in config — keeps "all edits in one place" honest.
  *
- * Layout: icon button on the left, title + meta to its right. In the
- * config view the icon flips to an arrow-left to return to the board.
+ * The Settings / Back-to-list affordance is the leading item in the
+ * meta line as an icon + label, blending into the same row as the
+ * recipe / edited / locked metadata instead of floating as a
+ * standalone button.
  */
 const TierListEditorHeader: React.FC<Props> = ({
     list,
@@ -41,36 +42,39 @@ const TierListEditorHeader: React.FC<Props> = ({
 }) => {
     const isConfig = view === 'config';
     return (
-        <header className="mb-6 flex items-start gap-3">
-            <button
-                type="button"
-                onClick={isConfig ? onBackToBoard : onOpenConfig}
-                aria-label={isConfig ? 'Back to tier list' : 'Open list config'}
-                title={isConfig ? 'Back to tier list' : 'Open list config'}
-                className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-muted/40 hover:text-foreground"
-            >
-                {isConfig ? <ArrowLeft className="h-4 w-4" /> : <Settings className="h-4 w-4" />}
-            </button>
-            <div className="flex-1 min-w-0">
-                <h1 className="text-[2rem] max-sm:text-[1.6rem] font-extrabold tracking-tight break-words">
-                    {list.title}
-                </h1>
-                <div className="text-sm text-text-muted mt-1 flex items-center gap-3 flex-wrap">
-                    <span>{list.tierRankableType?.name ?? 'Unknown recipe'}</span>
-                    <span>·</span>
-                    <span>Edited {formatRelative(list.updatedAt)}</span>
-                    {list.isLocked && (
-                        <>
-                            <span>·</span>
-                            <span
-                                className="text-[0.65rem] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
-                                title="This list is locked — open Config to unlock"
-                            >
-                                Locked
-                            </span>
-                        </>
+        <header className="mb-6">
+            <h1 className="text-[2rem] max-sm:text-[1.6rem] font-extrabold tracking-tight break-words">
+                {list.title}
+            </h1>
+            <div className="text-sm text-text-muted mt-1 flex items-center gap-3 flex-wrap">
+                <button
+                    type="button"
+                    onClick={isConfig ? onBackToBoard : onOpenConfig}
+                    aria-label={isConfig ? 'Back to tier list' : 'Open list settings'}
+                    className="inline-flex items-center gap-1 text-text-muted hover:text-foreground transition-colors"
+                >
+                    {isConfig ? (
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                    ) : (
+                        <Settings className="h-3.5 w-3.5" />
                     )}
-                </div>
+                    <span>{isConfig ? 'Back to list' : 'Settings'}</span>
+                </button>
+                <span>·</span>
+                <span>{list.tierRankableType?.name ?? 'Unknown recipe'}</span>
+                <span>·</span>
+                <span>Edited {formatRelative(list.updatedAt)}</span>
+                {list.isLocked && (
+                    <>
+                        <span>·</span>
+                        <span
+                            className="text-[0.65rem] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                            title="This list is locked — open Settings to unlock"
+                        >
+                            Locked
+                        </span>
+                    </>
+                )}
             </div>
         </header>
     );
