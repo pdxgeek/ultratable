@@ -483,6 +483,10 @@ const start = async () => {
         await seedRankingFormulas();
     } catch (err) {
         server.log.error(err);
+        // server.log might not flush before exit; mirror to stderr so
+        // the boot failure is visible in dev terminals + nodemon output.
+        // eslint-disable-next-line no-console
+        console.error('Boot failure:', err);
         process.exit(1);
     }
 };
