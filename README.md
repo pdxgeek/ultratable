@@ -57,6 +57,9 @@ The wedge for the paid product. Streamers want to make a prediction live on came
 
 - **Lock-in and history**. When the streamer hits *Lock in*, the prediction becomes an immutable snapshot. The history panel lets them re-load a previous snapshot to compare against the live table.
 - **Tier Lists** (recipe-registry-backed; see [apps/service/src/schema/tier-lists.ts](apps/service/src/schema/tier-lists.ts)) — the same drag-and-drop primitive, now generalized so any `TierRankableType` (teams, players, fixtures, future entities) plugs in.
+
+  ![Tier List ranking — Best Coaches](docs/screenshots/ranking.png)
+
 - **Stream Overlays** are next on the roadmap — thin, low-latency overlay renderers that read from the same GraphQL surface. The data layer is already designed for them; see [Roadmap](#roadmap).
 
 ### Operator console
@@ -106,7 +109,7 @@ Most of this section links to the actual file where the decision is enforced. Cl
 
 ### The architectural contracts
 
-These are the **non-negotiable rules** I codified for the codebase. Every one of them came from a hard-won bug or a foreseeable footgun. They live in [AI_README_FIRST.MD](AI_README_FIRST.MD) so both human contributors and AI agents inherit the same guardrails.
+These are the **non-negotiable rules** I codified for the codebase. Every one of them came from a hard-won bug or a foreseeable failure mode. They live in [AI_README_FIRST.MD](AI_README_FIRST.MD) so both human contributors and AI agents inherit the same guardrails.
 
 - **Dual-ID system.** Every internal row is a Postgres UUID. External provider IDs (API-Football's league `40`, etc.) only live in `source_id` columns and are never accepted where a UUID is expected. GraphQL args that take a provider ID use a `sourceId` suffix, and **every** schema field has a `description` documenting which kind of ID it expects. A `schema-descriptions.test.ts` asserts that. ([AI_README_FIRST.MD §1](AI_README_FIRST.MD))
 - **Hybrid SQL + JSONB schema.** A column only exists if the database needs to join on it, index it, filter on it, or sort by it. Everything else lives in `metadata: jsonb`. Display fields don't get migrations.
@@ -114,25 +117,25 @@ These are the **non-negotiable rules** I codified for the codebase. Every one of
 - **Storage-agnostic repository facade.** Every resolver imports `{ repository }` from [`apps/service/src/repositories`](apps/service/src/repositories) — a runtime singleton typed against an interface. The Postgres backend lives in `repositories/postgres/` as per-domain sub-repos. Swapping the backend is a single-line change at the index file; resolvers never know.
 - **DataLoader is mandatory for nested resolvers.** Any field that fetches a row by ID from a parent's foreign key (`Fixture.homeTeam`, `Team.venue`, …) goes through a per-request DataLoader in [`apps/service/src/loaders/index.ts`](apps/service/src/loaders/index.ts). The rule exists because direct `db.select().where(eq(id, parent.fooId))` is the silent N+1 that takes a list query from 50ms to 5s.
 - **Two-tier identity model.** `auth_user` is *who you are with a provider*; `user` is *the account you own in our system*; `auth_link` bridges many → one. **The bootstrap hook never auto-merges by email** — explicit linking is the only path. Anyone who creates a Google account at your address can't merge into your account.
-- **Authorization goes through CASL, never inline role checks.** A single per-request `ctx.ability` decides every gate on the server; the same rule shape is mirrored to both frontends so the "button appears but the click 403s" footgun can't happen.
+- **Authorization goes through CASL, never inline role checks.** A single per-request `ctx.ability` decides every gate on the server; the same rule shape is mirrored to both frontends so the "button appears but the click 403s" class of bug can't happen.
 
 ### Backend craft
 
-- **GraphQL surface is split by domain** ([football.ts](apps/service/src/schema/football.ts), [predictions.ts](apps/service/src/schema/predictions.ts), [tier-lists.ts](apps/service/src/schema/tier-lists.ts), [catalog.ts](apps/service/src/schema/catalog.ts), [graphics.ts](apps/service/src/schema/graphics.ts), [workers.ts](apps/service/src/schema/workers.ts), [viewer.ts](apps/service/src/schema/viewer.ts), [account.ts](apps/service/src/schema/account.ts), [config.ts](apps/service/src/schema/config.ts), [seasonConfig.ts](apps/service/src/schema/seasonConfig.ts)). One Pothos builder, multiple modules — no 5000-line god-schema. The playground is mounted in non-prod for hands-on exploration:
+- **GraphQL surface is split by domain** ([football.ts](apps/service/src/schema/football.ts), [predictions.ts](apps/service/src/schema/predictions.ts), [tier-lists.ts](apps/service/src/schema/tier-lists.ts), [catalog.ts](apps/service/src/schema/catalog.ts), [graphics.ts](apps/service/src/schema/graphics.ts), [workers.ts](apps/service/src/schema/workers.ts), [viewer.ts](apps/service/src/schema/viewer.ts), [account.ts](apps/service/src/schema/account.ts), [config.ts](apps/service/src/schema/config.ts), [seasonConfig.ts](apps/service/src/schema/seasonConfig.ts)). One Pothos builder, multiple modules — no 5000-line monolithic schema. The playground is mounted in non-prod for hands-on exploration:
 
-  ![GraphQL Yoga playground with viewer + leagues query](docs/screenshots/graphql-playground.png)
+  ![GraphQL Yoga playground with schema explorer and a sample query](docs/screenshots/graphql-playground2.png)
 
 - **Cache isolation pattern.** Raw API responses live in an LRU keyed by `[endpoint]_[remoteId]_[season]`. Mapped domain lists live in a separate cache keyed by **internal UUID** (`domain_fixtures_<uuid>`). Deleting + recreating a league instantly clears the domain cache for that instance without touching the raw cache, so we don't re-pay the upstream API call. The two never collide. ([AI_README_FIRST.MD §3–4](AI_README_FIRST.MD))
 - **Workers are first-class.** Job + execution rows are real entities in the schema with their own resolvers, so the admin console doesn't need a side-channel — it queries the same GraphQL. Execution records carry `processedCount` / `totalCount` / `apiCallsCount` so I can see exactly how expensive an import was.
 - **Recipe registry for ranking types.** The Tier Lists feature is built on a `TierRankableType` registry rather than a switch statement. Adding "rank players by goals" is a registration, not a schema migration.
 - **Drizzle migrations are the canonical workflow.** `db:generate` → commit the SQL → `db:migrate`. `db:push` exists as an escape hatch and `db:bootstrap` exists to stamp `__drizzle_migrations` on databases that were originally set up via push. The bootstrap script is **idempotent** — that matters because the rollout for issue [#99](../../issues/99) had to upgrade existing dev DBs without forcing a wipe.
-- **Production-like local Docker.** [`docker-compose.yml`](docker-compose.yml) builds the service image the same way Fly does. I run `docker compose up --build -d service` periodically so the Dockerfile rots can't ambush a deploy.
+- **Production-like local Docker.** [`docker-compose.yml`](docker-compose.yml) builds the service image the same way Fly does. I run `docker compose up --build -d service` periodically so Dockerfile drift can't break a deploy.
 
 ### Frontend craft
 
 - **Two SPAs, never coupled at the source level.** `apps/admin` and `apps/web` may eventually deploy as separate containers. There are zero cross-app imports. shadcn/ui primitives are installed per-app via `npx shadcn add` — not copied between apps.
 - **Strict TS, no `any`, zero-warning lint.** Enforced in CI.
-- **Components stay small and testable.** No god `App.tsx`. The web `App.tsx` is 30 lines; routing fans out to focused page components which fan out to focused subcomponents (`PredictionHistoryPanel`, `ProjectedFinishBoard`, `SectionNav`, …).
+- **Components stay small and testable.** No monolithic `App.tsx`. The web `App.tsx` is 30 lines; routing fans out to focused page components which fan out to focused subcomponents (`PredictionHistoryPanel`, `ProjectedFinishBoard`, `SectionNav`, …).
 - **The viewer query never throws.** `Query.viewer` returns `null` when unauthenticated. Frontends render a signed-out state without try/catch, and [viewer.test.ts](apps/service/src/schema/viewer.test.ts) pins that contract.
 - **Tailwind v4 + shadcn theme variables.** One source of truth for design tokens per app; documented in [docs/frontend-patterns.md](docs/frontend-patterns.md).
 
@@ -144,7 +147,7 @@ These are the **non-negotiable rules** I codified for the codebase. Every one of
 - **The service passes `clientId: [adminId, webId]` to Better Auth** — its canonical cross-platform pattern. Tokens whose `aud` matches *either* client are accepted by the same backend.
 - **ID-token sign-in flow.** The browser uses Google Identity Services to fetch an ID token under its own client ID, then POSTs it to the service via `authClient.signIn.social({ provider: 'google', idToken: { token } })`. **No redirect to Google, no per-host dispatch on the service.**
 - **Each frontend's edge rewrite proxies `/api/auth/*` to the service** so the session cookie lives on the SPA's own origin (same-site, no `SameSite=None` gymnastics). `BETTER_AUTH_URL` is intentionally unset in production; Better Auth derives the base URL per request from `X-Forwarded-Host`, so each OAuth redirect URI stays on its frontend's hostname.
-- **CASL rules live in three files by design** (server + both frontends). They're 30 lines of pure data; a shared package would couple browser and Node bundles for no benefit. Drift is the classic "button renders, click 403s" footgun, so the [PR-review checklist](docs/auth-architecture.md) calls it out explicitly.
+- **CASL rules live in three files by design** (server + both frontends). They're 30 lines of pure data; a shared package would couple browser and Node bundles for no benefit. Drift is the classic "button renders, click 403s" pitfall, so the [PR-review checklist](docs/auth-architecture.md) calls it out explicitly.
 
 ### Tested where it matters
 
@@ -158,7 +161,7 @@ These are the **non-negotiable rules** I codified for the codebase. Every one of
 
 This codebase was built by one engineer (me) collaborating with AI coding agents. The agents move fast; my job is to make sure they move fast *in the right direction*. Two artifacts make that possible:
 
-- **[AI_README_FIRST.MD](AI_README_FIRST.MD)** — the architectural contracts above, written for an agent who joined the project five seconds ago. Naming conventions, ID rules, timestamp rules, hybrid-schema rules, DataLoader rule, CASL rule, the bootstrap-hook security footgun, the `/tmp/` rule for utility scripts. Agents read it before touching the schema or the data layer.
+- **[AI_README_FIRST.MD](AI_README_FIRST.MD)** — the architectural contracts above, written for an agent who joined the project five seconds ago. Naming conventions, ID rules, timestamp rules, hybrid-schema rules, DataLoader rule, CASL rule, the bootstrap-hook security pitfall, the `/tmp/` rule for utility scripts. Agents read it before touching the schema or the data layer.
 - **[CLAUDE.md](CLAUDE.md)** — the operating manual: what to run, where things live, when to re-run `npm run setup` instead of hand-editing `.env`, the never-`pkill` rule. Pure conventions, no architecture.
 
 The result is that an agent picking up a ticket inherits the same constraints a senior teammate would. The dual-ID rule, the DataLoader rule, the "never auto-link by email" rule — none of them have to be re-litigated per PR. **The architectural decisions amortize across every future change**, whether the change is mine or an agent's.

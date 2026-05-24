@@ -15,7 +15,8 @@ PNGs in this directory back the image references in the top-level [README.md](..
 | `admin-leagues.png`        | Admin Inventory — Catalog Browser with England selected, Championship marked Active.         |
 | `admin-workers.png`        | Admin Workers — active jobs, recent execution history with records + API call counts.        |
 | `admin-graphics.png`       | Admin Graphics — gallery of registered team / venue / league / player crests.                |
-| `graphql-playground.png`   | Yoga GraphiQL playground with a viewer + leagues query.                                      |
+| `graphql-playground2.png`  | Yoga GraphiQL playground — schema explorer panel with a sample `allSeasons` query.           |
+| `ranking.png`              | Tier List ranking view ("Best Coaches") with S/A/B/C/D rows and pool of unranked entries.    |
 
 ## Refreshing the screenshots
 

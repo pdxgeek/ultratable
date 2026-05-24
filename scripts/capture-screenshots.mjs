@@ -33,6 +33,11 @@ const VIEWPORT = { width: 1600, height: 1000 };
 // Pick a different one by querying GraphQL: `{ fixtures(seasonId:"…"){ id … } }`.
 const FEATURE_FIXTURE_ID = 'a50b2150-e972-4465-acb9-b6e6b746c595';
 
+// Tier list to feature on ranking.png. Has hand-curated graphics overrides
+// (custom coach portraits), so we pin by title rather than grabbing whichever
+// list happens to be first in the index.
+const TIER_LIST_TITLE = 'Best Coaches';
+
 await mkdir(OUT, { recursive: true });
 
 const browser = await puppeteer.launch({
@@ -120,6 +125,26 @@ try {
             timeout: 25000,
         });
         await shot(page, 'web-match-detail.png');
+
+        // Tier-list detail: pin to "Best Coaches" — that list has hand-curated
+        // graphics overrides and is the canonical shot for ranking.png.
+        await page.goto(`${WEB}/tier-lists`, { waitUntil: 'networkidle2', timeout: 20000 });
+        const tierListHref = await page.evaluate((title) => {
+            const links = Array.from(
+                document.querySelectorAll('a[href^="/tier-lists/"]'),
+            );
+            const match = links.find((a) => a.textContent?.trim().includes(title));
+            return match?.getAttribute('href') ?? null;
+        }, TIER_LIST_TITLE);
+        if (tierListHref) {
+            await page.goto(`${WEB}${tierListHref}`, {
+                waitUntil: 'networkidle2',
+                timeout: 20000,
+            });
+            await shot(page, 'ranking.png');
+        } else {
+            console.log(`  ⚠ "${TIER_LIST_TITLE}" tier list not found, skipping ranking.png`);
+        }
         await page.close();
     }
 
@@ -168,10 +193,26 @@ try {
         const page = await browser.newPage();
         await page.setViewport(VIEWPORT);
         const query = encodeURIComponent(
-            `query Demo {\n  viewer {\n    id\n    name\n    email\n    roles\n  }\n  leagues {\n    id\n    name\n    country\n  }\n}`,
+            [
+                'query Demo {',
+                '  viewer { id name email roles }',
+                '  leagues { id name country sourceId }',
+                '  allSeasons {',
+                '    id',
+                '    year',
+                '    leagueId',
+                '    teamCount',
+                '    fixtureCount',
+                '    startDate',
+                '    endDate',
+                '    teams { id name shortName }',
+                '  }',
+                '  rankingFormulas { id name description logicType }',
+                '}',
+            ].join('\n'),
         );
         await page.goto(`${GRAPHQL}?query=${query}`, { waitUntil: 'networkidle2', timeout: 20000 });
-        await shot(page, 'graphql-playground.png');
+        await shot(page, 'graphql-playground2.png');
         await page.close();
     }
 } finally {
