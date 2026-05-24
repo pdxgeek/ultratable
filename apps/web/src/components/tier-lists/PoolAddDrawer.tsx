@@ -83,26 +83,52 @@ const PoolAddDrawer: React.FC<Props> = ({ list, onClose, onAdded }) => {
         );
     }, [candidates, query]);
 
+    const inputForCandidate = (cand: TierRankableItemCandidate) => ({
+        tierListId: list.id,
+        tierRankableTypeId: cand.tierRankableTypeId,
+        naturalKey: cand.naturalKey,
+        name: cand.name,
+        imageUrl: cand.imageUrl,
+        teamId: cand.teamId,
+        sourceType: cand.sourceType,
+        sourceId: cand.sourceId,
+        sourcePath: cand.sourcePath,
+    });
+
     const handleAdd = async (cand: TierRankableItemCandidate) => {
         setError(null);
         setBusyKey(cand.naturalKey);
-        const result = await addMutation({
-            input: {
-                tierListId: list.id,
-                tierRankableTypeId: cand.tierRankableTypeId,
-                naturalKey: cand.naturalKey,
-                name: cand.name,
-                imageUrl: cand.imageUrl,
-                teamId: cand.teamId,
-                sourceType: cand.sourceType,
-                sourceId: cand.sourceId,
-                sourcePath: cand.sourcePath,
-            },
-        });
+        const result = await addMutation({ input: inputForCandidate(cand) });
         setBusyKey(null);
         if (result.error) {
             setError(result.error.graphQLErrors[0]?.message ?? result.error.message);
             return;
+        }
+        onAdded();
+    };
+
+    const [addingAll, setAddingAll] = useState(false);
+
+    const handleAddAll = async () => {
+        if (addingAll || filtered.length === 0) return;
+        setError(null);
+        setAddingAll(true);
+        // Fire in parallel — server's addOrRestore is idempotent on
+        // `(tierListId, naturalKey)` so duplicates collapse, and the
+        // item cap surfaces as a typed error on whichever calls cross
+        // it. Collect the first error to surface so the user sees
+        // something specific (e.g. ITEM_LIMIT_REACHED).
+        const results = await Promise.all(
+            filtered.map((cand) =>
+                addMutation({ input: inputForCandidate(cand) }),
+            ),
+        );
+        setAddingAll(false);
+        const firstError = results.find((r) => r.error)?.error;
+        if (firstError) {
+            setError(
+                firstError.graphQLErrors[0]?.message ?? firstError.message,
+            );
         }
         onAdded();
     };
@@ -132,12 +158,28 @@ const PoolAddDrawer: React.FC<Props> = ({ list, onClose, onAdded }) => {
                         restored if you add them again.
                     </DialogDescription>
                 </DialogHeader>
-                <Input
-                    autoFocus
-                    placeholder="Search…"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                    <Input
+                        autoFocus
+                        placeholder="Search…"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        className="flex-1"
+                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handleAddAll()}
+                        disabled={addingAll || loading || filtered.length === 0}
+                        title={
+                            query.trim().length > 0
+                                ? `Add all ${filtered.length} matches`
+                                : `Add all ${filtered.length}`
+                        }
+                    >
+                        {addingAll ? 'Adding…' : `Add all (${filtered.length})`}
+                    </Button>
+                </div>
                 {(error || fetchError) && (
                     <p className="text-sm text-destructive" role="alert">
                         {error ?? fetchError}
