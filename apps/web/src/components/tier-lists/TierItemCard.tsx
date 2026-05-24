@@ -53,15 +53,19 @@ const TierItemCard: React.FC<Props> = ({
                         {item.displayName.slice(0, 2).toUpperCase()}
                     </span>
                 )}
-                {showTeamLogo && item.team?.logo && (
-                    <img
-                        src={item.team.logo}
-                        alt=""
-                        className="absolute top-1 left-1 w-5 h-5 rounded-full bg-white ring-1 ring-black/10 object-contain"
-                        draggable={false}
-                    />
-                )}
             </button>
+            {showTeamLogo && item.team?.logo && (
+                // Outside the overflow-hidden button so three quadrants of
+                // the badge can poke past the thumbnail border. Centred on
+                // the top-left corner of the thumbnail (offset = badge/2)
+                // so only the bottom-right quadrant overlaps the image.
+                <img
+                    src={item.team.logo}
+                    alt=""
+                    className="pointer-events-none absolute -top-5 -left-5 w-10 h-10 rounded-full bg-white ring-1 ring-black/10 object-contain shadow-md"
+                    draggable={false}
+                />
+            )}
             {interactive && onRemove && (
                 <button
                     type="button"
