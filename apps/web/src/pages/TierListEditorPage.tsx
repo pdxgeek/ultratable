@@ -111,6 +111,8 @@ const TierListEditorPage: React.FC = () => {
                     list={list}
                     onChanged={refetchList}
                     onBack={() => setView('board')}
+                    onOpenAddDrawer={() => setShowAddDrawer(true)}
+                    onRemoveItem={handleRemove}
                 />
             ) : (
                 <TierListBoard
@@ -118,7 +120,6 @@ const TierListEditorPage: React.FC = () => {
                     onMoveItem={handleMove}
                     onRemoveItem={handleRemove}
                     onOpenItemEditor={(itemId) => setEditingItemId(itemId)}
-                    onOpenAddDrawer={() => setShowAddDrawer(true)}
                 />
             )}
             {showAddDrawer && (

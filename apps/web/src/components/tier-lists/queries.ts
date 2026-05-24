@@ -13,6 +13,7 @@ export interface Tier {
 
 export interface TierListDisplayConfig {
     showTeamNames: boolean;
+    showTeamLogos: boolean;
 }
 
 export interface TierRankableTypeRef {
@@ -128,7 +129,7 @@ export const TIER_LIST_QUERY = gql`
             seasonId
             title
             tiers { key name }
-            displayConfig { showTeamNames }
+            displayConfig { showTeamNames showTeamLogos }
             isLocked
             updatedAt
             tierRankableTypeId
@@ -182,7 +183,7 @@ export const UPDATE_TIER_LIST_DISPLAY_CONFIG_MUTATION = gql`
     ) {
         updateTierListDisplayConfig(id: $id, displayConfig: $displayConfig) {
             id
-            displayConfig { showTeamNames }
+            displayConfig { showTeamNames showTeamLogos }
             updatedAt
         }
     }

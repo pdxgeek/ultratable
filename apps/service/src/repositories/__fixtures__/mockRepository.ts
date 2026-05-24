@@ -195,7 +195,7 @@ export function buildMockTierLists(
         tierRankableTypeId: 'coach',
         title: 'Mock Tier List',
         tiers: [],
-        displayConfig: { showTeamNames: true },
+        displayConfig: { showTeamNames: true, showTeamLogos: true },
         isLocked: false,
         createdAt: now,
         updatedAt: now,

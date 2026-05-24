@@ -5,6 +5,7 @@ import React from 'react';
 interface Props {
     item: TierRankableItem;
     showTeamName: boolean;
+    showTeamLogo: boolean;
     isLocked: boolean;
     onRemove?: () => void;
     onEdit?: () => void;
@@ -24,6 +25,7 @@ interface Props {
 const TierItemCard: React.FC<Props> = ({
     item,
     showTeamName,
+    showTeamLogo,
     isLocked,
     onRemove,
     onEdit,
@@ -51,7 +53,7 @@ const TierItemCard: React.FC<Props> = ({
                         {item.displayName.slice(0, 2).toUpperCase()}
                     </span>
                 )}
-                {item.team?.logo && (
+                {showTeamLogo && item.team?.logo && (
                     <img
                         src={item.team.logo}
                         alt=""

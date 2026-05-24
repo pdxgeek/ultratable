@@ -30,7 +30,6 @@ interface Props {
     onMoveItem: (itemId: string, tierKey: string | null, position: number) => void;
     onRemoveItem: (itemId: string) => void;
     onOpenItemEditor: (itemId: string) => void;
-    onOpenAddDrawer: () => void;
 }
 
 /** Bucket items by their tierKey. `null` key = pool. */
@@ -128,7 +127,6 @@ const TierListBoard: React.FC<Props> = ({
     onMoveItem,
     onRemoveItem,
     onOpenItemEditor,
-    onOpenAddDrawer,
 }) => {
     const { pool, byTier } = useMemo(() => bucketItems(list.items), [list.items]);
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -257,6 +255,9 @@ const TierListBoard: React.FC<Props> = ({
                                                         showTeamName={
                                                             list.displayConfig.showTeamNames
                                                         }
+                                                        showTeamLogo={
+                                                            list.displayConfig.showTeamLogos
+                                                        }
                                                         isLocked={list.isLocked}
                                                         onRemove={() => onRemoveItem(it.id)}
                                                         onEdit={() => onOpenItemEditor(it.id)}
@@ -273,27 +274,16 @@ const TierListBoard: React.FC<Props> = ({
             </div>
 
             <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
-                        Pool
-                    </h2>
-                    {interactive && (
-                        <button
-                            type="button"
-                            onClick={onOpenAddDrawer}
-                            className="px-3 py-1.5 rounded-[20px] border border-accent-green text-xs font-semibold bg-accent-green text-white hover:brightness-110"
-                        >
-                            + Add items
-                        </button>
-                    )}
-                </div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-2">
+                    Pool
+                </h2>
                 <DropRow
                     id={POOL_DROP_ID}
                     className="rounded-lg border border-dashed border-glass-border bg-glass-bg/40 min-h-[120px] p-3 flex flex-wrap gap-3 transition-colors"
                 >
                     {pool.length === 0 ? (
                         <p className="text-xs text-text-muted">
-                            Pool is empty. Click <strong>+ Add items</strong> to search.
+                            Pool is empty. Open <strong>Config</strong> to add items.
                         </p>
                     ) : (
                         <SortableContext
@@ -312,6 +302,7 @@ const TierListBoard: React.FC<Props> = ({
                                             <TierItemCard
                                                 item={it}
                                                 showTeamName={list.displayConfig.showTeamNames}
+                                                showTeamLogo={list.displayConfig.showTeamLogos}
                                                 isLocked={list.isLocked}
                                                 onRemove={() => onRemoveItem(it.id)}
                                                 onEdit={() => onOpenItemEditor(it.id)}
@@ -330,6 +321,7 @@ const TierListBoard: React.FC<Props> = ({
                     <TierItemCard
                         item={activeItem}
                         showTeamName={list.displayConfig.showTeamNames}
+                        showTeamLogo={list.displayConfig.showTeamLogos}
                         isLocked={false}
                         isOverlay
                     />

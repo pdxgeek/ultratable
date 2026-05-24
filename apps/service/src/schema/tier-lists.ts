@@ -65,6 +65,10 @@ const TierListDisplayConfigRef = builder.simpleObject('TierListDisplayConfig', {
             description:
                 "When true, the editor renders the team name label under each item thumbnail.",
         }),
+        showTeamLogos: t.boolean({
+            description:
+                "When true, the editor renders the team crest as a corner badge on the item thumbnail.",
+        }),
     }),
 });
 
@@ -73,6 +77,7 @@ const TierListDisplayConfigInput = builder.inputType('TierListDisplayConfigInput
         "Patch for `updateTierListDisplayConfig`. Pass the full desired shape — server normalises and persists.",
     fields: (t) => ({
         showTeamNames: t.boolean({ required: true }),
+        showTeamLogos: t.boolean({ required: true }),
     }),
 });
 
@@ -457,13 +462,31 @@ async function discoverCoachCandidates(seasonId: string): Promise<CandidateShape
 /**
  * Venue discovery: venues are first-class rows we already store, so
  * this is just a DB query + projection. No upstream calls.
+ *
+ * Venues don't carry a team FK directly — instead we reverse-lookup
+ * via `teams.venueId` to find the team that calls this venue home.
+ * That lets the universal item renderer surface the home team's name
+ * + crest on a venue tier item just like it does for coaches. A
+ * venue shared by multiple teams falls back to whichever team the
+ * map returns first (stadium-sharing is rare in the v1 leagues).
  */
 async function discoverVenueCandidates(seasonId: string): Promise<CandidateShape[]> {
     const cacheKey = `pool-candidates:venue:${seasonId}`;
     const cached = cacheService.get<CandidateShape[]>(cacheKey);
     if (cached) return cached;
 
-    const venues = await repository.teams.getVenuesBySeasonId(seasonId);
+    const [venues, teams] = await Promise.all([
+        repository.teams.getVenuesBySeasonId(seasonId),
+        repository.teams.getTeamsBySeasonId(seasonId),
+    ]);
+
+    const teamByVenueId = new Map<string, string>();
+    for (const team of teams) {
+        if (team.venueId && !teamByVenueId.has(team.venueId)) {
+            teamByVenueId.set(team.venueId, team.id);
+        }
+    }
+
     const candidates: CandidateShape[] = [];
     for (const v of venues) {
         try {
@@ -483,6 +506,9 @@ async function discoverVenueCandidates(seasonId: string): Promise<CandidateShape
                     : (v.city ?? (v.capacity ? `${v.capacity.toLocaleString()} seats` : null));
             const candidate = toCandidate(projection, subtitle);
             candidate.tierRankableTypeId = 'venue';
+            // Attach the home team so the renderer can show the team
+            // name + crest on venue items.
+            candidate.teamId = teamByVenueId.get(v.id) ?? null;
             candidates.push(candidate);
         } catch {
             // skip malformed venues
@@ -784,6 +810,7 @@ builder.mutationField('updateTierListDisplayConfig', (t) =>
             assertNotLocked(existing);
             const normalised = normaliseDisplayConfig({
                 showTeamNames: displayConfig.showTeamNames,
+                showTeamLogos: displayConfig.showTeamLogos,
             });
             const updated = await repository.tierLists.updateTierListDisplayConfig(
                 id as string,

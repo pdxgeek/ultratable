@@ -34,16 +34,23 @@ export const DEFAULT_TIERS: ReadonlyArray<{ key: string; name: string }> = [
 
 /**
  * Per-tier-list display preferences. Stored as JSONB on `tier_list` so new
- * toggles land here additively without a migration. v1 surfaces one flag —
- * `showTeamNames` — which gates whether the editor renders the team name
- * label under each square item thumbnail. Default `true`.
+ * toggles land here additively without a migration.
+ *
+ * - `showTeamNames` — render the team name label under each item.
+ * - `showTeamLogos` — render the team crest as a corner badge on the item
+ *   thumbnail.
+ *
+ * Both default `true` and gate independently so a user can keep the
+ * badge while hiding the name (or vice versa).
  */
 export interface TierListDisplayConfig {
     showTeamNames: boolean;
+    showTeamLogos: boolean;
 }
 
 export const DEFAULT_DISPLAY_CONFIG: TierListDisplayConfig = {
     showTeamNames: true,
+    showTeamLogos: true,
 };
 
 /**
@@ -59,5 +66,9 @@ export function normaliseDisplayConfig(input: unknown): TierListDisplayConfig {
             typeof obj.showTeamNames === 'boolean'
                 ? obj.showTeamNames
                 : DEFAULT_DISPLAY_CONFIG.showTeamNames,
+        showTeamLogos:
+            typeof obj.showTeamLogos === 'boolean'
+                ? obj.showTeamLogos
+                : DEFAULT_DISPLAY_CONFIG.showTeamLogos,
     };
 }

@@ -21,6 +21,8 @@ interface Props {
     list: TierListEditorRow;
     onChanged: () => void;
     onBack: () => void;
+    onOpenAddDrawer: () => void;
+    onRemoveItem: (itemId: string) => void;
 }
 
 const MIN_TIERS = 3;
@@ -53,7 +55,13 @@ function newTierKey(): string {
  * fire on flip, tier add/remove fires immediately (with confirm when the
  * removed tier holds items).
  */
-const TierListConfigView: React.FC<Props> = ({ list, onChanged, onBack }) => {
+const TierListConfigView: React.FC<Props> = ({
+    list,
+    onChanged,
+    onBack,
+    onOpenAddDrawer,
+    onRemoveItem,
+}) => {
     const navigate = useNavigate();
     const [syncedTitle, setSyncedTitle] = useState(list.title);
     const [draftTitle, setDraftTitle] = useState(list.title);
@@ -159,11 +167,16 @@ const TierListConfigView: React.FC<Props> = ({ list, onChanged, onBack }) => {
         void flushTiers(next);
     };
 
-    const toggleShowTeamNames = async (showTeamNames: boolean) => {
+    const patchDisplayConfig = async (
+        next: { showTeamNames?: boolean; showTeamLogos?: boolean },
+    ) => {
         setError(null);
         const result = await updateDisplayConfig({
             id: list.id,
-            displayConfig: { showTeamNames },
+            displayConfig: {
+                showTeamNames: next.showTeamNames ?? list.displayConfig.showTeamNames,
+                showTeamLogos: next.showTeamLogos ?? list.displayConfig.showTeamLogos,
+            },
         });
         if (result.error) {
             setError(result.error.graphQLErrors[0]?.message ?? result.error.message);
@@ -229,6 +242,70 @@ const TierListConfigView: React.FC<Props> = ({ list, onChanged, onBack }) => {
 
             <section className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
+                    <div>
+                        <Label>Pool ({list.items.length} items)</Label>
+                        <p className="text-xs text-text-muted mt-0.5">
+                            Items live here until you drag them into a tier on the main list.
+                        </p>
+                    </div>
+                    {!list.isLocked && (
+                        <Button type="button" onClick={onOpenAddDrawer}>
+                            + Add items
+                        </Button>
+                    )}
+                </div>
+                {list.items.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-glass-border bg-glass-bg/40 p-4 text-sm text-text-muted">
+                        No items yet. Click <strong>+ Add items</strong> to fill the pool.
+                    </p>
+                ) : (
+                    <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {list.items.map((it) => (
+                            <li
+                                key={it.id}
+                                className="flex items-center gap-2 rounded-md border border-glass-border bg-glass-bg px-2 py-1.5"
+                            >
+                                <div className="w-8 h-8 flex-shrink-0 rounded overflow-hidden bg-muted">
+                                    {it.displayImageUrl ? (
+                                        <img
+                                            src={it.displayImageUrl}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <span className="flex items-center justify-center w-full h-full text-[0.65rem] text-text-muted">
+                                            {it.displayName.slice(0, 2).toUpperCase()}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium truncate">
+                                        {it.displayName}
+                                    </div>
+                                    {it.team?.name && (
+                                        <div className="text-[0.65rem] text-text-muted truncate">
+                                            {it.team.name}
+                                        </div>
+                                    )}
+                                </div>
+                                {!list.isLocked && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveItem(it.id)}
+                                        className="text-xs text-text-muted hover:text-destructive"
+                                        aria-label={`Remove ${it.displayName}`}
+                                    >
+                                        ×
+                                    </button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
                     <Label>Tiers ({draftTiers.length})</Label>
                     <span className="text-xs text-text-muted">
                         Min {MIN_TIERS} · Max {MAX_TIERS}
@@ -285,7 +362,21 @@ const TierListConfigView: React.FC<Props> = ({ list, onChanged, onBack }) => {
                 <Switch
                     id="config-show-team-names"
                     checked={list.displayConfig.showTeamNames}
-                    onCheckedChange={(v) => void toggleShowTeamNames(v)}
+                    onCheckedChange={(v) => void patchDisplayConfig({ showTeamNames: v })}
+                />
+            </section>
+
+            <section className="flex items-center justify-between gap-3">
+                <div className="flex-1">
+                    <Label htmlFor="config-show-team-logos">Show team logos</Label>
+                    <p className="text-xs text-text-muted">
+                        When on, the team crest renders as a small badge on each item thumbnail.
+                    </p>
+                </div>
+                <Switch
+                    id="config-show-team-logos"
+                    checked={list.displayConfig.showTeamLogos}
+                    onCheckedChange={(v) => void patchDisplayConfig({ showTeamLogos: v })}
                 />
             </section>
 
