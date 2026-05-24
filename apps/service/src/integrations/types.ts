@@ -103,6 +103,32 @@ export interface IngestedSquadPlayer {
     photo: string | null;
 }
 
+/**
+ * One coach row from API-Football's `/coachs?team=<sourceId>` endpoint.
+ * Captures the full profile + birth info; the `career` blob preserves
+ * the upstream's club history so a future "managers I've ranked"
+ * feature doesn't need another fetch.
+ *
+ * `teamSourceId` is the team the coach is *currently* attached to per
+ * the upstream — used to resolve our local `team_id` FK on upsert.
+ */
+export interface IngestedCoach {
+    sourceId: number;
+    name: string;
+    firstName: string | null;
+    lastName: string | null;
+    age: number | null;
+    birthDate: string | null;
+    birthPlace: string | null;
+    birthCountry: string | null;
+    nationality: string | null;
+    height: string | null;
+    weight: string | null;
+    photo: string | null;
+    teamSourceId: number | null;
+    career: unknown;
+}
+
 // Dual-ID contract (AI_README_FIRST.MD §1): every ID here is an external
 // provider ID. `leagueSourceId`, `teamSourceId`, `fixtureId` (the upstream
 // numeric ID) — never an internal UUID. Do not reintroduce a bare `leagueId`.
@@ -126,4 +152,11 @@ export interface IFootballProvider {
     getLineups(fixtureId: number): Promise<IngestedLineup[]>;
     getPlayerData(playerId: number, season: number): Promise<IngestedPlayer | null>;
     getSquad(teamSourceId: number): Promise<IngestedSquadPlayer[]>;
+    /**
+     * Fetch the current coach(es) attached to a team. Backed by
+     * `/coachs?team=<sourceId>`. Returns an array because the upstream
+     * occasionally lists more than one current entry (e.g. caretaker +
+     * permanent manager) — callers usually want index 0.
+     */
+    getCoachesByTeam(teamSourceId: number): Promise<IngestedCoach[]>;
 }

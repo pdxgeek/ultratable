@@ -6,7 +6,7 @@ import { Image as ImageIcon, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { GRAPHIC_TYPES } from './types';
+import { GRAPHIC_TYPES, GRAPHIC_TYPE_LABELS } from './types';
 
 interface Props {
     graphics: Graphic[];
@@ -45,9 +45,9 @@ export const GraphicsGallery: React.FC<Props> = ({
                             <TabsTrigger
                                 key={t}
                                 value={t}
-                                className="h-7 px-4 text-sm font-medium capitalize text-slate-400 hover:text-slate-200 data-active:bg-sky-500/20 data-active:text-sky-400"
+                                className="h-7 px-4 text-sm font-medium text-slate-400 hover:text-slate-200 data-active:bg-sky-500/20 data-active:text-sky-400"
                             >
-                                {t}s
+                                {GRAPHIC_TYPE_LABELS[t].plural}
                             </TabsTrigger>
                         ))}
                     </TabsList>

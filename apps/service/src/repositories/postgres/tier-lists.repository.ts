@@ -11,6 +11,11 @@ import {
     notInArray,
 } from 'drizzle-orm';
 
+import {
+    DEFAULT_DISPLAY_CONFIG,
+    normaliseDisplayConfig,
+    type TierListDisplayConfig,
+} from '../../config/tier-lists';
 import { db } from '../../db';
 import * as schema from '../../db/schema';
 import type {
@@ -37,6 +42,8 @@ function mapTierList(row: typeof schema.tierLists.$inferSelect): TierListRow {
         tierRankableTypeId: row.tierRankableTypeId,
         title: row.title,
         tiers: row.tiers as Tier[],
+        displayConfig: normaliseDisplayConfig(row.displayConfig),
+        isLocked: row.isLocked,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         deletedAt: row.deletedAt,
@@ -103,6 +110,8 @@ export class PostgresTierListsRepository implements TierListsRepository {
                 tierRankableTypeId: input.tierRankableTypeId,
                 title: input.title,
                 tiers: input.tiers,
+                displayConfig: { ...DEFAULT_DISPLAY_CONFIG },
+                isLocked: false,
             })
             .returning();
         if (!row) throw new Error('Failed to insert tier list');
@@ -194,6 +203,29 @@ export class PostgresTierListsRepository implements TierListsRepository {
         });
     }
 
+    async updateTierListDisplayConfig(
+        id: string,
+        displayConfig: TierListDisplayConfig,
+    ): Promise<TierListRow | null> {
+        if (!db) return null;
+        const [row] = await db
+            .update(schema.tierLists)
+            .set({ displayConfig, updatedAt: NOW_MS as unknown as Date })
+            .where(and(eq(schema.tierLists.id, id), isNull(schema.tierLists.deletedAt)))
+            .returning();
+        return row ? mapTierList(row) : null;
+    }
+
+    async setTierListLocked(id: string, isLocked: boolean): Promise<TierListRow | null> {
+        if (!db) return null;
+        const [row] = await db
+            .update(schema.tierLists)
+            .set({ isLocked, updatedAt: NOW_MS as unknown as Date })
+            .where(and(eq(schema.tierLists.id, id), isNull(schema.tierLists.deletedAt)))
+            .returning();
+        return row ? mapTierList(row) : null;
+    }
+
     async softDeleteTierList(id: string): Promise<string | null> {
         if (!db) return null;
         const [live] = await db
@@ -234,36 +266,87 @@ export class PostgresTierListsRepository implements TierListsRepository {
 
     async addTierRankableItem(input: AddTierRankableItemInput): Promise<TierRankableItemRow> {
         if (!db) throw new Error('Database not configured');
-        const [tail] = await db
-            .select({ maxPos: max(schema.tierRankableItems.position) })
-            .from(schema.tierRankableItems)
-            .where(
-                and(
-                    eq(schema.tierRankableItems.tierListId, input.tierListId),
-                    isNull(schema.tierRankableItems.deletedAt),
-                    isNull(schema.tierRankableItems.tierKey),
-                ),
-            );
-        const nextPosition = (tail?.maxPos ?? 0) + 1.0;
+        return await db.transaction(async (tx) => {
+            // Look for an existing item (live or soft-deleted) with the
+            // same natural key in this list. Re-running a pool search must
+            // restore previously-removed matches rather than skip them or
+            // double them up (umbrella #110).
+            const [existing] = await tx
+                .select()
+                .from(schema.tierRankableItems)
+                .where(
+                    and(
+                        eq(schema.tierRankableItems.tierListId, input.tierListId),
+                        eq(schema.tierRankableItems.tierRankableTypeId, input.tierRankableTypeId),
+                        eq(schema.tierRankableItems.naturalKey, input.naturalKey),
+                    ),
+                )
+                .limit(1);
 
-        const [row] = await db
-            .insert(schema.tierRankableItems)
-            .values({
-                tierListId: input.tierListId,
-                tierRankableTypeId: input.tierRankableTypeId,
-                naturalKey: input.naturalKey,
-                tierKey: null,
-                position: nextPosition,
-                name: input.name,
-                imageUrl: input.imageUrl,
-                teamId: input.teamId,
-                sourceType: input.sourceType,
-                sourceId: input.sourceId,
-                sourcePath: input.sourcePath,
-            })
-            .returning();
-        if (!row) throw new Error('Failed to insert tier rankable item');
-        return mapItem(row);
+            // Live duplicate — return as-is. No update; the existing
+            // snapshot wins until the user explicitly refreshes (out of
+            // scope for v1) so we don't clobber per-user edits on a
+            // re-search.
+            if (existing && existing.deletedAt === null) {
+                return mapItem(existing);
+            }
+
+            const [tail] = await tx
+                .select({ maxPos: max(schema.tierRankableItems.position) })
+                .from(schema.tierRankableItems)
+                .where(
+                    and(
+                        eq(schema.tierRankableItems.tierListId, input.tierListId),
+                        isNull(schema.tierRankableItems.deletedAt),
+                        isNull(schema.tierRankableItems.tierKey),
+                    ),
+                );
+            const nextPosition = (tail?.maxPos ?? 0) + 1.0;
+
+            // Soft-deleted match — un-delete it, send it back to the
+            // pool at the tail, refresh the snapshot fields from the new
+            // input. Per-user overrides (nameOverride / imageUrlOverride /
+            // subtitle) are preserved deliberately: if the user customised
+            // "Pep" before removing him, re-adding shouldn't wipe that.
+            if (existing && existing.deletedAt !== null) {
+                const [restored] = await tx
+                    .update(schema.tierRankableItems)
+                    .set({
+                        deletedAt: null,
+                        tierKey: null,
+                        position: nextPosition,
+                        name: input.name,
+                        imageUrl: input.imageUrl,
+                        teamId: input.teamId,
+                        sourceType: input.sourceType,
+                        sourceId: input.sourceId,
+                        sourcePath: input.sourcePath,
+                    })
+                    .where(eq(schema.tierRankableItems.id, existing.id))
+                    .returning();
+                if (!restored) throw new Error('Failed to restore tier rankable item');
+                return mapItem(restored);
+            }
+
+            const [row] = await tx
+                .insert(schema.tierRankableItems)
+                .values({
+                    tierListId: input.tierListId,
+                    tierRankableTypeId: input.tierRankableTypeId,
+                    naturalKey: input.naturalKey,
+                    tierKey: null,
+                    position: nextPosition,
+                    name: input.name,
+                    imageUrl: input.imageUrl,
+                    teamId: input.teamId,
+                    sourceType: input.sourceType,
+                    sourceId: input.sourceId,
+                    sourcePath: input.sourcePath,
+                })
+                .returning();
+            if (!row) throw new Error('Failed to insert tier rankable item');
+            return mapItem(row);
+        });
     }
 
     async updateTierRankableItemOverrides(

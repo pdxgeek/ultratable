@@ -16,7 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 
-import { GRAPHIC_TYPES } from './types';
+import { GRAPHIC_TYPES, GRAPHIC_TYPE_LABELS } from './types';
 import { registerOrAutoSideloadGraphic } from './useGraphics';
 
 interface Props {
@@ -80,7 +80,7 @@ export const GraphicsUploadForm: React.FC<Props> = ({ onUploaded }) => {
                         <SelectContent>
                             {GRAPHIC_TYPES.map((t) => (
                                 <SelectItem key={t} value={t}>
-                                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                                    {GRAPHIC_TYPE_LABELS[t].singular}
                                 </SelectItem>
                             ))}
                         </SelectContent>

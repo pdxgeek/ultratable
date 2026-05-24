@@ -2,6 +2,7 @@ import { ApiFootballProvider } from '../../integrations/api-football';
 import { IFootballProvider } from '../../integrations/types';
 import { IRepository } from '../repository';
 import { PostgresCatalogRepository } from './catalog.repository';
+import { PostgresCoachesRepository } from './coaches.repository';
 import { PostgresConfigRepository } from './config.repository';
 import { PostgresFixturesRepository } from './fixtures.repository';
 import { PostgresGraphicsRepository } from './graphics.repository';
@@ -25,6 +26,7 @@ export {
     PostgresUsersRepository,
     PostgresPredictionsRepository,
     PostgresTierListsRepository,
+    PostgresCoachesRepository,
 };
 
 /**
@@ -48,5 +50,6 @@ export function createPostgresRepository(providerOverride?: IFootballProvider): 
         users: new PostgresUsersRepository(),
         predictions: new PostgresPredictionsRepository(),
         tierLists: new PostgresTierListsRepository(),
+        coaches: new PostgresCoachesRepository(provider),
     };
 }

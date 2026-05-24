@@ -183,6 +183,47 @@ export class ApiFootballProvider implements IFootballProvider {
         return resp.data.response.map((item: RawLineupItem) => Normalizer.normalizeLineup(item));
     }
 
+    async getCoachesByTeam(
+        teamSourceId: number,
+    ): Promise<import('../types').IngestedCoach[]> {
+        this.logger.debug({ teamSourceId }, 'API: fetching coaches');
+        const resp = await this.client.get('/coachs', { params: { team: teamSourceId } });
+        const rows = (resp.data?.response ?? []) as Array<{
+            id: number;
+            name: string;
+            firstname?: string | null;
+            lastname?: string | null;
+            age?: number | null;
+            birth?: {
+                date?: string | null;
+                place?: string | null;
+                country?: string | null;
+            } | null;
+            nationality?: string | null;
+            height?: string | null;
+            weight?: string | null;
+            photo?: string | null;
+            team?: { id?: number | null } | null;
+            career?: unknown;
+        }>;
+        return rows.map((r) => ({
+            sourceId: r.id,
+            name: r.name,
+            firstName: r.firstname ?? null,
+            lastName: r.lastname ?? null,
+            age: r.age ?? null,
+            birthDate: r.birth?.date ?? null,
+            birthPlace: r.birth?.place ?? null,
+            birthCountry: r.birth?.country ?? null,
+            nationality: r.nationality ?? null,
+            height: r.height ?? null,
+            weight: r.weight ?? null,
+            photo: r.photo ?? null,
+            teamSourceId: r.team?.id ?? null,
+            career: r.career ?? null,
+        }));
+    }
+
     async getSquad(teamSourceId: number): Promise<import('../types').IngestedSquadPlayer[]> {
         this.logger.debug({ teamSourceId }, 'API: fetching squad');
         const resp = await this.client.get('/players/squads', { params: { team: teamSourceId } });

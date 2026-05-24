@@ -28,7 +28,12 @@ import {
     MAX_TIERS,
     MAX_TITLE_LENGTH,
     MIN_TIERS,
+    normaliseDisplayConfig,
 } from '../config/tier-lists';
+import { coachRecipe } from '../entities/tier-rankable-types/coach';
+import type { TierRankableTypeProjection } from '../entities/tier-rankable-types/recipe';
+import { teamRecipe } from '../entities/tier-rankable-types/team';
+import { venueRecipe } from '../entities/tier-rankable-types/venue';
 import { repository } from '../repositories';
 import type {
     Tier,
@@ -36,6 +41,8 @@ import type {
     TierRankableItemRow,
     TierRankableTypeRow,
 } from '../repositories/tier-lists';
+import { cacheService, TTL } from '../services/cache.service';
+import { graphicsService } from '../services/graphics.service';
 import { abilityOf, builder } from './builder';
 import { TeamRef } from './football';
 
@@ -49,6 +56,82 @@ const TierRef = builder.simpleObject('Tier', {
     fields: (t) => ({
         key: t.string({ description: 'Stable short id for this tier within its parent.' }),
         name: t.string({ description: 'Display label.' }),
+    }),
+});
+
+const TierListDisplayConfigRef = builder.simpleObject('TierListDisplayConfig', {
+    description:
+        "Per-tier-list display preferences. New toggles land here additively — the underlying storage is JSONB so a future toggle doesn't need a migration.",
+    fields: (t) => ({
+        showTeamNames: t.boolean({
+            description:
+                "When true, the editor renders the team name label under each item thumbnail.",
+        }),
+        showTeamLogos: t.boolean({
+            description:
+                "When true, the editor renders the team crest as a corner badge on the item thumbnail.",
+        }),
+    }),
+});
+
+const TierListDisplayConfigInput = builder.inputType('TierListDisplayConfigInput', {
+    description:
+        "Patch for `updateTierListDisplayConfig`. Pass the full desired shape — server normalises and persists.",
+    fields: (t) => ({
+        showTeamNames: t.boolean({ required: true }),
+        showTeamLogos: t.boolean({ required: true }),
+    }),
+});
+
+/**
+ * One candidate the pool add drawer can show, ready to feed back into
+ * `addTierRankableItem`. The shape mirrors `AddTierRankableItemInput`
+ * (sans `tierListId`) plus a couple of display extras (`subtitle`,
+ * `team`) so the drawer can render an informative row without a second
+ * round-trip. Returned by `tierRankableItemCandidates`.
+ */
+interface CandidateShape {
+    tierRankableTypeId: string;
+    naturalKey: string;
+    name: string;
+    imageUrl: string | null;
+    teamId: string | null;
+    sourceType: string | null;
+    sourceId: string | null;
+    sourcePath: unknown | null;
+    subtitle: string | null;
+}
+
+const TierRankableItemCandidateRef =
+    builder.objectRef<CandidateShape>('TierRankableItemCandidate');
+
+builder.objectType(TierRankableItemCandidateRef, {
+    description:
+        "One candidate the pool add drawer can offer. The shape mirrors `AddTierRankableItemInput` minus `tierListId` — submit it via `addTierRankableItem` to add. Re-adding a previously-removed item with the same `(tierRankableTypeId, naturalKey)` restores it server-side rather than duplicating.",
+    fields: (t) => ({
+        tierRankableTypeId: t.exposeString('tierRankableTypeId'),
+        naturalKey: t.exposeString('naturalKey'),
+        name: t.exposeString('name'),
+        imageUrl: t.exposeString('imageUrl', { nullable: true }),
+        teamId: t.exposeID('teamId', { nullable: true }),
+        sourceType: t.exposeString('sourceType', { nullable: true }),
+        sourceId: t.exposeID('sourceId', { nullable: true }),
+        sourcePath: t.field({
+            type: 'JSON',
+            nullable: true,
+            resolve: (parent) => parent.sourcePath,
+        }),
+        subtitle: t.exposeString('subtitle', {
+            nullable: true,
+            description: 'Optional secondary line (e.g. venue city + capacity).',
+        }),
+        team: t.field({
+            type: TeamRef,
+            nullable: true,
+            description: 'Team this candidate is associated with. Resolved from `teamId` via DataLoader.',
+            resolve: (parent, _args, ctx) =>
+                parent.teamId ? ctx.loaders.teamLoader.load(parent.teamId) : null,
+        }),
     }),
 });
 
@@ -96,6 +179,16 @@ builder.objectType(TierListRef, {
             type: [TierRef],
             description: 'Ordered tier scheme, top-to-bottom. Items reference `tier.key`.',
             resolve: (parent) => parent.tiers,
+        }),
+        displayConfig: t.field({
+            type: TierListDisplayConfigRef,
+            description:
+                'Per-list display preferences (e.g. `showTeamNames`). Always returned with every key populated.',
+            resolve: (parent) => parent.displayConfig,
+        }),
+        isLocked: t.exposeBoolean('isLocked', {
+            description:
+                'User-flipped read-only flag. When true, the editor renders read-only and all edit mutations on this list (and its items) throw `TIER_LIST_LOCKED`. The same user can flip it back any time via `setTierListLocked`.',
         }),
         items: t.field({
             type: [TierRankableItemRef],
@@ -182,8 +275,23 @@ builder.objectType(TierRankableItemRef, {
         }),
         displayImageUrl: t.string({
             nullable: true,
-            description: 'Convenience: `imageUrlOverride ?? imageUrl`.',
-            resolve: (parent) => parent.imageUrlOverride ?? parent.imageUrl,
+            description:
+                "Resolved image URL with the same graphics-registry fallback chain Team/Venue/Player use: per-user override > graphics-registry stored URL (Supabase) > recipe snapshot. Items with `sourceType` of `coach` / `team` / `venue` get the Supabase URL when one was sideloaded at sync time; otherwise the snapshot URL the recipe captured at add time wins.",
+            resolve: async (parent) => {
+                if (parent.imageUrlOverride) return parent.imageUrlOverride;
+                if (parent.sourceType && parent.sourceId) {
+                    try {
+                        const url = await graphicsService.resolveUrl(
+                            parent.sourceId,
+                            parent.sourceType,
+                        );
+                        if (url) return url;
+                    } catch {
+                        /* fall through */
+                    }
+                }
+                return parent.imageUrl;
+            },
         }),
         addedAt: t.expose('addedAt', { type: 'DateTime' }),
     }),
@@ -251,6 +359,14 @@ function assertViewer(ctx: AbilityCtx): { id: string; roles: string[] } {
     return ctx.user;
 }
 
+function assertNotLocked(parent: { isLocked: boolean }): void {
+    if (parent.isLocked) {
+        throw new GraphQLError('Tier list is locked', {
+            extensions: { code: 'TIER_LIST_LOCKED', http: { status: 409 } },
+        });
+    }
+}
+
 function validateTitle(title: string): void {
     if (title.trim().length === 0) {
         throw new GraphQLError('Title cannot be blank', {
@@ -266,6 +382,187 @@ function validateTitle(title: string): void {
 
 function newTierKey(): string {
     return `tier-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36).slice(-4)}`;
+}
+
+// ----------------------------------------------------------------------
+// Pool-candidate discovery
+// ----------------------------------------------------------------------
+
+/**
+ * Project a recipe projection onto the candidate shape (adds the
+ * display-only `subtitle` field with a recipe-specific default of null).
+ */
+function toCandidate(
+    projection: TierRankableTypeProjection,
+    subtitle: string | null = null,
+): CandidateShape {
+    return {
+        tierRankableTypeId: '',
+        naturalKey: projection.naturalKey,
+        name: projection.name,
+        imageUrl: projection.imageUrl,
+        teamId: projection.teamId,
+        sourceType: projection.sourceType,
+        sourceId: projection.sourceId,
+        sourcePath: projection.sourcePath,
+        subtitle,
+    };
+}
+
+/**
+ * Coach discovery: reads from the first-class `coaches` table.
+ *
+ * Cold cache: for any team in the season that doesn't yet have a coach
+ * row, fetch it via `/coachs?team=<sourceId>` and upsert. Calls are
+ * parallelised but bounded to one per uncached team, so a 24-team
+ * season is at most 24 upstream calls (vs. one per fixture under the
+ * old lineup-scraping path).
+ *
+ * Warm cache: pure DB read. The result is also cached in-memory at
+ * TTL.STABLE so repeated drawer opens don't even touch the DB.
+ */
+async function discoverCoachCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:coach:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const teams = await repository.teams.getTeamsBySeasonId(seasonId);
+    if (teams.length === 0) {
+        cacheService.set(cacheKey, [], TTL.STABLE);
+        return [];
+    }
+
+    const existingCoaches = await repository.coaches.getCoachesBySeasonId(seasonId);
+    const coachByTeamId = new Map(existingCoaches.map((c) => [c.teamId, c]));
+
+    // Lazy-sync any team missing a coach row. Parallelised so a cold
+    // cache fills in roughly one round-trip rather than 24.
+    const missingTeams = teams.filter((t) => !coachByTeamId.has(t.id));
+    if (missingTeams.length > 0) {
+        const synced = await Promise.all(
+            missingTeams.map((t) =>
+                repository.coaches.getOrSyncCoachForTeam(t.id, t.sourceId),
+            ),
+        );
+        for (const c of synced) {
+            if (c?.teamId) coachByTeamId.set(c.teamId, c);
+        }
+    }
+
+    const candidates: CandidateShape[] = [];
+    for (const coach of coachByTeamId.values()) {
+        if (!coach.teamId) continue;
+        try {
+            const projection = await coachRecipe.project(
+                {
+                    coachId: coach.id,
+                    teamId: coach.teamId,
+                    name: coach.name,
+                    photo: coach.photo,
+                },
+                // The coach recipe doesn't use the context any more.
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const candidate = toCandidate(projection);
+            candidate.tierRankableTypeId = 'coach';
+            candidates.push(candidate);
+        } catch {
+            // Coach without a name slips through here — skip.
+        }
+    }
+
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
+}
+
+/**
+ * Venue discovery: venues are first-class rows we already store, so
+ * this is just a DB query + projection. No upstream calls.
+ *
+ * Venues don't carry a team FK directly — instead we reverse-lookup
+ * via `teams.venueId` to find the team that calls this venue home.
+ * That lets the universal item renderer surface the home team's name
+ * + crest on a venue tier item just like it does for coaches. A
+ * venue shared by multiple teams falls back to whichever team the
+ * map returns first (stadium-sharing is rare in the v1 leagues).
+ */
+async function discoverVenueCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:venue:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const [venues, teams] = await Promise.all([
+        repository.teams.getVenuesBySeasonId(seasonId),
+        repository.teams.getTeamsBySeasonId(seasonId),
+    ]);
+
+    const teamByVenueId = new Map<string, string>();
+    for (const team of teams) {
+        if (team.venueId && !teamByVenueId.has(team.venueId)) {
+            teamByVenueId.set(team.venueId, team.id);
+        }
+    }
+
+    const candidates: CandidateShape[] = [];
+    for (const v of venues) {
+        try {
+            const projection = await venueRecipe.project(
+                {
+                    venueId: v.id,
+                    name: v.name,
+                    image: v.image,
+                    city: v.city,
+                    capacity: v.capacity,
+                },
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const subtitle =
+                v.city && v.capacity
+                    ? `${v.city} · ${v.capacity.toLocaleString()} seats`
+                    : (v.city ?? (v.capacity ? `${v.capacity.toLocaleString()} seats` : null));
+            const candidate = toCandidate(projection, subtitle);
+            candidate.tierRankableTypeId = 'venue';
+            // Attach the home team so the renderer can show the team
+            // name + crest on venue items.
+            candidate.teamId = teamByVenueId.get(v.id) ?? null;
+            candidates.push(candidate);
+        } catch {
+            // skip malformed venues
+        }
+    }
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
+}
+
+/**
+ * Team discovery: teams are first-class rows we already store, so this
+ * is a pure DB query + projection. No upstream calls.
+ */
+async function discoverTeamCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:team:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const teams = await repository.teams.getTeamsBySeasonId(seasonId);
+    const candidates: CandidateShape[] = [];
+    for (const t of teams) {
+        try {
+            const projection = await teamRecipe.project(
+                { teamId: t.id, name: t.name, logo: t.logo },
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const candidate = toCandidate(projection);
+            candidate.tierRankableTypeId = 'team';
+            candidates.push(candidate);
+        } catch {
+            // skip malformed teams
+        }
+    }
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
 }
 
 // ----------------------------------------------------------------------
@@ -301,6 +598,41 @@ builder.queryField('myTierLists', (t) =>
                 seasonId: seasonId as string,
                 tierRankableTypeId: tierRankableTypeId ?? undefined,
             });
+        },
+    }),
+);
+
+builder.queryField('tierRankableItemCandidates', (t) =>
+    t.field({
+        type: [TierRankableItemCandidateRef],
+        description:
+            "Discover pool candidates for a (season, recipe). The server walks the recipe's source data — for `coach`, a bounded set of recent fixtures' lineups; for `venue`, the season's venues — and returns ready-to-submit projections. Drives the pool add drawer. Results are cached (TTL.STABLE) so repeated drawer opens don't hammer the upstream provider.",
+        args: {
+            seasonId: t.arg.id({ required: true }),
+            tierRankableTypeId: t.arg.string({ required: true }),
+        },
+        resolve: async (_root, { seasonId, tierRankableTypeId }, ctx) => {
+            assertViewer(ctx);
+            const seasonIdStr = seasonId as string;
+            switch (tierRankableTypeId) {
+                case 'coach':
+                    return discoverCoachCandidates(seasonIdStr);
+                case 'venue':
+                    return discoverVenueCandidates(seasonIdStr);
+                case 'team':
+                    return discoverTeamCandidates(seasonIdStr);
+                default:
+                    throw new GraphQLError(
+                        `Unknown tier rankable type: ${tierRankableTypeId}`,
+                        {
+                            extensions: {
+                                code: 'UNKNOWN_TIER_RANKABLE_TYPE',
+                                http: { status: 400 },
+                                tierRankableTypeId,
+                            },
+                        },
+                    );
+            }
         },
     }),
 );
@@ -409,6 +741,7 @@ builder.mutationField('updateTierListTitle', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(existing);
             validateTitle(title);
             const updated = await repository.tierLists.updateTierListTitle(
                 id as string,
@@ -449,6 +782,7 @@ builder.mutationField('updateTierListTiers', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(existing);
 
             if (tiers.length < MIN_TIERS || tiers.length > MAX_TIERS) {
                 throw new GraphQLError(
@@ -485,6 +819,89 @@ builder.mutationField('updateTierListTiers', (t) =>
             const updated = await repository.tierLists.updateTierListTiers(
                 id as string,
                 resolved,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('updateTierListDisplayConfig', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            'Patch the per-list display preferences (e.g. `showTeamNames`). Locked lists reject this with `TIER_LIST_LOCKED`.',
+        args: {
+            id: t.arg.id({ required: true }),
+            displayConfig: t.arg({ type: TierListDisplayConfigInput, required: true }),
+        },
+        resolve: async (_root, { id, displayConfig }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            assertNotLocked(existing);
+            const normalised = normaliseDisplayConfig({
+                showTeamNames: displayConfig.showTeamNames,
+                showTeamLogos: displayConfig.showTeamLogos,
+            });
+            const updated = await repository.tierLists.updateTierListDisplayConfig(
+                id as string,
+                normalised,
+            );
+            if (!updated) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            return updated;
+        },
+    }),
+);
+
+builder.mutationField('setTierListLocked', (t) =>
+    t.field({
+        type: TierListRef,
+        description:
+            "Flip the user-controlled read-only flag. Lock is never permanent — the same user (or admin) can unlock the list any time. Locked lists reject every other edit mutation with `TIER_LIST_LOCKED`, so this mutation deliberately does NOT check the flag itself (otherwise locking would be a one-way door).",
+        args: {
+            id: t.arg.id({ required: true }),
+            locked: t.arg.boolean({ required: true }),
+        },
+        resolve: async (_root, { id, locked }, ctx) => {
+            assertViewer(ctx);
+            const existing = await repository.tierLists.getTierListById({ id: id as string });
+            if (!existing) {
+                throw new GraphQLError('Tier list not found', {
+                    extensions: { code: 'NOT_FOUND', http: { status: 404 } },
+                });
+            }
+            if (
+                abilityOf(ctx).cannot(
+                    'update',
+                    subject('TierList', { userId: existing.userId }),
+                )
+            ) {
+                throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
+            }
+            const updated = await repository.tierLists.setTierListLocked(
+                id as string,
+                locked,
             );
             if (!updated) {
                 throw new GraphQLError('Tier list not found', {
@@ -554,6 +971,7 @@ builder.mutationField('addTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
 
             if (input.tierRankableTypeId !== parent.tierRankableTypeId) {
                 throw new GraphQLError(
@@ -662,6 +1080,7 @@ builder.mutationField('updateTierRankableItemOverrides', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
             const updated = await repository.tierLists.updateTierRankableItemOverrides({
                 itemId: item.id,
                 nameOverride: input.nameOverride === undefined ? undefined : input.nameOverride,
@@ -712,6 +1131,7 @@ builder.mutationField('removeTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
             const deletedId = await repository.tierLists.softDeleteTierRankableItem(item.id);
             return deletedId ?? item.id;
         },
@@ -752,6 +1172,7 @@ builder.mutationField('moveTierRankableItem', (t) =>
             ) {
                 throw new GraphQLError('Forbidden', { extensions: { http: { status: 403 } } });
             }
+            assertNotLocked(parent);
 
             if (tierKey !== null && tierKey !== undefined) {
                 const known = parent.tiers.some((t) => t.key === tierKey);

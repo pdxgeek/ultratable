@@ -241,6 +241,46 @@ export const teams = pgTable(
     }),
 );
 
+// Coach is a first-class entity, populated from API-Football's
+// `/coachs?team=<sourceId>` endpoint by the per-team coach sync. Tier
+// lists project coaches via this table — the old "scrape from fixture
+// lineups" path was leaky (one upstream call per fixture per drawer
+// open) and gave us no stable identity. With a coach source id we
+// dedupe Pep-the-person across teams; the per-team item identity stays
+// `<teamId>|<coachId>` at the tier_rankable_item layer.
+//
+// `teamId` is the coach's CURRENT team (per upstream). Mutates as
+// coaches move; tier_rankable_item snapshots stay frozen to the team
+// they were added at, so historical rankings don't change underfoot.
+export const coaches = pgTable(
+    'coaches',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        name: varchar('name', { length: 255 }).notNull(),
+        firstName: varchar('first_name', { length: 255 }),
+        lastName: varchar('last_name', { length: 255 }),
+        age: integer('age'),
+        birthDate: varchar('birth_date', { length: 32 }),
+        birthPlace: varchar('birth_place', { length: 255 }),
+        birthCountry: varchar('birth_country', { length: 255 }),
+        nationality: varchar('nationality', { length: 255 }),
+        height: varchar('height', { length: 32 }),
+        weight: varchar('weight', { length: 32 }),
+        photo: varchar('photo', { length: 500 }),
+        teamId: uuid('team_id').references(() => teams.id),
+        sourceName: varchar('source_name', { length: 50 }).notNull(),
+        sourceId: integer('source_id').notNull(),
+        career: jsonb('career'),
+        rawResponse: jsonb('raw_response'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        unq: unique().on(table.sourceName, table.sourceId),
+        teamIdx: index('coaches_team_idx').on(table.teamId),
+    }),
+);
+
 export const seasons = pgTable(
     'seasons',
     {
@@ -555,6 +595,16 @@ export const tierLists = pgTable(
         // reference `key`, not `name`, so renames don't touch them. Bounds
         // (MIN_TIERS..MAX_TIERS) are enforced by the resolver.
         tiers: jsonb('tiers').notNull(),
+        // Per-list display toggles (e.g. `showTeamNames`). Stored as JSONB
+        // so new toggles can land without a migration. See
+        // [[../config/tier-lists.ts]] for the canonical shape.
+        displayConfig: jsonb('display_config')
+            .notNull()
+            .default(sql`'{"showTeamNames": true}'::jsonb`),
+        // User-flipped read-only flag. When true, the resolver rejects edit
+        // mutations with `TIER_LIST_LOCKED` and the editor renders
+        // read-only. Never auto-set; the same user can flip it back any time.
+        isLocked: boolean('is_locked').notNull().default(false),
         createdAt: utcTimestamp('created_at').defaultNow().notNull(),
         updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
         // Soft-delete marker. Null = live; set to now() on delete. Caps

@@ -25,6 +25,8 @@
  * season) limit. Recipe rows are never deleted in normal operation.
  */
 
+import type { TierListDisplayConfig } from '../config/tier-lists';
+
 /** One row of the parent's tier scheme. Items reference `key`, not `name`. */
 export interface Tier {
     key: string;
@@ -48,6 +50,17 @@ export interface TierListRow {
     tierRankableTypeId: string;
     title: string;
     tiers: Tier[];
+    /**
+     * Per-list display toggles (e.g. `showTeamNames`). Always present;
+     * the repository normalises whatever shape was stored to the current
+     * canonical shape before returning.
+     */
+    displayConfig: TierListDisplayConfig;
+    /**
+     * User-flipped read-only flag. When true, edit mutations throw
+     * `TIER_LIST_LOCKED`. Never auto-set; the same user can flip it back.
+     */
+    isLocked: boolean;
     createdAt: Date;
     updatedAt: Date;
     deletedAt: Date | null;
@@ -154,6 +167,15 @@ export interface TierListsRepository {
      */
     updateTierListTiers(id: string, tiers: Tier[]): Promise<TierListRow | null>;
 
+    /** Patch the display-config JSONB. Pass the full desired shape. */
+    updateTierListDisplayConfig(
+        id: string,
+        displayConfig: TierListDisplayConfig,
+    ): Promise<TierListRow | null>;
+
+    /** Flip the user-controlled read-only flag. */
+    setTierListLocked(id: string, isLocked: boolean): Promise<TierListRow | null>;
+
     /** Idempotent soft-delete. */
     softDeleteTierList(id: string): Promise<string | null>;
 
@@ -164,10 +186,20 @@ export interface TierListsRepository {
     // -----------------------------------------------------------------
 
     /**
-     * Insert a new item at the end of the parent's pool row
-     * (`tierKey = null`, `position = max(position) + 1.0`). Caller is
-     * responsible for validating the cap and that the recipe matches the
-     * parent's `tierRankableTypeId`.
+     * Add an item to the parent's pool row OR restore a previously-removed
+     * one. When a live item with the same `(tierListId, naturalKey)` already
+     * exists, returns it untouched (no duplicate). When a soft-deleted item
+     * with that key exists, un-soft-deletes it: clears `deletedAt`, moves
+     * it to the end of the pool (so re-added items land where you expect),
+     * refreshes the snapshot fields from the new input (name / imageUrl /
+     * teamId / source pointer — recipes can produce updated values, e.g. a
+     * coach's photo changes), and preserves the per-user overrides
+     * (`nameOverride` / `imageUrlOverride` / `subtitle`). Otherwise, inserts
+     * a fresh item at the end of the pool with position = max + 1.0.
+     *
+     * Powers the "re-running a pool search restores previously-removed
+     * matches" rule (umbrella #110, issue #113). Caller is responsible for
+     * validating the cap and the recipe match.
      */
     addTierRankableItem(input: AddTierRankableItemInput): Promise<TierRankableItemRow>;
 

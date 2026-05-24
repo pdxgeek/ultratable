@@ -1,14 +1,17 @@
 /**
- * Coach recipe — projects a coach tier-rankable-item snapshot out of a
- * fixture lineup. Coaches aren't first-class entities in this codebase;
- * their data lives inside `fixtures.lineups[i]`. This recipe is the
- * only lens that lets the tier-list product rank coaches.
+ * Coach recipe — projects a `Coach` row from the first-class coaches
+ * table into the tier-rankable-item display contract.
  *
- * Identity rule: `(teamId, lowercased name)`. A new coach for a team is
- * a fresh natural key (tier lists ranking the old coach keep their
- * reference). Two users picking the same coach for the same team share
- * the same `(tier_rankable_type_id, natural_key)`, which is what powers
- * cross-user aggregates like "most-ranked Pep".
+ * Coaches are populated by `/coachs?team=<sourceId>` per team in a
+ * season (see [[../../repositories/coaches.ts]]). At item add time the
+ * recipe just snapshots `name`, `photo`, and the current team — no
+ * upstream calls happen inside the recipe.
+ *
+ * Identity rule: `<teamId>|<lowercased name>`. Keeping the team in the
+ * natural key matches the umbrella #110 design — "Pep at City" and
+ * "Pep at Bayern" are intentionally distinct identities, so a manager
+ * change doesn't silently mutate every user's tier-list ranking of the
+ * outgoing coach.
  */
 import type {
     TierRankableTypeProjection,
@@ -16,54 +19,40 @@ import type {
 } from './recipe';
 
 /**
- * One lineup entry within a fixture, sufficient to project a coach
- * snapshot. The editor / bulk helpers extract this shape from the
- * existing GraphQL `Lineup` type before calling the recipe.
+ * Source row consumed by the recipe. Built either from a `coaches`
+ * table row (production path) or a test fixture (unit tests). The
+ * shape deliberately omits provider-side fields the recipe doesn't
+ * use; if a future flag needs them, widen the interface here.
  */
 export interface CoachSourceRow {
-    /** Fixture id — recorded in `sourcePath` so refresh-from-source can find it. */
-    fixtureId: string;
-    /** Provider id for the team this lineup belongs to. */
-    teamSourceId: number;
-    /** Which provider this `teamSourceId` is scoped to (e.g. 'api-football'). */
-    sourceName: string;
-    /** From `lineup.coachName`. May be null if the provider didn't report it. */
-    coachName: string | null;
-    /** From `lineup.coachPhoto`. */
-    coachPhoto: string | null;
+    /** Internal `coaches.id` UUID. Becomes the item's `sourceId`. */
+    coachId: string;
+    /** Internal `teams.id` UUID. Already resolved by the caller. */
+    teamId: string;
+    /** Display name. */
+    name: string;
+    /** Headshot URL or null. */
+    photo: string | null;
 }
 
 export const coachRecipe: TierRankableTypeRecipe<CoachSourceRow> = {
     id: 'coach',
     name: 'Coach',
-    sourceType: 'fixture',
+    sourceType: 'coach',
 
-    async project(src, ctx): Promise<TierRankableTypeProjection> {
-        if (!src.coachName || src.coachName.trim().length === 0) {
-            throw new Error(
-                `Coach recipe: lineup for fixture ${src.fixtureId} has no coachName`,
-            );
+    async project(src): Promise<TierRankableTypeProjection> {
+        const trimmedName = src.name.trim();
+        if (trimmedName.length === 0) {
+            throw new Error(`Coach recipe: coach ${src.coachId} has no name`);
         }
-
-        const teamMap = await ctx.resolveTeamIdsBySource(src.sourceName, [src.teamSourceId]);
-        const teamId = teamMap.get(src.teamSourceId) ?? null;
-        if (!teamId) {
-            throw new Error(
-                `Coach recipe: no local team for source ${src.sourceName}:${src.teamSourceId}`,
-            );
-        }
-
-        const trimmedName = src.coachName.trim();
-        const normalisedName = trimmedName.toLowerCase();
-
         return {
             name: trimmedName,
-            imageUrl: src.coachPhoto,
-            teamId,
-            naturalKey: `${teamId}|${normalisedName}`,
-            sourceType: 'fixture',
-            sourceId: src.fixtureId,
-            sourcePath: { teamSourceId: src.teamSourceId, sourceName: src.sourceName },
+            imageUrl: src.photo,
+            teamId: src.teamId,
+            naturalKey: `${src.teamId}|${trimmedName.toLowerCase()}`,
+            sourceType: 'coach',
+            sourceId: src.coachId,
+            sourcePath: null,
         };
     },
 };
