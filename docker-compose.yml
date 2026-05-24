@@ -55,18 +55,30 @@ services:
         build:
             context: .
             dockerfile: apps/service/Dockerfile
+            args:
+                # Forwarded to the Dockerfile's `ARG PORT` so EXPOSE matches
+                # the actual bound port. Operator overrides SERVICE_PORT in
+                # the host env / root .env (see issue #120).
+                PORT: ${SERVICE_PORT:-8080}
         restart: always
         ports:
-            - '8080:8080'
+            - '${SERVICE_PORT:-8080}:${SERVICE_PORT:-8080}'
         env_file:
             - apps/service/.env
         environment:
             - NODE_ENV=${NODE_ENV:-development}
-            - PORT=8080
+            - PORT=${SERVICE_PORT:-8080}
             - HOST=0.0.0.0
             - LOG_LEVEL=${LOG_LEVEL:-debug}
         healthcheck:
-            test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8080/healthz']
+            test:
+                [
+                    'CMD',
+                    'wget',
+                    '--spider',
+                    '-q',
+                    'http://localhost:${SERVICE_PORT:-8080}/healthz',
+                ]
             interval: 30s
             timeout: 5s
             retries: 3

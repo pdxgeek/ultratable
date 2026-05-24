@@ -67,11 +67,13 @@ Both frontends build their UI from **shadcn/ui primitives** vendored under each 
 
 UltraTable is a real-time fantasy sports platform structured as a monorepo with three apps:
 
-| App            | Stack                                            | Port | Prod   |
-| -------------- | ------------------------------------------------ | ---- | ------ |
-| `apps/service` | Fastify 5 + GraphQL Yoga + Drizzle + Better Auth | 8080 | Fly.io |
-| `apps/web`     | React 19 + Vite + urql + Dexie (IndexedDB)       | 5175 | Vercel |
-| `apps/admin`   | React 19 + Vite + TanStack Query                 | 5174 | Vercel |
+| App            | Stack                                            | Default port | Prod   |
+| -------------- | ------------------------------------------------ | ------------ | ------ |
+| `apps/service` | Fastify 5 + GraphQL Yoga + Drizzle + Better Auth | 8080         | Fly.io |
+| `apps/web`     | React 19 + Vite + urql + Dexie (IndexedDB)       | 5175         | Vercel |
+| `apps/admin`   | React 19 + Vite + TanStack Query                 | 5174         | Vercel |
+
+Ports are configurable: `SERVICE_PORT` / `ADMIN_PORT` / `WEB_PORT` in the root `.env` (written by `npm run setup`) are the single source of truth — they feed `start:all`, `wait-for-port`, `health-check.sh`, the Vite proxies, the Fastify CORS allowlist, and `docker-compose.yml`. Each app's own `.env` also carries the matching port for its runtime (service's `PORT`, the two Vite `PORT`s). The numbers above are the defaults that ship out of the box.
 
 ### Service Internals
 

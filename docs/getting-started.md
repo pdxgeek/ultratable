@@ -53,12 +53,14 @@ npm run dev
 
 Wraps `concurrently` to start all three dev servers, killing any stale processes on the relevant ports first. **Never** start them individually with `pkill` / `kill -9` — use `Ctrl+C` on the `dev` process so child processes shut down cleanly.
 
-| Service                   | URL                                                       |
+| Service                   | URL (default)                                             |
 | ------------------------- | --------------------------------------------------------- |
 | GraphQL / Yoga playground | [http://localhost:8080/graphql](http://localhost:8080/graphql) |
 | Health check              | [http://localhost:8080/healthz](http://localhost:8080/healthz) |
 | Admin UI                  | [http://localhost:5174](http://localhost:5174)             |
 | Web UI                    | [http://localhost:5175](http://localhost:5175)             |
+
+The ports above are the defaults. The setup script prompts for `SERVICE_PORT` / `ADMIN_PORT` / `WEB_PORT` and writes them to the root `.env` (plus each app's `.env`); re-run `npm run setup` to change them. The Fastify CORS allowlist, Vite proxies, dev tooling (`start:all`, `health:check`, `wait-for-port`), and the docker-compose service all read these values automatically.
 
 ## Useful commands
 

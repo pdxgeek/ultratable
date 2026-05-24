@@ -24,20 +24,28 @@ const logger = globalLogger.child({ module: 'api/auth' });
 // In dev the service is hit directly or through Vite's default proxy (which
 // does NOT forward X-Forwarded headers), so a static base URL is required;
 // `BETTER_AUTH_URL` provides it.
+// SERVICE_PORT (workspace-wide override, see issue #120) wins over PORT
+// (PaaS convention; what apps/service/.env writes). Falls back to 8080.
+const SERVICE_PORT = Number(process.env.SERVICE_PORT) || Number(process.env.PORT) || 8080;
+const ADMIN_PORT = Number(process.env.ADMIN_PORT) || 5174;
+const WEB_PORT = Number(process.env.WEB_PORT) || 5175;
+
 const betterAuthUrl = process.env.BETTER_AUTH_URL;
 if (!betterAuthUrl && process.env.NODE_ENV !== 'production') {
     logger.warn(
-        'BETTER_AUTH_URL not set — defaulting to http://localhost:8080. Set this in apps/service/.env (via `npm run setup`).',
+        `BETTER_AUTH_URL not set — defaulting to http://localhost:${SERVICE_PORT}. Set this in apps/service/.env (via \`npm run setup\`).`,
     );
 }
 
 // Build trusted origins from ALLOWED_ORIGINS + localhost fallbacks for dev.
+// Ports are sourced from the same env vars the rest of the stack reads (issue
+// #120) so an operator override flows here without a code change.
 const DEV_ORIGINS = [
-    'http://localhost:5174',
-    'http://127.0.0.1:5174',
-    'http://localhost:5175',
-    'http://127.0.0.1:5175',
-    'http://127.0.0.1:8080',
+    `http://localhost:${ADMIN_PORT}`,
+    `http://127.0.0.1:${ADMIN_PORT}`,
+    `http://localhost:${WEB_PORT}`,
+    `http://127.0.0.1:${WEB_PORT}`,
+    `http://127.0.0.1:${SERVICE_PORT}`,
 ];
 const trustedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
@@ -130,7 +138,9 @@ export const auth = betterAuth({
     // Only pin baseURL when an explicit BETTER_AUTH_URL is set (dev). When
     // unset (intended prod default), Better Auth derives the base URL per
     // request from X-Forwarded-Host — see the comment above the env read.
-    baseURL: betterAuthUrl || (process.env.NODE_ENV !== 'production' ? 'http://localhost:8080' : undefined),
+    baseURL:
+        betterAuthUrl ||
+        (process.env.NODE_ENV !== 'production' ? `http://localhost:${SERVICE_PORT}` : undefined),
     trustedOrigins,
     // The admin plugin exposes auth.api.{listUsers,getUser,banUser,unbanUser,
     // impersonateUser,removeUser,setRole} for the upcoming user-management UI

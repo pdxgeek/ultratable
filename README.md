@@ -189,11 +189,11 @@ What this enables, concretely: the [recent commit history](../../commits/master)
 
 ```bash
 # TL;DR
-npm run setup    # prompts for Postgres mode + API key, writes .env files
-npm run dev      # starts service (8080) + admin (5174) + web (5175)
+npm run setup    # prompts for ports + Postgres mode + API key, writes .env files
+npm run dev      # starts service + admin + web (defaults: 8080 / 5174 / 5175)
 ```
 
-Local URLs: [Web](http://localhost:5175) · [Admin](http://localhost:5174) · [GraphQL Playground](http://localhost:8080/graphql) · [Health](http://localhost:8080/healthz)
+Local URLs (defaults): [Web](http://localhost:5175) · [Admin](http://localhost:5174) · [GraphQL Playground](http://localhost:8080/graphql) · [Health](http://localhost:8080/healthz). Override the ports by re-running `npm run setup` (or by editing `SERVICE_PORT` / `ADMIN_PORT` / `WEB_PORT` in the root `.env`).
 
 ---
 

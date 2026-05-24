@@ -1,13 +1,30 @@
+import { readFileSync } from 'fs';
 import net from 'net';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const port = Number(process.argv[2]);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..');
+
+// Resolution order when no explicit port arg is given (issue #120):
+//   1. SERVICE_PORT in process env
+//   2. SERVICE_PORT in root .env (written by scripts/setup.mjs)
+//   3. 8080 — historical default; lets old clones that pre-date the
+//      `npm run setup` port prompt continue to work without re-running it.
+function readRootSvcPort() {
+    if (process.env.SERVICE_PORT) return Number(process.env.SERVICE_PORT);
+    try {
+        const text = readFileSync(path.join(REPO_ROOT, '.env'), 'utf8');
+        const match = text.match(/^\s*SERVICE_PORT\s*=\s*(\S+)\s*$/m);
+        return match ? Number(match[1]) : NaN;
+    } catch {
+        return NaN;
+    }
+}
+
+const port = Number(process.argv[2]) || readRootSvcPort() || 8080;
 const host = process.argv[3] || '127.0.0.1';
 const timeoutMs = 30000;
-
-if (!port) {
-    console.error('Usage: node scripts/wait-for-port.js <port> [host]');
-    process.exit(2);
-}
 
 const start = Date.now();
 

@@ -41,8 +41,12 @@ RUN chown -R node:node /app
 # Switch to non-root user for security
 USER node
 
-# Expose the API port
-EXPOSE 8080
+# Expose the API port. ARG is forwarded by docker-compose from SERVICE_PORT
+# so EXPOSE matches whatever the operator picked. EXPOSE is documentation
+# (it doesn't publish the port — `ports:` does), but keeping the two in
+# sync avoids surprising tooling that scans the image manifest.
+ARG PORT=8080
+EXPOSE $PORT
 
 # Start the application referencing the local node_modules
 # Since the workdir is /app at runtime, we can either cd or use prefix
