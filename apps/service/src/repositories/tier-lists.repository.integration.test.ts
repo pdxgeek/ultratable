@@ -265,7 +265,7 @@ describe('PostgresTierListsRepository — integration', () => {
             title: 'defaults',
             tiers: DEFAULT_TIERS,
         });
-        expect(tl.displayConfig).toEqual({ showTeamNames: true });
+        expect(tl.displayConfig).toEqual({ showTeamNames: true, showTeamLogos: true });
         expect(tl.isLocked).toBe(false);
     });
 
@@ -280,8 +280,12 @@ describe('PostgresTierListsRepository — integration', () => {
         });
         const patched = await repository.tierLists.updateTierListDisplayConfig(tl.id, {
             showTeamNames: false,
+            showTeamLogos: false,
         });
-        expect(patched?.displayConfig).toEqual({ showTeamNames: false });
+        expect(patched?.displayConfig).toEqual({
+            showTeamNames: false,
+            showTeamLogos: false,
+        });
 
         const locked = await repository.tierLists.setTierListLocked(tl.id, true);
         expect(locked?.isLocked).toBe(true);

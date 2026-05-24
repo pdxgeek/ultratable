@@ -32,6 +32,7 @@ import {
 } from '../config/tier-lists';
 import { coachRecipe } from '../entities/tier-rankable-types/coach';
 import type { TierRankableTypeProjection } from '../entities/tier-rankable-types/recipe';
+import { teamRecipe } from '../entities/tier-rankable-types/team';
 import { venueRecipe } from '../entities/tier-rankable-types/venue';
 import { repository } from '../repositories';
 import type {
@@ -519,6 +520,35 @@ async function discoverVenueCandidates(seasonId: string): Promise<CandidateShape
     return candidates;
 }
 
+/**
+ * Team discovery: teams are first-class rows we already store, so this
+ * is a pure DB query + projection. No upstream calls.
+ */
+async function discoverTeamCandidates(seasonId: string): Promise<CandidateShape[]> {
+    const cacheKey = `pool-candidates:team:${seasonId}`;
+    const cached = cacheService.get<CandidateShape[]>(cacheKey);
+    if (cached) return cached;
+
+    const teams = await repository.teams.getTeamsBySeasonId(seasonId);
+    const candidates: CandidateShape[] = [];
+    for (const t of teams) {
+        try {
+            const projection = await teamRecipe.project(
+                { teamId: t.id, name: t.name, logo: t.logo },
+                { resolveTeamIdsBySource: async () => new Map() },
+            );
+            const candidate = toCandidate(projection);
+            candidate.tierRankableTypeId = 'team';
+            candidates.push(candidate);
+        } catch {
+            // skip malformed teams
+        }
+    }
+    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    cacheService.set(cacheKey, candidates, TTL.STABLE);
+    return candidates;
+}
+
 // ----------------------------------------------------------------------
 // Queries
 // ----------------------------------------------------------------------
@@ -573,6 +603,8 @@ builder.queryField('tierRankableItemCandidates', (t) =>
                     return discoverCoachCandidates(seasonIdStr);
                 case 'venue':
                     return discoverVenueCandidates(seasonIdStr);
+                case 'team':
+                    return discoverTeamCandidates(seasonIdStr);
                 default:
                     throw new GraphQLError(
                         `Unknown tier rankable type: ${tierRankableTypeId}`,

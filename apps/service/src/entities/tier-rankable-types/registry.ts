@@ -11,6 +11,7 @@
 import { repository } from '../../repositories';
 import { coachRecipe } from './coach';
 import type { TierRankableTypeRecipe } from './recipe';
+import { teamRecipe } from './team';
 import { venueRecipe } from './venue';
 
 /**
@@ -25,6 +26,7 @@ import { venueRecipe } from './venue';
 const recipes: Record<string, TierRankableTypeRecipe<any>> = {
     [coachRecipe.id]: coachRecipe,
     [venueRecipe.id]: venueRecipe,
+    [teamRecipe.id]: teamRecipe,
 };
 
 export function getRecipe(id: string): TierRankableTypeRecipe<unknown> | undefined {
@@ -78,4 +80,4 @@ export async function assertRecipeRegistryMatchesDb(): Promise<void> {
     }
 }
 
-export { coachRecipe, venueRecipe };
+export { coachRecipe, venueRecipe, teamRecipe };
