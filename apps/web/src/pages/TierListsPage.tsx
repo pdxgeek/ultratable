@@ -143,18 +143,10 @@ const TierListsPage: React.FC = () => {
                         <p className="text-sm text-text-secondary">Loading tier lists…</p>
                     ) : lists.length === 0 ? (
                         <div className="rounded-lg border border-glass-border bg-glass-bg p-8 text-center">
-                            <p className="text-sm text-text-secondary mb-3">
-                                You don&apos;t have any tier lists this season yet.
+                            <p className="text-sm text-text-secondary">
+                                You don&apos;t have any tier lists this season yet. Use{' '}
+                                <strong>+ New Tier List</strong> to create one.
                             </p>
-                            <Can I="create" a="TierList">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowNewDialog(true)}
-                                    className="px-4 py-1.5 rounded-[20px] border border-accent-green text-[0.85rem] font-semibold bg-accent-green text-white hover:brightness-110"
-                                >
-                                    Create your first tier list
-                                </button>
-                            </Can>
                         </div>
                     ) : (
                         <ul className="flex flex-col gap-2">
