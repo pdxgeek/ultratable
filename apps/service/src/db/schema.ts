@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
     boolean,
+    check,
+    doublePrecision,
     index,
     integer,
     jsonb,
@@ -489,6 +491,162 @@ export const predictionSnapshotEntries = pgTable(
         // One team per position within a snapshot; pairs with the (snapshot,
         // team) PK to enforce the bijection required by `lockInPrediction`.
         uniqueSnapshotPosition: unique().on(table.snapshotId, table.position),
+    }),
+);
+
+// --- Tier rankable types (recipes) ---
+// A small registry of *recipes* for ranking categories — `coach`,
+// `player`, `venue`, …. Each row declares that a category exists; the
+// matching server-side resolver knows how to project source data onto
+// the tier-rankable-item display contract (name / imageUrl / teamId)
+// and how to derive a per-instance natural key.
+//
+// Coaches: no first-class table — the `coach` recipe extracts data from
+// fixture lineups. The fixture entity is the load-bearing thing; this
+// row is a lens that lets the tier-list product project coaches out of
+// it.
+//
+// Players / venues: first-class tables exist, but their schemas have
+// variable shape (player name might live in `name` / `playerName` /
+// `firstName`+`lastName`). The recipe pins which fields project where.
+//
+// `default_formula_id` is the formula seam for future objective-score
+// computation (per-recipe — e.g. coaches → points-per-game). Wired but
+// not consumed yet. Boot-time validation asserts every row here has a
+// registered TS recipe with the same id (and vice versa).
+export const tierRankableTypes = pgTable('tier_rankable_type', {
+    id: text('id').primaryKey(), // 'coach', 'player', 'venue', …
+    name: text('name').notNull(),
+    defaultFormulaId: varchar('default_formula_id', { length: 50 }).references(
+        () => rankingFormulas.id,
+    ),
+    createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- Tier Lists ---
+// A live-editable per-(user, season, recipe) ranking surface. Each item
+// carries a snapshot of the recipe's projection (name, image, team)
+// plus the natural key the recipe derived. The recipe row itself only
+// declares "this category exists" — projection logic lives in the
+// matching TS resolver.
+export const tierLists = pgTable(
+    'tier_list',
+    {
+        // Stable external identifier — surfaced as the GraphQL `id` and
+        // used for any future share link / overlay route. Internal numeric
+        // ids are never exposed (AI_README_FIRST §1).
+        id: uuid('id').primaryKey().defaultRandom(),
+        userId: uuid('user_id')
+            .references(() => users.id, { onDelete: 'cascade' })
+            .notNull(),
+        seasonId: uuid('season_id')
+            .references(() => seasons.id, { onDelete: 'cascade' })
+            .notNull(),
+        // Which recipe this list ranks against. Constrains the add-drawer
+        // and item validation. FK to the registry so a typo in user
+        // input can't write garbage.
+        tierRankableTypeId: text('tier_rankable_type_id')
+            .references(() => tierRankableTypes.id)
+            .notNull(),
+        title: text('title').notNull(),
+        // Ordered tier scheme, top to bottom. Each entry is
+        // `{ key: <stable short id>, name: <display label> }`. Items
+        // reference `key`, not `name`, so renames don't touch them. Bounds
+        // (MIN_TIERS..MAX_TIERS) are enforced by the resolver.
+        tiers: jsonb('tiers').notNull(),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+        // Soft-delete marker. Null = live; set to now() on delete. Caps
+        // count both live and soft-deleted rows so a create/delete loop
+        // can't bypass the per-(user, season) limit.
+        deletedAt: utcTimestamp('deleted_at'),
+    },
+    (table) => ({
+        // Live-row read path: viewer's tier lists in a season, newest
+        // first, filtered to live rows.
+        liveByScopeIdx: index('tier_list_live_by_scope_idx')
+            .on(table.userId, table.seasonId, table.tierRankableTypeId)
+            .where(sql`${table.deletedAt} IS NULL`),
+        // Cap-count path: counts every row including soft-deleted ones, so
+        // the index intentionally has no partial filter.
+        scopeIdx: index('tier_list_scope_idx').on(table.userId, table.seasonId),
+    }),
+);
+
+export const tierRankableItems = pgTable(
+    'tier_rankable_item',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        tierListId: uuid('tier_list_id')
+            .references(() => tierLists.id, { onDelete: 'cascade' })
+            .notNull(),
+        // Which recipe was used to project this slot. Must match the
+        // parent tier list's recipe; resolver enforces it.
+        tierRankableTypeId: text('tier_rankable_type_id')
+            .references(() => tierRankableTypes.id)
+            .notNull(),
+        // Stable per-instance identifier within the recipe ("${teamId}|pep
+        // guardiola" for the coach recipe). `(tier_rankable_type_id,
+        // natural_key)` is the cross-user identity for an instance and
+        // powers aggregates like "most-ranked Pep". No UNIQUE — two
+        // users can both have the same coach in their lists.
+        naturalKey: text('natural_key').notNull(),
+        // null = in the pool row; non-null = in the named tier on the parent.
+        tierKey: text('tier_key'),
+        // Float per row. Reorder by midpoint (insert between A=1.0 and
+        // B=2.0 by writing 1.5) so a drag doesn't re-number siblings.
+        position: doublePrecision('position').notNull(),
+        // Snapshot of the recipe's projection at add time. Reads use these
+        // directly; refresh-from-source (future) re-runs the recipe and
+        // overwrites these without touching the per-user overrides below.
+        name: text('name').notNull(),
+        imageUrl: text('image_url'),
+        teamId: uuid('team_id').references(() => teams.id),
+        // Source back-pointer — where the snapshot came from.
+        //   sourceType = 'fixture' | 'player' | 'venue' | …
+        //   sourceId   = uuid of the source row
+        //   sourcePath = sub-selector (e.g. { teamSourceId: 50 } to pick
+        //                which lineup in a fixture)
+        sourceType: text('source_type'),
+        sourceId: uuid('source_id'),
+        sourcePath: jsonb('source_path'),
+        // Per-user customisation. Displayed name = nameOverride ?? name
+        // (same for image). Refresh-from-source overwrites `name` /
+        // `image_url` but never touches these.
+        nameOverride: text('name_override'),
+        imageUrlOverride: text('image_url_override'),
+        // Secondary line. Per-user, no canonical version — different
+        // recipes use it for different things (striker position, venue
+        // capacity, etc.).
+        subtitle: text('subtitle'),
+        addedAt: utcTimestamp('added_at').defaultNow().notNull(),
+        deletedAt: utcTimestamp('deleted_at'),
+    },
+    (table) => ({
+        // Editor hot path: live items for one tier list, by row (tier or
+        // pool) then position.
+        liveByListIdx: index('tier_rankable_item_live_by_list_idx').on(
+            table.tierListId,
+            table.deletedAt,
+            table.tierKey,
+            table.position,
+        ),
+        // Reverse-lookup: every item using a given recipe + instance
+        // identifier — powers "most-ranked Pep" aggregates across users.
+        instanceIdx: index('tier_rankable_item_instance_idx').on(
+            table.tierRankableTypeId,
+            table.naturalKey,
+        ),
+        // Reverse-lookup by team — supports team-profile widgets ("every
+        // item associated with team X").
+        teamIdx: index('tier_rankable_item_team_idx').on(table.teamId),
+        // Source-pointer integrity: either freeform (both null) or sourced
+        // (both set).
+        sourcePointerCheck: check(
+            'tier_rankable_item_source_pointer_check',
+            sql`(${table.sourceType} IS NULL) = (${table.sourceId} IS NULL)`,
+        ),
     }),
 );
 
