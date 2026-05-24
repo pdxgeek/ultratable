@@ -42,6 +42,7 @@ import type {
     TierRankableTypeRow,
 } from '../repositories/tier-lists';
 import { cacheService, TTL } from '../services/cache.service';
+import { graphicsService } from '../services/graphics.service';
 import { abilityOf, builder } from './builder';
 import { TeamRef } from './football';
 
@@ -274,8 +275,23 @@ builder.objectType(TierRankableItemRef, {
         }),
         displayImageUrl: t.string({
             nullable: true,
-            description: 'Convenience: `imageUrlOverride ?? imageUrl`.',
-            resolve: (parent) => parent.imageUrlOverride ?? parent.imageUrl,
+            description:
+                "Resolved image URL with the same graphics-registry fallback chain Team/Venue/Player use: per-user override > graphics-registry stored URL (Supabase) > recipe snapshot. Items with `sourceType` of `coach` / `team` / `venue` get the Supabase URL when one was sideloaded at sync time; otherwise the snapshot URL the recipe captured at add time wins.",
+            resolve: async (parent) => {
+                if (parent.imageUrlOverride) return parent.imageUrlOverride;
+                if (parent.sourceType && parent.sourceId) {
+                    try {
+                        const url = await graphicsService.resolveUrl(
+                            parent.sourceId,
+                            parent.sourceType,
+                        );
+                        if (url) return url;
+                    } catch {
+                        /* fall through */
+                    }
+                }
+                return parent.imageUrl;
+            },
         }),
         addedAt: t.expose('addedAt', { type: 'DateTime' }),
     }),

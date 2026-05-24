@@ -23,6 +23,7 @@ const ENTITY_TABLES = {
     venue: schema.venues,
     league: schema.leagues,
     player: schema.players,
+    coach: schema.coaches,
 } as const;
 
 type GraphicEntityType = keyof typeof ENTITY_TABLES;
@@ -205,6 +206,10 @@ export class GraphicsService {
             }
             if (row?.sourceId)
                 url = `https://media.api-sports.io/football/leagues/${row.sourceId}.png`;
+        } else if (entityType === 'coach') {
+            [row] = await db.select().from(schema.coaches).where(eq(schema.coaches.id, entityId));
+            if (row?.sourceId)
+                url = `https://media.api-sports.io/football/coachs/${row.sourceId}.png`;
         }
 
         if (!url) {

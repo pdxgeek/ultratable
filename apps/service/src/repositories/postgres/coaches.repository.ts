@@ -3,6 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db';
 import * as schema from '../../db/schema';
 import type { IFootballProvider, IngestedCoach } from '../../integrations/types';
+import { graphicsService } from '../../services/graphics.service';
 import { globalLogger } from '../../services/log.service';
 import type { CoachesRepository, CoachRow } from '../coaches';
 import { NOW_MS } from './shared';
@@ -95,6 +96,15 @@ export class PostgresCoachesRepository implements CoachesRepository {
             })
             .returning();
         if (!row) throw new Error('Failed to upsert coach');
+
+        // Sideload the upstream photo into the graphics registry so the
+        // tier-list item renderer can resolve a stable storage URL instead
+        // of the raw API-Football URL. Best-effort; failures are logged
+        // inside the service and don't block the upsert.
+        if (input.photo) {
+            graphicsService.sideload(row.id, 'coach', input.photo);
+        }
+
         return row;
     }
 
