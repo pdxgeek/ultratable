@@ -1,6 +1,6 @@
 import type { TierListEditorRow } from '../components/tier-lists/queries';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
@@ -23,6 +23,15 @@ const TierListEditorPage: React.FC = () => {
     const [view, setView] = useState<EditorView>('board');
     const [showAddDrawer, setShowAddDrawer] = useState(false);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [moveError, setMoveError] = useState<string | null>(null);
+
+    // Auto-dismiss move errors after a few seconds so a transient
+    // failure doesn't stick around on the screen forever.
+    useEffect(() => {
+        if (!moveError) return;
+        const timer = setTimeout(() => setMoveError(null), 4000);
+        return () => clearTimeout(timer);
+    }, [moveError]);
 
     const [result, refetch] = useQuery<{ tierList: TierListEditorRow | null }>({
         query: TIER_LIST_QUERY,
@@ -81,7 +90,17 @@ const TierListEditorPage: React.FC = () => {
     };
 
     const handleMove = async (itemId: string, tierKey: string | null, position: number) => {
-        await moveItemMutation({ itemId, tierKey, position });
+        setMoveError(null);
+        const result = await moveItemMutation({ itemId, tierKey, position });
+        if (result.error) {
+            setMoveError(
+                result.error.graphQLErrors[0]?.message ?? result.error.message,
+            );
+            // Pull the server's authoritative state back so the item
+            // visually snaps to where it actually is.
+            refetchList();
+            return;
+        }
         refetchList();
     };
 
@@ -106,6 +125,14 @@ const TierListEditorPage: React.FC = () => {
                 onRenameTitle={handleRenameTitle}
                 onToggleLock={refetchList}
             />
+            {moveError && (
+                <div
+                    role="alert"
+                    className="mb-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                    {moveError}
+                </div>
+            )}
             {view === 'config' ? (
                 <TierListConfigView
                     list={list}

@@ -7,10 +7,12 @@ import {
     KeyboardSensor,
     PointerSensor,
     TouchSensor,
-    closestCenter,
+    closestCorners,
+    pointerWithin,
     useDroppable,
     useSensor,
     useSensors,
+    type CollisionDetection,
     type DragEndEvent,
     type DragStartEvent,
 } from '@dnd-kit/core';
@@ -78,6 +80,25 @@ function positionForInsert(siblings: TierRankableItem[], targetIndex: number): n
 const POOL_DROP_ID = '__pool__';
 const tierDropId = (key: string) => `tier:${key}`;
 
+/**
+ * Custom collision detection for the multi-container sortable layout.
+ * Each tier row is its own droppable + SortableContext; the default
+ * `closestCenter` and `closestCorners` algorithms can fail to resolve
+ * an over-target on cross-row drags (cursor sits between droppables,
+ * neither corner nor center wins), leaving `over` null and the drop
+ * a silent no-op.
+ *
+ * `pointerWithin` first: if the cursor is literally inside any
+ * droppable's rectangle, that's the over. Falls back to
+ * `closestCorners` when the cursor is between droppables (e.g. in the
+ * gap above/below a row), which still resolves a sensible target.
+ */
+const multiContainerCollision: CollisionDetection = (args) => {
+    const within = pointerWithin(args);
+    if (within.length > 0) return within;
+    return closestCorners(args);
+};
+
 interface SortableItemProps {
     item: TierRankableItem;
     disabled: boolean;
@@ -128,7 +149,24 @@ const TierListBoard: React.FC<Props> = ({
     onRemoveItem,
     onOpenItemEditor,
 }) => {
-    const { pool, byTier } = useMemo(() => bucketItems(list.items), [list.items]);
+    // Optimistic local mirror of list.items. Drag drops update this
+    // immediately so the item visually lands in its new slot without
+    // waiting for the server round-trip — without this, dnd-kit's
+    // slide-out animation resets at drop time and the item briefly
+    // snaps back to its source row before the refetch updates props.
+    //
+    // Set-state-during-render to resync: when the server's authoritative
+    // list comes back from refetch, the props reference changes and we
+    // adopt it (which will be identical to the optimistic state on
+    // success, or snap to truth on failure).
+    const [syncedItems, setSyncedItems] = useState(list.items);
+    const [items, setItems] = useState(list.items);
+    if (syncedItems !== list.items) {
+        setSyncedItems(list.items);
+        setItems(list.items);
+    }
+
+    const { pool, byTier } = useMemo(() => bucketItems(items), [items]);
     const [activeId, setActiveId] = useState<string | null>(null);
 
     const sensors = useSensors(
@@ -139,7 +177,7 @@ const TierListBoard: React.FC<Props> = ({
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
     );
 
-    const itemsById = useMemo(() => new Map(list.items.map((i) => [i.id, i])), [list.items]);
+    const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
     const activeItem = activeId ? (itemsById.get(activeId) ?? null) : null;
 
     const handleDragStart = (e: DragStartEvent) => {
@@ -221,6 +259,17 @@ const TierListBoard: React.FC<Props> = ({
             return;
         }
 
+        // Optimistic update: rewrite the item locally so it lands in its
+        // new slot immediately. Server reconciliation runs in parallel;
+        // when the refetch returns, the props-vs-state sync above adopts
+        // the server's truth.
+        setItems((prev) =>
+            prev.map((i) =>
+                i.id === item.id
+                    ? { ...i, tierKey: targetTierKey, position: nextPosition }
+                    : i,
+            ),
+        );
         onMoveItem(item.id, targetTierKey, nextPosition);
     };
 
@@ -229,7 +278,7 @@ const TierListBoard: React.FC<Props> = ({
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={multiContainerCollision}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveId(null)}
