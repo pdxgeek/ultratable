@@ -27,6 +27,15 @@ import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { refuseInAgentSession } from './agent-guard.mjs';
+
+refuseInAgentSession({
+    scriptName: 'scripts/setup.mjs',
+    mutates:
+        'writes apps/service/.env, regenerates apps/{admin,web}/.env and root .env, ' +
+        'optionally starts Postgres/MinIO containers, runs npm install, and applies migrations.',
+});
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVICE_ENV = path.join(ROOT, 'apps/service/.env');
 const ADMIN_ENV = path.join(ROOT, 'apps/admin/.env');
