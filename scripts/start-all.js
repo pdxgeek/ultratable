@@ -4,6 +4,15 @@ import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { refuseInAgentSession } from './agent-guard.mjs';
+
+refuseInAgentSession({
+    scriptName: 'scripts/start-all.js',
+    mutates:
+        'kills any processes on the service/admin/web ports (including the operator\'s ' +
+        'running dev servers) and spawns fresh ts-node + Vite processes in their place.',
+});
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 

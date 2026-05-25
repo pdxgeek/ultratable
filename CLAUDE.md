@@ -4,13 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read This First
 
+> [!CAUTION]
+> **The operator's dev environment is not the agent's to mutate.** Your ports are not their ports, your containers are not their containers, your volume is not their volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down` against the default `ultratable` project name, `db:migrate` / `db:bootstrap`, or hand-edit `.env` files. Those scripts hard-refuse in an agent session via [scripts/agent-guard.mjs](scripts/agent-guard.mjs). For most verification, the test suite + `node --check` + `npm run lint --workspaces` are enough. If you genuinely need a live run, use a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never the bypass flag. Full pattern: [AI_README_FIRST.MD §7](AI_README_FIRST.MD#7-ai-agent-operational-rules).
+
 This file covers **what to run and where things live**. The architectural contracts and agent operating rules live in [AI_README_FIRST.MD](AI_README_FIRST.MD) — read that before touching the ID system, data layer, schema, or GraphQL resolvers. Specifically:
 
 - **§1 ID Philosophy** — dual-ID system, naming convention, timestamp/timezone rules, hybrid SQL+JSONB column policy
 - **§3–4 Cache Isolation & Lifecycle** — raw API cache vs. domain cache keying
 - **§5 Architecture & Design Principles** — library-over-bespoke, DataLoader requirement for nested resolvers, performance and SOLID/DRY guidance
 - **§6 Auth Contracts** — identity ≠ account, never auto-link by email, per-frontend OAuth redirect URIs, viewer-returns-null, **CASL ability is the only authorization surface** (no inline role checks anywhere). Deep dive: [docs/auth-architecture.md](docs/auth-architecture.md).
-- **§7 AI Agent Operational Rules** — no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
+- **§7 AI Agent Operational Rules** — **stay out of the operator's dev environment** (top of §7), no `any`, keep components small, write one-off scripts to `/tmp/`, ask first for large refactors
 
 ## First-Run Setup
 
