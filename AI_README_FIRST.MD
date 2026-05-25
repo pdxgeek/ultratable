@@ -229,55 +229,23 @@ The legacy `requireAdmin` / `requireViewer` / `requireSelfOrAdmin` helpers in [a
 
 ## 7. Provider Rate Limiting
 
-Every call to an upstream provider goes through a single chokepoint at the provider class. Two distinct concerns are baked in at that layer, and they look different on purpose.
+Every upstream call routes through a single Bottleneck-wrapped chokepoint per provider. The deep dive is in [docs/provider-integration.md](docs/provider-integration.md) — read that before adding a new method on `ApiFootballProvider` or wiring up a new upstream provider. Headline rules:
 
-### Metered JSON API — `v3.football.api-sports.io`
-
-- **Single chokepoint:** [`apps/service/src/integrations/api-football/index.ts`](apps/service/src/integrations/api-football/index.ts)'s private `request()` method. Every provider method (`getCountries`, `getLeagues`, `getSeasons`, `getTeams`, `getFixtures`, `getFixturesByIds`, `getMatchEvents`, `getPlayerData`, `getLineups`, `getCoachesByTeam`, `getSquad`) routes through it. The wrapper schedules every request through a per-instance `Bottleneck` limiter.
-- **Header-driven plan detection.** A response interceptor reads `X-RateLimit-Limit` off any response and resizes the reservoir to match the account's actual plan — Free=10/min, Pro=300/min, anything else. No env var declaring the tier, no `/status` probe at boot. The limiter starts conservative (10/min) and widens once it sees the first response header.
-- **Automatic 429 handling.** On a 429, the limiter reads `Retry-After` and queues a retry up to 3 attempts. Callers never see transient rate-limit errors.
+- **Metered JSON API** (`v3.football.api-sports.io`) is rate-limited at the provider class via a per-instance `Bottleneck`. A response interceptor reads `X-RateLimit-Limit` and adapts the reservoir to the account's plan (Free=10/min, Pro=300/min, …). 429s read `Retry-After` and queue retries.
+- **Asset CDN** (`media.api-sports.io`) gets its own concurrency-only limiter at the consumer — separate host, separate budget, and the cap is about the local HTTP socket pool, not upstream throttling.
 
 > [!CAUTION]
-> When adding a new method on `ApiFootballProvider`, it MUST go through `this.request(...)`, never `this.client.get(...)` directly. The wrapper is the rate-limit chokepoint; a direct call silently bypasses the budget and will trip 429s under load.
-
-### Asset CDN — `media.api-sports.io`
-
-- **Separate host, separate budget.** Image binaries from the CDN don't count against the metered API's per-minute window, so they have their own (looser) limiter rather than sharing the API's reservoir.
-- **Lives at** [`apps/service/src/services/graphics.service.ts`](apps/service/src/services/graphics.service.ts) as a module-level `Bottleneck({ maxConcurrent: 10 })` — concurrency-bounded, no per-minute reservoir.
-- **Why a cap is necessary even without upstream throttling:** a 20-team squad sync lands ~500 fire-and-forget `graphicsService.sideload(...)` calls in rapid succession. Without a concurrency cap the Node HTTP agent's socket pool saturates and requests time out at the axios layer before they ever leave the process. The cap is about the local connection pool, not the CDN.
-
-### Adding a new provider
-
-Follow the same shape: rate-limit the **metered** API at the provider class (header-driven if the upstream exposes them, otherwise a static reservoir), and concurrency-bound the **asset CDN** at the service that consumes it. Don't fold both into one limiter — they have different bottlenecks at different layers and one config can only optimize for one of them.
+> New methods on `ApiFootballProvider` MUST go through `this.request(...)`, never `this.client.get(...)` directly. The wrapper is the rate-limit chokepoint; a direct call silently bypasses the budget.
 
 ---
 
 ## 8. Workers / Background Job Execution
 
-The 15-second authenticated GraphQL timeout in [`apps/service/src/index.ts`](apps/service/src/index.ts) (`REQUEST_TIMEOUT_MS_AUTH`) is a hard ceiling on any resolver. Any mutation whose runtime scales with input size (number of teams, fixtures, players, …) MUST dispatch off the request thread or it will eventually fail in production.
+The 15-second authenticated GraphQL timeout in [`apps/service/src/index.ts`](apps/service/src/index.ts) (`REQUEST_TIMEOUT_MS_AUTH`) is a hard ceiling on any resolver. Any mutation whose runtime scales with input size (teams, fixtures, players, …) MUST dispatch off the request thread. The deep dive — including the `JobRunner.run` vs `runInBackground` decision matrix, the `runJob` dispatcher pattern, cache-invalidation placement, and the known in-process limitation — is in [docs/workers.md](docs/workers.md). Headline rules:
 
-The job runner at [`apps/service/src/workers/runner.ts`](apps/service/src/workers/runner.ts) gives every long-running operation a persistent execution record and a polling-friendly status. Two variants:
-
-| Variant                              | Returns                                       | Throws on task error?              | When to use                                                                |
-| ------------------------------------ | --------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| `JobRunner.run(name, task)`          | `void` after the task settles                 | Yes — re-throws after persisting   | Short tasks that fit inside the GraphQL request budget (sub-second).        |
-| `JobRunner.runInBackground(name, task)` | `JobExecution` row immediately, status `'running'` | No — failures land in `errorMessage` | Tasks that may take seconds or minutes. The caller MUST NOT block the request. |
-
-Both variants share the same persistence (`status`, `processedCount`, `totalCount`, `apiCallsCount`, `errorMessage`, `finishedAt`) so the admin's `WorkersView` polls progress regardless of which one the resolver chose.
-
-### The `runJob` dispatcher
-
-[`apps/service/src/schema/workers.ts`](apps/service/src/schema/workers.ts) exposes a generic `runJob(name: String!)` mutation. The name's prefix selects the work (e.g. `sync-fixtures-39-2024` dispatches to `repository.fixtures.syncFixtures(39, 2024, reporter)`); the resolver wires the call through `runInBackground` and returns the freshly-created `JobExecution`. The admin's `WorkersView` already polls `jobExecutions` for completion — there is no separate "wait for it" path.
-
-**Adding a new background-eligible mutation:** do NOT introduce a new top-level GraphQL mutation that wraps `JobRunner.run` in a closure (the pattern of `let result; await JobRunner.run(...); return result` does not survive background execution — by the time the resolver returns, `result` is still empty). Instead, add a new name-prefix branch inside the `runJob` resolver and let it dispatch via `runInBackground`.
-
-### Cache invalidation belongs in the repository method
-
-When a sync runs via `runInBackground`, the resolver returns before the task completes. Any `cacheService.invalidate(...)` call placed in the resolver runs against stale state and gets overwritten the moment the background task finishes. Move invalidations into the `repository.X.syncY()` method that owns the work, where they fire after the writes land.
-
-### In-process execution — known limitation
-
-`runInBackground` runs the task on the same Node process (a microtask tick after the resolver returns). There is no Redis queue, BullMQ broker, or separate worker tier. A process restart kills any in-flight job; its execution row stays in `'running'` status with no `finishedAt`. This is acceptable for the current scale of admin-triggered syncs; if it becomes a problem, a persistent queue is the next step. **Don't add a queue speculatively** — the API surface stays the same when the day comes.
+- **Long syncs use `JobRunner.runInBackground`** and return a `JobExecution` row immediately; clients poll `jobExecutions` for completion.
+- **Cache invalidation belongs in the repository method**, not the resolver — the resolver returns before the background task lands its writes.
+- **Don't wrap `JobRunner.run` in a closure** to extract the work's result (`let result; await JobRunner.run(...); return result`). That pattern doesn't survive background execution. Add a new name-prefix branch to `runJob` instead.
 
 ---
 
