@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Read This First
 
 > [!CAUTION]
-> **The operator's dev environment is not the agent's to mutate.** Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down`, `db:migrate` / `db:bootstrap`, or hand-edit `.env` files. Those scripts hard-refuse in an agent session via [scripts/agent-guard.mjs](scripts/agent-guard.mjs); the refusal is a signal, not something to bypass. To verify, use the test suite, `node --check`, and `npm run lint --workspaces`. See [AI_README_FIRST.MD §7](AI_README_FIRST.MD#7-ai-agent-operational-rules).
+> **The operator's dev environment is not the agent's to mutate.** Your ports are not their ports, your containers are not their containers, your volume is not their volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down` against the default `ultratable` project name, `db:migrate` / `db:bootstrap`, or hand-edit `.env` files. Those scripts hard-refuse in an agent session via [scripts/agent-guard.mjs](scripts/agent-guard.mjs). For most verification, the test suite + `node --check` + `npm run lint --workspaces` are enough. If you genuinely need a live run, use a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never the bypass flag. Full pattern: [AI_README_FIRST.MD §7](AI_README_FIRST.MD#7-ai-agent-operational-rules).
 
 This file covers **what to run and where things live**. The architectural contracts and agent operating rules live in [AI_README_FIRST.MD](AI_README_FIRST.MD) — read that before touching the ID system, data layer, schema, or GraphQL resolvers. Specifically:
 

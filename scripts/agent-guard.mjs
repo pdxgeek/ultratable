@@ -54,10 +54,26 @@ export function refuseInAgentSession({ scriptName, mutates }) {
     process.stderr.write(`${bold('What this script does:')} ${mutates}\n`);
     process.stderr.write(
         `${bold('Why this guard exists:')} the operator's dev environment is not the agent's to mutate.\n` +
-            `The agent should propose changes; the human runs them. See AI_README_FIRST.MD §7.\n\n`,
+            `Your ports are not their ports. Your containers are not their containers.\n` +
+            `Your volume is not their volume.\n\n`,
+    );
+    process.stderr.write(`${bold('What to do instead:')}\n`);
+    process.stderr.write(
+        `  • Prefer ${bold('not running anything live')} — npm run test, node --check,\n` +
+            `    and npm run lint --workspaces cover most verification.\n` +
+            `  • If you genuinely need a live run, use an ${bold('isolated stack')}:\n` +
+            `      git worktree add ../ultratable-claude <branch>\n` +
+            `      cd ../ultratable-claude\n` +
+            `      export COMPOSE_PROJECT_NAME=claude-dev-ultratable\n` +
+            `      node scripts/setup.mjs ${BYPASS_FLAG}    # in the worktree only\n` +
+            `    setup.mjs auto-shifts ports past the operator's stack; the\n` +
+            `    project name namespaces containers + volumes. Tear down with\n` +
+            `    docker compose down -v from inside the worktree.\n` +
+            `  • Or just propose the change and let the human run it.\n\n`,
     );
     process.stderr.write(
-        `If you are the human operator and this heuristic misfired, re-run with ${bold(BYPASS_FLAG)}.\n\n`,
+        `Full policy: AI_README_FIRST.MD §7. The ${bold(BYPASS_FLAG)} flag exists for the\n` +
+            `human operator if this heuristic misfires — ${bold('not')} for the agent to bypass.\n\n`,
     );
     process.exit(1);
 }
