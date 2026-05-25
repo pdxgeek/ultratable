@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import axios from 'axios';
+import Bottleneck from 'bottleneck';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '../db';
@@ -9,6 +10,16 @@ import { storageProvider } from '../providers/storage';
 import { globalLogger } from './log.service';
 
 const logger = globalLogger.child({ module: 'GraphicsService' });
+
+// Image downloads run fire-and-forget during sync, so a 20-team squad
+// import can land ~500 concurrent player-photo fetches at once. Without
+// a cap that saturates the Node HTTP agent's connection pool and the
+// individual requests time out before they ever get a socket. Capping
+// concurrency here is the right fix — the upstream CDN (media.api-sports.io)
+// is separate from the metered JSON API, so it has its own limiter
+// rather than sharing the api-football provider's reservoir.
+const mediaLimiter = new Bottleneck({ maxConcurrent: 10 });
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000;
 
 export interface SideloadCandidate {
     entityId: string;
@@ -62,8 +73,14 @@ export class GraphicsService {
                 return null;
             }
 
-            // 1. Download image
-            const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
+            // 1. Download image — scheduled through the media limiter so a
+            //    large sync's fan-out can't exhaust the HTTP connection pool.
+            const response = await mediaLimiter.schedule(() =>
+                axios.get(url, {
+                    responseType: 'arraybuffer',
+                    timeout: MEDIA_DOWNLOAD_TIMEOUT_MS,
+                }),
+            );
             const buffer = Buffer.from(response.data);
             const contentTypeHeader = response.headers['content-type'];
             const mimeType: string =
