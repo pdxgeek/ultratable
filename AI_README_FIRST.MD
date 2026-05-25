@@ -1,6 +1,6 @@
 # 🚨 AI AGENT ARCHITECTURE GUIDE
 
-**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§7](#7-ai-agent-operational-rules).
+**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§9](#9-ai-agent-operational-rules).
 
 **NEVER TAKE CONTROL OF A BROWSER FOR VERIFYING UNLESS CLEARLY ASKED**
 
@@ -227,7 +227,29 @@ The legacy `requireAdmin` / `requireViewer` / `requireSelfOrAdmin` helpers in [a
 
 ---
 
-## 7. AI Agent Operational Rules
+## 7. Provider Rate Limiting
+
+Every upstream call routes through a single Bottleneck-wrapped chokepoint per provider. The deep dive is in [docs/provider-integration.md](docs/provider-integration.md) — read that before adding a new method on `ApiFootballProvider` or wiring up a new upstream provider. Headline rules:
+
+- **Metered JSON API** (`v3.football.api-sports.io`) is rate-limited at the provider class via a per-instance `Bottleneck`. A response interceptor reads `X-RateLimit-Limit` and adapts the reservoir to the account's plan (Free=10/min, Pro=300/min, …). 429s read `Retry-After` and queue retries.
+- **Asset CDN** (`media.api-sports.io`) gets its own concurrency-only limiter at the consumer — separate host, separate budget, and the cap is about the local HTTP socket pool, not upstream throttling.
+
+> [!CAUTION]
+> New methods on `ApiFootballProvider` MUST go through `this.request(...)`, never `this.client.get(...)` directly. The wrapper is the rate-limit chokepoint; a direct call silently bypasses the budget.
+
+---
+
+## 8. Workers / Background Job Execution
+
+The 15-second authenticated GraphQL timeout in [`apps/service/src/index.ts`](apps/service/src/index.ts) (`REQUEST_TIMEOUT_MS_AUTH`) is a hard ceiling on any resolver. Any mutation whose runtime scales with input size (teams, fixtures, players, …) MUST dispatch off the request thread. The deep dive — including the `JobRunner.run` vs `runInBackground` decision matrix, the `runJob` dispatcher pattern, cache-invalidation placement, and the known in-process limitation — is in [docs/workers.md](docs/workers.md). Headline rules:
+
+- **Long syncs use `JobRunner.runInBackground`** and return a `JobExecution` row immediately; clients poll `jobExecutions` for completion.
+- **Cache invalidation belongs in the repository method**, not the resolver — the resolver returns before the background task lands its writes.
+- **Don't wrap `JobRunner.run` in a closure** to extract the work's result (`let result; await JobRunner.run(...); return result`). That pattern doesn't survive background execution. Add a new name-prefix branch to `runJob` instead.
+
+---
+
+## 9. AI Agent Operational Rules
 
 - **STAY OUT OF THE OPERATOR'S DEV ENVIRONMENT**: The agent's job is to read, reason, and write code — not to drive the running system on the operator's machine. **The operator's containers, volumes, ports, env files, and database are not the agent's.** That means: do **not** run `npm run setup` (mutates env files, spins containers, runs `npm install`, applies migrations), do **not** run `npm run dev` / `npm run start:all` (kills the operator's dev-server processes by port and replaces them), do **not** run `docker compose up/down/restart` / `scripts/docker-deploy.sh` against the default `ultratable` project name (touches the operator's containers and volumes), and do **not** run `db:migrate` / `db:bootstrap` / `db:reset` / any DDL against the live DB. Do **not** hand-edit `apps/{service,admin,web}/.env` or the root `.env`.
 

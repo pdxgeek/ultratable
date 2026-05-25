@@ -17,13 +17,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('axios');
 
+// The provider wraps every request in a Bottleneck limiter. Tests assert
+// pre-retry behaviour (a 429 propagates as-is), so we stub the limiter to
+// execute scheduled work inline with no throttling or retry hooks. The
+// real limiter is exercised in integration tests.
+vi.mock('bottleneck', () => {
+    class MockBottleneck {
+        schedule<T>(fn: () => Promise<T>): Promise<T> {
+            return fn();
+        }
+        on(): void {}
+        updateSettings(): void {}
+    }
+    return { default: MockBottleneck };
+});
+
 interface MockAxiosInstance {
     get: ReturnType<typeof vi.fn>;
+    interceptors: { response: { use: ReturnType<typeof vi.fn> } };
 }
 
 // Build a fresh mock axios instance and have axios.create return it.
 function installMockAxios(): MockAxiosInstance {
-    const instance: MockAxiosInstance = { get: vi.fn() };
+    const instance: MockAxiosInstance = {
+        get: vi.fn(),
+        interceptors: { response: { use: vi.fn() } },
+    };
     vi.mocked(axios.create).mockReturnValue(instance as unknown as ReturnType<typeof axios.create>);
     return instance;
 }

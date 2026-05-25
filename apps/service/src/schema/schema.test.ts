@@ -22,6 +22,7 @@ import { repository } from '../repositories';
 import { builder } from './builder';
 
 import './football'; // Ensure football schema is registered
+import './workers'; // Register runJob mutation + job queries
 
 // Mock the database (Drizzle calls inside un-stubbed code paths must not crash).
 vi.mock('../db', () => ({
@@ -31,13 +32,31 @@ vi.mock('../db', () => ({
     },
 }));
 
-// Mock JobRunner so `syncFixtures` mutation runs its task body synchronously
-// and we can assert on the wired-up repository call.
-vi.mock('../workers/runner', () => ({
-    JobRunner: {
-        run: vi.fn().mockImplementation((_name: string, task: () => Promise<unknown>) => task()),
-    },
-}));
+// Mock JobRunner so background work runs synchronously inside the test
+// and we can assert on the wired-up repository call. A stub reporter is
+// passed in so handlers that thread it down to repository calls still
+// receive a callable.
+vi.mock('../workers/runner', () => {
+    const stubReporter = { updateProgress: async () => {} };
+    return {
+        JobRunner: {
+            run: vi
+                .fn()
+                .mockImplementation(
+                    (_name: string, task: (reporter: unknown) => Promise<unknown>) =>
+                        task(stubReporter),
+                ),
+            runInBackground: vi
+                .fn()
+                .mockImplementation(
+                    async (_name: string, task: (reporter: unknown) => Promise<unknown>) => {
+                        await task(stubReporter);
+                        return { id: 'mock-exec', status: 'success', jobId: 'mock-job' };
+                    },
+                ),
+        },
+    };
+});
 
 // Replace the repository singleton with a *type-checked* mock. The async
 // factory lets us import the helper through Vite's TS resolver (require()
@@ -163,7 +182,7 @@ describe('GraphQL Schema', () => {
         );
     });
 
-    it('should trigger syncFixtures mutation and track via JobRunner', async () => {
+    it('runJob with a sync-fixtures-* name dispatches to repository.fixtures.syncFixtures via JobRunner', async () => {
         vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
             data: [{ id: 'mock-fixture' }] as unknown as (typeof schema.fixtures.$inferSelect)[],
             stats: { processedCount: 1, apiCallsCount: 1 },
@@ -182,8 +201,9 @@ describe('GraphQL Schema', () => {
             body: JSON.stringify({
                 query: `
                     mutation Sync {
-                        syncFixtures(leagueSourceId: 39, seasonYear: 2024) {
+                        runJob(name: "sync-fixtures-39-2024") {
                             id
+                            status
                         }
                     }
                 `,
@@ -191,8 +211,9 @@ describe('GraphQL Schema', () => {
         });
 
         const result = await response.json();
-        expect(result.data.syncFixtures).toBeDefined();
-        expect(repository.fixtures.syncFixtures).toHaveBeenCalled();
+        expect(result.errors).toBeUndefined();
+        expect(result.data.runJob).toBeDefined();
+        expect(repository.fixtures.syncFixtures).toHaveBeenCalledWith(39, 2024, expect.anything());
     });
 
     it('non-admin cannot call admin-gated mutations (saveLeagueConfig)', async () => {

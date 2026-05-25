@@ -11,9 +11,23 @@ vi.mock('axios', () => ({
     default: {
         create: vi.fn().mockReturnValue({
             get: (...args: unknown[]) => mockGet(...args),
+            interceptors: { response: { use: vi.fn() } },
         }),
     },
 }));
+
+// Stub the rate limiter so scheduled requests run inline. The real
+// limiter is exercised in integration tests.
+vi.mock('bottleneck', () => {
+    class MockBottleneck {
+        schedule<T>(fn: () => Promise<T>): Promise<T> {
+            return fn();
+        }
+        on(): void {}
+        updateSettings(): void {}
+    }
+    return { default: MockBottleneck };
+});
 
 vi.mock('../db', () => ({
     db: {

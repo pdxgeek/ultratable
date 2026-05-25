@@ -159,7 +159,7 @@ builder.queryField('systemLogs', (t) =>
 builder.mutationField('runJob', (t) =>
     t.field({
         description:
-            'Admin only. Manually triggers a job by name and returns the resulting execution record.',
+            'Admin only. Kicks off a job by name and returns the fresh execution record immediately (status `running`). The task continues on a background tick — clients poll `jobExecutions` for completion.',
         type: JobExecutionRef,
         args: {
             name: t.arg.string({
@@ -170,7 +170,7 @@ builder.mutationField('runJob', (t) =>
         },
         resolve: async (_, { name }, ctx) => {
             requireAdmin(ctx);
-            await JobRunner.run(name, async (reporter) => {
+            const execution = await JobRunner.runInBackground(name, async (reporter) => {
                 if (name.startsWith('sync-fixtures-')) {
                     const parts = name.split('-');
                     const leagueSourceId = parseInt(parts[2]);
@@ -195,14 +195,8 @@ builder.mutationField('runJob', (t) =>
                 return { processedCount: 0, apiCallsCount: 0 };
             });
 
-            // Return the latest execution for THIS job specifically
-            const job = await repository.workers.getJobByName(name);
-            if (!job) {
-                throw new GraphQLError(`Job "${name}" not found after execution`);
-            }
-            const execution = await repository.workers.getLatestJobExecution(job.id);
             if (!execution) {
-                throw new GraphQLError(`Job "${name}" produced no execution record`);
+                throw new GraphQLError(`Job "${name}" is inactive or could not be started`);
             }
             return execution;
         },

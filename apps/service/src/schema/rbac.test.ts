@@ -85,9 +85,6 @@ vi.mock('../repositories', () => ({
         },
         fixtures: {
             getFixtures: vi.fn().mockResolvedValue([]),
-            syncFixtures: vi
-                .fn()
-                .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
             getMatchEvents: vi.fn().mockResolvedValue([]),
             getLineups: vi.fn().mockResolvedValue([]),
         },
@@ -235,10 +232,6 @@ const MUTATIONS: RbacTestCase[] = [
     },
     // football.ts
     { name: 'ingestLeagues', query: 'mutation { ingestLeagues { id } }' },
-    {
-        name: 'syncFixtures',
-        query: 'mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }',
-    },
     {
         name: 'saveLeagueConfig',
         query: 'mutation { saveLeagueConfig(id: "test-id", configJson: "{}") { id } }',

@@ -33,11 +33,27 @@ import './catalog';
 
 vi.mock('../db', () => ({ db: { select: vi.fn(), insert: vi.fn() } }));
 
-vi.mock('../workers/runner', () => ({
-    JobRunner: {
-        run: vi.fn().mockImplementation((_name: string, task: () => Promise<unknown>) => task()),
-    },
-}));
+vi.mock('../workers/runner', () => {
+    const stubReporter = { updateProgress: async () => {} };
+    return {
+        JobRunner: {
+            run: vi
+                .fn()
+                .mockImplementation(
+                    (_name: string, task: (reporter: unknown) => Promise<unknown>) =>
+                        task(stubReporter),
+                ),
+            runInBackground: vi
+                .fn()
+                .mockImplementation(
+                    async (_name: string, task: (reporter: unknown) => Promise<unknown>) => {
+                        await task(stubReporter);
+                        return { id: 'mock-exec', status: 'success', jobId: 'mock-job' };
+                    },
+                ),
+        },
+    };
+});
 
 vi.mock('../repositories', async () => {
     const { buildMockRepository } = await import('../repositories/__fixtures__/mockRepository');
@@ -138,28 +154,12 @@ describe('Mutation → cache invalidation wiring', () => {
             expect(cacheService.get('leagues:by-id:l1')).toBeUndefined();
         });
 
-        it('syncFixtures invalidates fixtures:{leagueSourceId}:{seasonYear} and teams:{leagueSourceId}:{seasonYear}', async () => {
-            vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
-                data: [],
-                stats: { processedCount: 0, apiCallsCount: 0 },
-            });
-
-            cacheService.set('fixtures:39:2024', [{ stale: true }], 60_000);
-            cacheService.set('fixtures:39:2024:played', [{ stale: true }], 60_000);
-            cacheService.set('teams:39:2024', [{ stale: true }], 60_000);
-            // Untouched: an unrelated fixtures key for another league.
-            cacheService.set('fixtures:40:2024', [{ untouched: true }], 60_000);
-
-            const result = await fire(
-                `mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }`,
-            );
-            expect(result.errors).toBeUndefined();
-            expect(cacheService.get('fixtures:39:2024')).toBeUndefined();
-            expect(cacheService.get('fixtures:39:2024:played')).toBeUndefined();
-            expect(cacheService.get('teams:39:2024')).toBeUndefined();
-            // Prefix invalidation must not touch sibling leagues.
-            expect(cacheService.get('fixtures:40:2024')).toEqual([{ untouched: true }]);
-        });
+        // Fixture-sync cache invalidation moved from the resolver into
+        // `repository.fixtures.syncFixtures()` when the GraphQL mutation
+        // was retired in favour of `runJob(name: "sync-fixtures-*")`. It's
+        // pinned at the integration layer in
+        // postgres.subrepos.integration.test.ts where a real repo is wired
+        // up, so no schema-level mirror is needed here.
     });
 
     describe('catalog schema', () => {
@@ -291,15 +291,5 @@ describe('Mutation → cache invalidation wiring', () => {
             expect(cacheService.get('seasons:by-league:l1')).toEqual([{ stable: true }]);
         });
 
-        it('syncFixtures does not invalidate `leagues` (would be a wasted refetch)', async () => {
-            vi.mocked(repository.fixtures.syncFixtures).mockResolvedValue({
-                data: [],
-                stats: { processedCount: 0, apiCallsCount: 0 },
-            });
-
-            cacheService.set('leagues', [{ stable: true }], 60_000);
-            await fire(`mutation { syncFixtures(leagueSourceId: 39, seasonYear: 2024) { id } }`);
-            expect(cacheService.get('leagues')).toEqual([{ stable: true }]);
-        });
     });
 });

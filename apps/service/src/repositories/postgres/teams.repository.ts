@@ -253,20 +253,31 @@ export class PostgresTeamsRepository implements TeamsRepository {
         // Invalidate it here so the next read picks up the freshly linked teams.
         cacheService.invalidate(`teams:season:${localSeason.id}`);
 
-        let squadApiCalls = 0;
-        for (const t of teams) {
+        // Squad imports fan out in parallel — the api-football client's
+        // built-in rate limiter throttles fairly across the batch, so we
+        // don't need explicit chunking here. `allSettled` preserves the
+        // soft-fail-per-team semantics: one team's failure does not poison
+        // the rest of the sync.
+        const teamsWithIds = teams.flatMap((t) => {
             const teamId = teamMap.get(t.sourceId);
-            if (!teamId) continue;
-            try {
-                await this.importSquad(teamId, t.sourceId, localSeason.id);
+            return teamId ? [{ teamId, sourceId: t.sourceId }] : [];
+        });
+        const results = await Promise.allSettled(
+            teamsWithIds.map((t) =>
+                this.importSquad(t.teamId, t.sourceId, localSeason.id),
+            ),
+        );
+        let squadApiCalls = 0;
+        results.forEach((r, idx) => {
+            if (r.status === 'fulfilled') {
                 squadApiCalls++;
-            } catch (e: unknown) {
+            } else {
                 logger.warn(
-                    { error: (e as Error).message, teamSourceId: t.sourceId },
+                    { error: (r.reason as Error)?.message, teamSourceId: teamsWithIds[idx].sourceId },
                     'Soft-fail on squad import',
                 );
             }
-        }
+        });
         logger.info(
             { leagueSourceId, seasonYear, teamCount: teams.length, squadApiCalls },
             'Squad import complete',
