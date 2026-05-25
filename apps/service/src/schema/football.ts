@@ -2,7 +2,6 @@ import * as schema from '../db/schema';
 import { repository } from '../repositories';
 import { cacheService } from '../services/cache.service';
 import { graphicsService } from '../services/graphics.service';
-import { JobRunner } from '../workers/runner';
 import { builder, requireAdmin } from './builder';
 
 // Define object refs first
@@ -852,42 +851,6 @@ builder.mutationField('ingestLeagues', (t) =>
             requireAdmin(ctx);
             const result = await repository.leagues.getLeagues();
             cacheService.invalidate('leagues');
-            return result;
-        },
-    }),
-);
-
-builder.mutationField('syncFixtures', (t) =>
-    t.field({
-        description:
-            'Admin only. Calls the external API-Football provider to fetch all fixtures for the given league and season, then upserts them into the database. Also syncs teams and venues as a side effect. Progress is tracked via the JobRunner.',
-        type: [FixtureRef],
-        args: {
-            leagueSourceId: t.arg.int({
-                required: true,
-                description:
-                    'External API-Football league ID to sync (e.g. 39 = Premier League). Required because the upstream API is addressed by its own identifiers, not our internal UUIDs.',
-            }),
-            seasonYear: t.arg.int({
-                required: true,
-                description:
-                    'Calendar year of the season to sync (e.g. 2025). Combined with leagueSourceId to identify the exact season on the external API.',
-            }),
-        },
-        resolve: async (_, { leagueSourceId, seasonYear }, ctx) => {
-            requireAdmin(ctx);
-            let result: Array<typeof schema.fixtures.$inferSelect> = [];
-            await JobRunner.run(`sync-fixtures-${leagueSourceId}-${seasonYear}`, async () => {
-                const syncRes = await repository.fixtures.syncFixtures(leagueSourceId, seasonYear);
-                result = syncRes.data;
-                return {
-                    processedCount: syncRes.stats.processedCount,
-                    apiCallsCount: syncRes.stats.apiCallsCount,
-                    context: { leagueSourceId, seasonYear },
-                };
-            });
-            cacheService.invalidate(`fixtures:${leagueSourceId}:${seasonYear}`);
-            cacheService.invalidate(`teams:${leagueSourceId}:${seasonYear}`);
             return result;
         },
     }),

@@ -75,8 +75,8 @@ export const importSeasonForLeague = (leagueId: string, year: number) =>
 
 export const syncSeasonFixtures = (leagueSourceId: number, year: number) =>
     gqlFetch(
-        `mutation($id: Int!, $year: Int!) { syncFixtures(leagueSourceId: $id, seasonYear: $year) { id } }`,
-        { id: leagueSourceId, year },
+        `mutation($name: String!) { runJob(name: $name) { id status } }`,
+        { name: `sync-fixtures-${leagueSourceId}-${year}` },
     );
 
 export const removeSeasonById = (seasonId: string) =>

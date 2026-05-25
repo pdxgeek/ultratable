@@ -173,8 +173,11 @@ export class PostgresFixturesRepository implements FixturesRepository {
             await reporter.updateProgress({ processedCount, totalCount });
         }
 
-        // Invalidate the UUID-keyed cache used by getFixturesBySeasonId, which the BFF reads via the `fixtures(seasonId)` GraphQL query.
+        // Invalidate caches keyed both by season UUID (read via `fixtures(seasonId)`)
+        // and by source-id+year (the legacy admin path). syncTeams already invalidates
+        // `teams:${leagueSourceId}:${seasonYear}` internally.
         cacheService.invalidate(`fixtures:season:${localSeason.id}`);
+        cacheService.invalidate(`fixtures:${leagueSourceId}:${seasonYear}`);
 
         const data = await this.getFixtures(leagueSourceId, seasonYear);
         return {
