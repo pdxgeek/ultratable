@@ -28,6 +28,14 @@
     > - Three Postgres modes: `docker` (local container in [`docker-compose.yml`](docker-compose.yml)), `supabase` (hosted), or `system` (BYO `DATABASE_URL`). **Supabase URL/keys ARE the Postgres connection** for the Supabase mode — never treat them as an unrelated add-on.
     > - When you see missing env vars at runtime, do NOT hand-edit `.env` files unless the user explicitly asks. Tell the user to run `npm run setup` instead — that script is the single source of truth for generated env files.
     >
+    > **DB MIGRATIONS & BOOTSTRAP**
+    >
+    > - The canonical path is `db:generate` → commit → `db:migrate`. `db:bootstrap` exists only to stamp `drizzle.__drizzle_migrations` on a DB that was originally set up via `db:push`. It has three branches, in order:
+    >     1. Migrations table has rows → no-op.
+    >     2. Migrations table empty AND `public.leagues` is missing → fresh DB; skip stamping and exit 0 so `setup.mjs`'s `db:bootstrap && db:migrate` chain falls through to migrate, which creates the schema.
+    >     3. Migrations table empty AND `public.leagues` exists → push-style DB; stamp from the journal.
+    > - **`public.leagues` is a load-bearing canary** in [`apps/service/src/scripts/bootstrap-migrations.ts`](apps/service/src/scripts/bootstrap-migrations.ts) because it's been in migration `0000` since day one. If you ever rename or drop `leagues`, swap the canary for another table that's guaranteed to exist after migration `0000`. Skipping this step silently breaks the fresh-DB path for new contributors.
+    >
     > **ID GENERATION RULES**
     >
     > - **EVERY ID IS A NATIVE POSTGRES UUID EXCEPT FOR DIRECT CALLS TO REMOTE APIS**.
