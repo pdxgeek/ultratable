@@ -1,7 +1,14 @@
+import { SpanStatusCode } from '@opentelemetry/api';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import Bottleneck from 'bottleneck';
 
 import { globalLogger } from '../../services/log.service';
+import {
+    upstreamApiCallDuration,
+    upstreamApiCallTotal,
+    upstreamRateLimitRemaining,
+} from '../../telemetry/metrics';
+import { tracer } from '../../telemetry/tracer';
 import {
     IFootballProvider,
     IngestedCountry,
@@ -94,9 +101,19 @@ export class ApiFootballProvider implements IFootballProvider {
     /**
      * Reads `X-RateLimit-Limit` off any provider response and widens the
      * limiter to match the account's actual plan. Avoids the need for a
-     * `/status` probe or an env var declaring the tier.
+     * `/status` probe or an env var declaring the tier. Also publishes the
+     * current `X-RateLimit-Remaining` as a gauge so dashboards can see how
+     * close we are to the ceiling.
      */
     private absorbRateLimitHeaders(headers: Record<string, string>) {
+        const remainingRaw = headers?.['x-ratelimit-remaining'];
+        if (remainingRaw !== undefined) {
+            const remaining = parseInt(remainingRaw, 10);
+            if (!isNaN(remaining)) {
+                upstreamRateLimitRemaining.record(remaining, { provider: this.name });
+            }
+        }
+
         const raw = headers?.['x-ratelimit-limit'];
         if (!raw) return;
         const limit = parseInt(raw, 10);
@@ -116,7 +133,44 @@ export class ApiFootballProvider implements IFootballProvider {
         url: string,
         config?: AxiosRequestConfig,
     ): Promise<AxiosResponse<T>> {
-        return this.limiter.schedule(() => this.client.get<T>(url, config));
+        return tracer.startActiveSpan(`api-football ${url}`, async (span) => {
+            span.setAttribute('http.url', url);
+            span.setAttribute('provider', this.name);
+            const start = process.hrtime.bigint();
+            try {
+                const response = await this.limiter.schedule(() =>
+                    this.client.get<T>(url, config),
+                );
+                const durationSec = Number(process.hrtime.bigint() - start) / 1e9;
+                upstreamApiCallTotal.add(1, {
+                    endpoint: url,
+                    status: String(response.status),
+                });
+                upstreamApiCallDuration.record(durationSec, { endpoint: url });
+                span.setAttribute('http.status_code', response.status);
+                const remaining = response.headers?.['x-ratelimit-remaining'];
+                if (remaining !== undefined) {
+                    span.setAttribute('rate_limit.remaining', String(remaining));
+                }
+                return response;
+            } catch (err) {
+                const durationSec = Number(process.hrtime.bigint() - start) / 1e9;
+                const status =
+                    (err as { response?: { status?: number } })?.response?.status ?? 0;
+                upstreamApiCallTotal.add(1, {
+                    endpoint: url,
+                    status: String(status || 'error'),
+                });
+                upstreamApiCallDuration.record(durationSec, { endpoint: url });
+                span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message: (err as Error).message,
+                });
+                throw err;
+            } finally {
+                span.end();
+            }
+        });
     }
 
     async getCountries(): Promise<IngestedCountry[]> {

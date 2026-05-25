@@ -4,6 +4,7 @@ import { db } from '../../db';
 import * as schema from '../../db/schema';
 import { IFootballProvider } from '../../integrations/types';
 import { cacheService, TTL } from '../../services/cache.service';
+import { withDbMetric } from '../../telemetry/metrics';
 import { LeaguesRepository } from '../leagues';
 import { SyncResult } from '../shared';
 import { DEFAULT_RANKING_CRITERIA } from './shared';
@@ -23,18 +24,25 @@ export class PostgresLeaguesRepository implements LeaguesRepository {
 
     async getLeagueById(leagueId: string): Promise<typeof schema.leagues.$inferSelect | null> {
         if (!db) return null;
-        const [row] = await db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId));
-        return row ?? null;
+        return withDbMetric('leagues', 'getLeagueById', async () => {
+            const [row] = await db
+                .select()
+                .from(schema.leagues)
+                .where(eq(schema.leagues.id, leagueId));
+            return row ?? null;
+        });
     }
 
     async getLeaguesByIds(
         leagueIds: readonly string[],
     ): Promise<Array<typeof schema.leagues.$inferSelect>> {
         if (!db || leagueIds.length === 0) return [];
-        return db
-            .select()
-            .from(schema.leagues)
-            .where(inArray(schema.leagues.id, [...leagueIds]));
+        return withDbMetric('leagues', 'getLeaguesByIds', () =>
+            db
+                .select()
+                .from(schema.leagues)
+                .where(inArray(schema.leagues.id, [...leagueIds])),
+        );
     }
 
     async updateLeagueConfig(

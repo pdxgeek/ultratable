@@ -72,7 +72,7 @@ export function refuseInAgentSession({ scriptName, mutates }) {
             `  • Or just propose the change and let the human run it.\n\n`,
     );
     process.stderr.write(
-        `Full policy: AI_README_FIRST.MD §7. The ${bold(BYPASS_FLAG)} flag exists for the\n` +
+        `Full policy: AI_README_FIRST.MD §10. The ${bold(BYPASS_FLAG)} flag exists for the\n` +
             `human operator if this heuristic misfires — ${bold('not')} for the agent to bypass.\n\n`,
     );
     process.exit(1);

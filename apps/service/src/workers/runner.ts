@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { globalLogger } from '../services/log.service';
+import { jobExecutionDuration, jobExecutionTotal } from '../telemetry/metrics';
 
 const logger = globalLogger.child({ module: 'JobRunner' });
 
@@ -138,6 +139,10 @@ export class JobRunner {
                 .set({ lastRunAt: new Date() })
                 .where(eq(schema.jobs.id, job.id));
 
+            const durationSec = (Date.now() - startMs) / 1000;
+            jobExecutionTotal.add(1, { job_name: name, status: 'success' });
+            jobExecutionDuration.record(durationSec, { job_name: name, status: 'success' });
+
             logger.info(
                 {
                     jobId: job.id,
@@ -159,6 +164,10 @@ export class JobRunner {
                     errorMessage: err.message || String(error),
                 })
                 .where(eq(schema.jobExecutions.id, execution.id));
+
+            const durationSec = (Date.now() - startMs) / 1000;
+            jobExecutionTotal.add(1, { job_name: name, status: 'failed' });
+            jobExecutionDuration.record(durationSec, { job_name: name, status: 'failed' });
 
             logger.error(
                 {

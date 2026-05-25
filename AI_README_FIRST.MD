@@ -1,6 +1,6 @@
 # 🚨 AI AGENT ARCHITECTURE GUIDE
 
-**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§9](#9-ai-agent-operational-rules).
+**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§10](#10-ai-agent-operational-rules).
 
 **NEVER TAKE CONTROL OF A BROWSER FOR VERIFYING UNLESS CLEARLY ASKED**
 
@@ -249,7 +249,17 @@ The 15-second authenticated GraphQL timeout in [`apps/service/src/index.ts`](app
 
 ---
 
-## 9. AI Agent Operational Rules
+## 9. Observability
+
+OpenTelemetry is wired pre-deploy. The SDK is imported as the first line of [`apps/service/src/index.ts`](apps/service/src/index.ts); custom metric instruments live in [`apps/service/src/telemetry/metrics.ts`](apps/service/src/telemetry/metrics.ts); Prometheus exposes at `GET /metrics` on the service port. Deep dive: [docs/observability.md](docs/observability.md). Headline rules:
+
+- **Adding a new metric goes in `telemetry/metrics.ts`** — call sites import the instrument by name. Don't sprinkle ad-hoc `metrics.getMeter(...)` calls around.
+- **`db_query_duration_seconds` is opt-in per call site** via `withDbMetric(repo, method, fn)` — postgres-js has no auto-instrumentation. Wrap a method only when its latency is something you'd actually look at; don't speculatively wrap every repo method.
+- **No trace exporter is wired** — spans are created locally, not shipped. Connecting to Grafana Cloud / Honeycomb / etc. is a deploy-time concern; see `docs/observability.md § "At deploy: connect"`.
+
+---
+
+## 10. AI Agent Operational Rules
 
 - **STAY OUT OF THE OPERATOR'S DEV ENVIRONMENT**: The agent's job is to read, reason, and write code — not to drive the running system on the operator's machine. **The operator's containers, volumes, ports, env files, and database are not the agent's.** That means: do **not** run `npm run setup` (mutates env files, spins containers, runs `npm install`, applies migrations), do **not** run `npm run dev` / `npm run start:all` (kills the operator's dev-server processes by port and replaces them), do **not** run `docker compose up/down/restart` / `scripts/docker-deploy.sh` against the default `ultratable` project name (touches the operator's containers and volumes), and do **not** run `db:migrate` / `db:bootstrap` / `db:reset` / any DDL against the live DB. Do **not** hand-edit `apps/{service,admin,web}/.env` or the root `.env`.
 
