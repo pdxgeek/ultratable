@@ -74,6 +74,22 @@ const run = async (): Promise<void> => {
             return;
         }
 
+        // Guard: stamping is only correct when the schema was applied out-of-band
+        // (e.g. via `drizzle-kit push`). On a truly empty DB, the migration table
+        // is also empty, and stamping would make `db:migrate` silently skip every
+        // migration. Probe for a table from migration 0000 to tell the two apart.
+        const applicationTables = await sql<{ count: string }[]>`
+            SELECT COUNT(*)::text AS count
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'leagues'
+        `;
+        if (Number(applicationTables[0]?.count ?? '0') === 0) {
+            console.error(
+                'The database has no application tables yet. `db:bootstrap` is only for DBs that were created via `db:push`. For a fresh DB, run `npm run db:migrate` instead.',
+            );
+            process.exit(1);
+        }
+
         const journal = readJournal();
         if (journal.entries.length === 0) {
             console.log('Journal is empty — nothing to backfill.');
