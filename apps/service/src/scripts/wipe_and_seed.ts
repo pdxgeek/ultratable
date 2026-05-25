@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { db } from '../db';
 import * as schema from '../db/schema';
+import { listAllRecipes } from '../entities/tier-rankable-types/registry';
 import { storageProvider } from '../providers/storage';
 import { repository } from '../repositories';
 
@@ -56,6 +57,30 @@ async function run() {
         await db.delete(schema.seasons);
         await db.delete(schema.leagues);
         console.log('✅ Managed database cleared.');
+
+        // 2b. Re-seed recipe registry from TS source of truth. Migrations
+        // insert these rows in prod, but a DB bootstrapped via `db:push`
+        // never ran those INSERTs, and a wipe of `tier_rankable_type`
+        // leaves any tier-list / overlay feature pointing at empty FK
+        // targets (issue #124). Upserting on every reset keeps dev DBs
+        // working regardless of bootstrap path.
+        console.log('\n--- 2b. Seeding TierRankableType Registry ---');
+        const recipes = listAllRecipes();
+        for (const recipe of recipes) {
+            await db
+                .insert(schema.tierRankableTypes)
+                .values({ id: recipe.id, name: recipe.name })
+                .onConflictDoUpdate({
+                    target: [schema.tierRankableTypes.id],
+                    set: {
+                        name: sql`excluded.name`,
+                        updatedAt: new Date(),
+                    },
+                });
+        }
+        console.log(
+            `✅ Seeded ${recipes.length} recipe row(s): ${recipes.map((r) => r.id).join(', ')}.`,
+        );
 
         // 3. Sync Catalog
         console.log('\n--- 3. Syncing Catalog ---');
