@@ -1,3 +1,8 @@
+// Telemetry MUST be the very first import — the OpenTelemetry SDK registers
+// require-in-the-middle hooks on `start()`, and any module loaded before it
+// (fastify, pino, http) will not be instrumented.
+import './telemetry';
+
 import type {
     ASTNode,
     ASTVisitor,
@@ -27,6 +32,8 @@ import { builder } from './schema/builder';
 import { invalidateDomainUserCache, resolveDomainUser, toWebHeaders } from './services/auth.service';
 import { globalLogger } from './services/log.service';
 import { seedRankingFormulas } from './services/seed-ranking-formulas';
+import { resolverDuration } from './telemetry/metrics';
+import { prometheusExporter } from './telemetry/prometheus-exporter';
 
 import './schema/account';
 import './schema/catalog';
@@ -132,6 +139,10 @@ const yoga = createYoga<{
                 //    longer ceiling than anonymous traffic.
                 const ctx = args.contextValue as Context | undefined;
                 const timeoutMs = ctx?.user ? REQUEST_TIMEOUT_MS_AUTH : REQUEST_TIMEOUT_MS_GUEST;
+                const operationType =
+                    args.document.definitions.find((d) => d.kind === 'OperationDefinition')
+                        ?.operation ?? 'query';
+                const operationName = args.operationName ?? 'anonymous';
                 setExecuteFn(async (executeArgs) => {
                     let timer: NodeJS.Timeout | undefined;
                     const timeout = new Promise<never>((_, reject) => {
@@ -141,10 +152,23 @@ const yoga = createYoga<{
                             timeoutMs,
                         );
                     });
+                    const start = process.hrtime.bigint();
+                    let status: 'success' | 'error' = 'success';
                     try {
                         return await Promise.race([executeFn(executeArgs), timeout]);
+                    } catch (err) {
+                        status = 'error';
+                        throw err;
                     } finally {
                         if (timer) clearTimeout(timer);
+                        resolverDuration.record(
+                            Number(process.hrtime.bigint() - start) / 1e9,
+                            {
+                                operation: operationType,
+                                operation_name: operationName,
+                                status,
+                            },
+                        );
                     }
                 });
             },
@@ -243,6 +267,23 @@ server.register(fastifyCors, {
     },
     credentials: true,
 });
+
+/**
+ * Prometheus scrape endpoint. The exporter doesn't run its own HTTP server
+ * (see telemetry/prometheus-exporter.ts) — Fastify owns the port and we
+ * hand the raw req/res off to the exporter's handler. Skipped by the
+ * global rate-limit so scrape cadence isn't throttled.
+ */
+server.get(
+    '/metrics',
+    { config: { rateLimit: false } },
+    async (request, reply) => {
+        prometheusExporter.getMetricsRequestHandler(request.raw, reply.raw);
+        // The exporter writes directly to reply.raw and ends the response;
+        // tell Fastify to stop managing the lifecycle.
+        return reply.hijack();
+    },
+);
 
 /**
  * Domain User Resolution Endpoint
