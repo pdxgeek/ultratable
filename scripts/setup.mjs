@@ -349,6 +349,13 @@ async function main() {
     const existing = parseEnvFile(SERVICE_ENV);
     const rootExisting = parseEnvFile(ROOT_ENV);
 
+    // Auto-port-shifting (issue #122) only runs on a fresh install. On a
+    // re-run we'd otherwise see the user's own running postgres/minio
+    // container as "taken" and walk past 5432 → 5433, silently moving a
+    // working deployment off its known ports. The presence of an existing
+    // apps/service/.env is the canonical "have I run setup before?" signal.
+    const isFreshInstall = !existsSync(SERVICE_ENV);
+
     // ── Database mode ────────────────────────────────────────
     header('Database');
     paragraph(
@@ -418,14 +425,23 @@ async function main() {
             def: webEnvExisting.PORT || rootExisting.WEB_PORT || '5175',
         })) || '5175';
 
-    // Probe each requested port and step around any that are already taken.
-    // The dev servers all bind 0.0.0.0; a 0.0.0.0 bind fails when anything
-    // else is listening on that port on any interface, which is exactly
-    // what we want to detect.
-    stdout.write('\n  Reserving dev-server ports…\n');
-    const servicePort = await reservePort('Service', servicePortRequested);
-    const adminPort = await reservePort('Admin', adminPortRequested);
-    const webPort = await reservePort('Web', webPortRequested);
+    // Fresh installs: probe each requested port and step around any that
+    // are already taken (0.0.0.0 bind fails when anything is listening on
+    // any interface, which is exactly what we want to detect).
+    // Re-runs: trust whatever the user typed — a running dev server on the
+    // same port is almost certainly their previous one, not a foreign
+    // collision, and shifting would silently move the deployment.
+    let servicePort, adminPort, webPort;
+    if (isFreshInstall) {
+        stdout.write('\n  Reserving dev-server ports…\n');
+        servicePort = await reservePort('Service', servicePortRequested);
+        adminPort = await reservePort('Admin', adminPortRequested);
+        webPort = await reservePort('Web', webPortRequested);
+    } else {
+        servicePort = servicePortRequested;
+        adminPort = adminPortRequested;
+        webPort = webPortRequested;
+    }
 
     const vars = {
         NODE_ENV: existing.NODE_ENV || 'development',
@@ -494,35 +510,40 @@ async function main() {
             );
             process.exit(1);
         }
-        // Reserve the container host-ports before showing the DATABASE_URL /
-        // S3 endpoint defaults so the suggested URLs already point at the
-        // free ports we'll actually publish. Walks past the Homebrew
-        // postgres-on-:5432 collision from issue #122.
-        stdout.write('\n  Reserving container ports…\n');
-        vars.POSTGRES_PORT = await reservePort('Postgres', 5432);
-        vars.MINIO_API_PORT = await reservePort('MinIO API', 9000);
-        vars.MINIO_CONSOLE_PORT = await reservePort('MinIO console', 9001);
+        // Fresh installs: reserve the container host-ports before showing
+        // the DATABASE_URL / S3 endpoint defaults so the suggested URLs
+        // already point at the free ports we'll actually publish. Walks
+        // past the Homebrew-postgres-on-:5432 collision from issue #122.
+        //
+        // Re-runs: preserve the ports already in use by the running
+        // deployment. Probing them would see the user's own container as
+        // "taken" and shift to 5433/9001/9002, silently breaking it.
+        if (isFreshInstall) {
+            stdout.write('\n  Reserving container ports…\n');
+            vars.POSTGRES_PORT = await reservePort('Postgres', 5432);
+            vars.MINIO_API_PORT = await reservePort('MinIO API', 9000);
+            vars.MINIO_CONSOLE_PORT = await reservePort('MinIO console', 9001);
+        } else {
+            vars.POSTGRES_PORT = rootExisting.POSTGRES_PORT || '5432';
+            vars.MINIO_API_PORT = rootExisting.MINIO_API_PORT || '9000';
+            vars.MINIO_CONSOLE_PORT = rootExisting.MINIO_CONSOLE_PORT || '9001';
+        }
 
         const pgDefaultUrl = `postgresql://postgres:postgres@localhost:${vars.POSTGRES_PORT}/postgres`;
-        // Reuse an existing DATABASE_URL only when it still points at the
-        // standard local postgres credentials — otherwise the prior URL was
-        // hand-edited (or stale) and forcing the new port into it would be
-        // surprising. The default we offer always reflects the reserved port.
-        const existingDbHasStdLocalShape = /^postgresql:\/\/postgres:postgres@localhost:\d+\/postgres$/i.test(
-            existing.DATABASE_URL || '',
-        );
         vars.DATABASE_URL = await ask('DATABASE_URL', {
-            def: existingDbHasStdLocalShape ? pgDefaultUrl : existing.DATABASE_URL || pgDefaultUrl,
+            def: existing.DATABASE_URL || pgDefaultUrl,
         });
-        // S3 vars target the MinIO container in docker-compose.yml. The host
-        // port is whatever we just reserved — always rewrite so the service
-        // (and browsers fetching graphics) hit the published port.
-        vars.S3_ENDPOINT = `http://localhost:${vars.MINIO_API_PORT}`;
+        // S3 vars target the MinIO container in docker-compose.yml.
+        // Fresh install: write the (possibly shifted) reserved-port URL.
+        // Re-run: preserve any hand-edited value (e.g. pointed at AWS),
+        // falling back to localhost on the existing MinIO port.
+        const minioUrl = `http://localhost:${vars.MINIO_API_PORT}`;
+        vars.S3_ENDPOINT = isFreshInstall ? minioUrl : existing.S3_ENDPOINT || minioUrl;
         vars.S3_REGION = existing.S3_REGION || 'us-east-1';
         vars.S3_ACCESS_KEY = existing.S3_ACCESS_KEY || 'root';
         vars.S3_SECRET_KEY = existing.S3_SECRET_KEY || 'root12345';
         vars.S3_BUCKET = existing.S3_BUCKET || 'graphics';
-        vars.S3_PUBLIC_URL = `http://localhost:${vars.MINIO_API_PORT}`;
+        vars.S3_PUBLIC_URL = isFreshInstall ? minioUrl : existing.S3_PUBLIC_URL || minioUrl;
         // Supabase keys intentionally left blank.
     } else {
         vars.DATABASE_URL = await ask('DATABASE_URL', { def: existing.DATABASE_URL, secret: true });
