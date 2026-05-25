@@ -37,6 +37,10 @@ export function listRecipeIds(): string[] {
     return Object.keys(recipes);
 }
 
+export function listAllRecipes(): TierRankableTypeRecipe<unknown>[] {
+    return Object.values(recipes);
+}
+
 /**
  * Boot-time validator. Called from the service's preflight check; logs
  * and exits if the registry drifts from the DB.
