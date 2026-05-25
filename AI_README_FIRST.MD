@@ -1,6 +1,6 @@
 # 🚨 AI AGENT ARCHITECTURE GUIDE
 
-**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§7](#7-ai-agent-operational-rules).
+**MY DEV ENVIRONMENT IS NOT THE AGENT'S DEV ENVIRONMENT — STAY OUT.** Your ports are not the operator's ports. Your containers are not the operator's containers. Your volume is not the operator's volume. Do not run `npm run setup`, `npm run dev` / `start:all`, `docker compose up/down/restart` against the default `ultratable` project name, `db:migrate` / `db:bootstrap` / `db:reset`, or anything else that mutates the operator's env files, running containers, dev servers, or database. The three live-mutation scripts hard-refuse when invoked from an agent session. **When you genuinely need a live run, spin up your own isolated stack** in a git worktree with `COMPOSE_PROJECT_NAME=claude-dev-ultratable` and auto-shifted ports — never `--i-am-the-human` (that bypass is for the human if a heuristic misfires, not for the agent). Full pattern in [§9](#9-ai-agent-operational-rules).
 
 **NEVER TAKE CONTROL OF A BROWSER FOR VERIFYING UNLESS CLEARLY ASKED**
 
@@ -227,7 +227,61 @@ The legacy `requireAdmin` / `requireViewer` / `requireSelfOrAdmin` helpers in [a
 
 ---
 
-## 7. AI Agent Operational Rules
+## 7. Provider Rate Limiting
+
+Every call to an upstream provider goes through a single chokepoint at the provider class. Two distinct concerns are baked in at that layer, and they look different on purpose.
+
+### Metered JSON API — `v3.football.api-sports.io`
+
+- **Single chokepoint:** [`apps/service/src/integrations/api-football/index.ts`](apps/service/src/integrations/api-football/index.ts)'s private `request()` method. Every provider method (`getCountries`, `getLeagues`, `getSeasons`, `getTeams`, `getFixtures`, `getFixturesByIds`, `getMatchEvents`, `getPlayerData`, `getLineups`, `getCoachesByTeam`, `getSquad`) routes through it. The wrapper schedules every request through a per-instance `Bottleneck` limiter.
+- **Header-driven plan detection.** A response interceptor reads `X-RateLimit-Limit` off any response and resizes the reservoir to match the account's actual plan — Free=10/min, Pro=300/min, anything else. No env var declaring the tier, no `/status` probe at boot. The limiter starts conservative (10/min) and widens once it sees the first response header.
+- **Automatic 429 handling.** On a 429, the limiter reads `Retry-After` and queues a retry up to 3 attempts. Callers never see transient rate-limit errors.
+
+> [!CAUTION]
+> When adding a new method on `ApiFootballProvider`, it MUST go through `this.request(...)`, never `this.client.get(...)` directly. The wrapper is the rate-limit chokepoint; a direct call silently bypasses the budget and will trip 429s under load.
+
+### Asset CDN — `media.api-sports.io`
+
+- **Separate host, separate budget.** Image binaries from the CDN don't count against the metered API's per-minute window, so they have their own (looser) limiter rather than sharing the API's reservoir.
+- **Lives at** [`apps/service/src/services/graphics.service.ts`](apps/service/src/services/graphics.service.ts) as a module-level `Bottleneck({ maxConcurrent: 10 })` — concurrency-bounded, no per-minute reservoir.
+- **Why a cap is necessary even without upstream throttling:** a 20-team squad sync lands ~500 fire-and-forget `graphicsService.sideload(...)` calls in rapid succession. Without a concurrency cap the Node HTTP agent's socket pool saturates and requests time out at the axios layer before they ever leave the process. The cap is about the local connection pool, not the CDN.
+
+### Adding a new provider
+
+Follow the same shape: rate-limit the **metered** API at the provider class (header-driven if the upstream exposes them, otherwise a static reservoir), and concurrency-bound the **asset CDN** at the service that consumes it. Don't fold both into one limiter — they have different bottlenecks at different layers and one config can only optimize for one of them.
+
+---
+
+## 8. Workers / Background Job Execution
+
+The 15-second authenticated GraphQL timeout in [`apps/service/src/index.ts`](apps/service/src/index.ts) (`REQUEST_TIMEOUT_MS_AUTH`) is a hard ceiling on any resolver. Any mutation whose runtime scales with input size (number of teams, fixtures, players, …) MUST dispatch off the request thread or it will eventually fail in production.
+
+The job runner at [`apps/service/src/workers/runner.ts`](apps/service/src/workers/runner.ts) gives every long-running operation a persistent execution record and a polling-friendly status. Two variants:
+
+| Variant                              | Returns                                       | Throws on task error?              | When to use                                                                |
+| ------------------------------------ | --------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
+| `JobRunner.run(name, task)`          | `void` after the task settles                 | Yes — re-throws after persisting   | Short tasks that fit inside the GraphQL request budget (sub-second).        |
+| `JobRunner.runInBackground(name, task)` | `JobExecution` row immediately, status `'running'` | No — failures land in `errorMessage` | Tasks that may take seconds or minutes. The caller MUST NOT block the request. |
+
+Both variants share the same persistence (`status`, `processedCount`, `totalCount`, `apiCallsCount`, `errorMessage`, `finishedAt`) so the admin's `WorkersView` polls progress regardless of which one the resolver chose.
+
+### The `runJob` dispatcher
+
+[`apps/service/src/schema/workers.ts`](apps/service/src/schema/workers.ts) exposes a generic `runJob(name: String!)` mutation. The name's prefix selects the work (e.g. `sync-fixtures-39-2024` dispatches to `repository.fixtures.syncFixtures(39, 2024, reporter)`); the resolver wires the call through `runInBackground` and returns the freshly-created `JobExecution`. The admin's `WorkersView` already polls `jobExecutions` for completion — there is no separate "wait for it" path.
+
+**Adding a new background-eligible mutation:** do NOT introduce a new top-level GraphQL mutation that wraps `JobRunner.run` in a closure (the pattern of `let result; await JobRunner.run(...); return result` does not survive background execution — by the time the resolver returns, `result` is still empty). Instead, add a new name-prefix branch inside the `runJob` resolver and let it dispatch via `runInBackground`.
+
+### Cache invalidation belongs in the repository method
+
+When a sync runs via `runInBackground`, the resolver returns before the task completes. Any `cacheService.invalidate(...)` call placed in the resolver runs against stale state and gets overwritten the moment the background task finishes. Move invalidations into the `repository.X.syncY()` method that owns the work, where they fire after the writes land.
+
+### In-process execution — known limitation
+
+`runInBackground` runs the task on the same Node process (a microtask tick after the resolver returns). There is no Redis queue, BullMQ broker, or separate worker tier. A process restart kills any in-flight job; its execution row stays in `'running'` status with no `finishedAt`. This is acceptable for the current scale of admin-triggered syncs; if it becomes a problem, a persistent queue is the next step. **Don't add a queue speculatively** — the API surface stays the same when the day comes.
+
+---
+
+## 9. AI Agent Operational Rules
 
 - **STAY OUT OF THE OPERATOR'S DEV ENVIRONMENT**: The agent's job is to read, reason, and write code — not to drive the running system on the operator's machine. **The operator's containers, volumes, ports, env files, and database are not the agent's.** That means: do **not** run `npm run setup` (mutates env files, spins containers, runs `npm install`, applies migrations), do **not** run `npm run dev` / `npm run start:all` (kills the operator's dev-server processes by port and replaces them), do **not** run `docker compose up/down/restart` / `scripts/docker-deploy.sh` against the default `ultratable` project name (touches the operator's containers and volumes), and do **not** run `db:migrate` / `db:bootstrap` / `db:reset` / any DDL against the live DB. Do **not** hand-edit `apps/{service,admin,web}/.env` or the root `.env`.
 
