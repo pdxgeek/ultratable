@@ -72,7 +72,7 @@ const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
         ...slips.map((s) => s.gameweek),
         ...selectableGameweeks,
     ]);
-    const sortedWeeks = [...allWeeks].sort((a, b) => b - a);
+    const sortedWeeks = [...allWeeks].sort((a, b) => a - b);
 
     return (
         <aside className="flex flex-col gap-3">
