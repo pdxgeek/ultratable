@@ -10,7 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
 import { Can, useAbility } from '../auth/abilities';
-import SectionNav, { type SectionItem } from '../components/predictions/SectionNav';
+import RankingsNav from '../components/RankingsNav';
 import NewTierListDialog from '../components/tier-lists/NewTierListDialog';
 import {
     DELETE_TIER_LIST_MUTATION,
@@ -18,8 +18,6 @@ import {
     TIER_RANKABLE_TYPES_QUERY,
 } from '../components/tier-lists/queries';
 import { useLeague } from '../context/LeagueContext';
-
-type RankingsSection = 'PROJECTED_FINISH' | 'TIER_LISTS';
 
 function formatRelative(iso: string): string {
     const then = new Date(iso).getTime();
@@ -75,16 +73,6 @@ const TierListsPage: React.FC = () => {
         );
     }
 
-    const navItems: SectionItem<RankingsSection>[] = [
-        { id: 'PROJECTED_FINISH', label: 'Projected Finish' },
-    ];
-    if (ability.can('create', 'TierList')) {
-        navItems.push({ id: 'TIER_LISTS', label: 'Tier Lists' });
-    }
-    const onSelectSection = (id: RankingsSection) => {
-        if (id === 'PROJECTED_FINISH') navigate('/predictions');
-    };
-
     const lists = listsResult.data?.myTierLists ?? [];
     const recipes = typesResult.data?.tierRankableTypes ?? [];
 
@@ -115,12 +103,7 @@ const TierListsPage: React.FC = () => {
                 </p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8 items-start">
-                <SectionNav
-                    items={navItems}
-                    selected="TIER_LISTS"
-                    onSelect={onSelectSection}
-                    ariaLabel="Predictions and rankings sections"
-                />
+                <RankingsNav />
                 <section>
                     <div className="flex items-center justify-between mb-5">
                         <h2 className="text-lg font-semibold">My Tier Lists</h2>

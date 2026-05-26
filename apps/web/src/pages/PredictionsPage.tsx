@@ -5,7 +5,7 @@ import type { ZoneArrays } from '../lib/zones';
 import React, { useEffect, useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
 import GameweekSection from '../components/predictions/gameweek/GameweekSection';
@@ -13,7 +13,7 @@ import PredictionHistoryPanel from '../components/predictions/PredictionHistoryP
 import ProjectedFinishBoard, {
     type MoveTarget,
 } from '../components/predictions/ProjectedFinishBoard';
-import SectionNav, { type SectionItem } from '../components/predictions/SectionNav';
+import RankingsNav from '../components/RankingsNav';
 import { applyMove } from '../components/predictions/applyMove';
 import {
     DELETE_PREDICTION_SNAPSHOT_MUTATION,
@@ -51,7 +51,7 @@ const PredictionsPage: React.FC = () => {
     const { activeLeague, activeSeason, isLoading: leagueLoading } = useLeague();
     const { viewer } = useViewer();
     const ability = useAbility<AppAbility>();
-    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const seasonId = activeSeason?.id ?? '';
 
     const { standings, teamsMap, isLoading: standingsLoading } = useStandings(seasonId);
@@ -66,18 +66,12 @@ const PredictionsPage: React.FC = () => {
     );
     const validTeamIds = useMemo(() => new Set(teamIds), [teamIds]);
 
-    // 'GAMEWEEK' is the new per-week score-picks section (#144). 'TIER_LISTS'
-    // lives at its own route (the nav item routes there). The remaining
-    // sections are owned by this page's local state.
-    type Section = 'PROJECTED_FINISH' | 'GAMEWEEK' | 'TIER_LISTS';
-    const [section, setSection] = useState<Section>('PROJECTED_FINISH');
-    const handleSectionSelect = (id: Section) => {
-        if (id === 'TIER_LISTS') {
-            navigate('/tier-lists');
-            return;
-        }
-        setSection(id);
-    };
+    // Which sub-section of this page to render. URL-driven via `?section=...`
+    // so `RankingsNav` can deep-link from any page in the family — clicking
+    // Gameweek from TierListsPage lands here on the Gameweek board, not the
+    // Projected Finish default. Tier Lists is its own route entirely.
+    const section: 'PROJECTED_FINISH' | 'GAMEWEEK' =
+        searchParams.get('section') === 'gameweek' ? 'GAMEWEEK' : 'PROJECTED_FINISH';
     // `selectedType` is still tied to the legacy Projected-Finish state below.
     // Gameweek runs its own queries in `GameweekSection` and doesn't use this.
     const selectedType: PredictionType = 'PROJECTED_FINISH';
@@ -284,16 +278,6 @@ const PredictionsPage: React.FC = () => {
 
     const placedCount = slots.filter((s) => s !== null).length;
 
-    const navItems: SectionItem<Section>[] = [
-        { id: 'PROJECTED_FINISH', label: 'Projected Finish' },
-    ];
-    if (ability.can('create', 'GameweekPrediction')) {
-        navItems.push({ id: 'GAMEWEEK', label: 'Gameweek' });
-    }
-    if (ability.can('create', 'TierList')) {
-        navItems.push({ id: 'TIER_LISTS', label: 'Tier Lists' });
-    }
-
     return (
         <div className="max-w-[1100px] mx-auto pt-5 pb-10">
             <Link
@@ -311,12 +295,7 @@ const PredictionsPage: React.FC = () => {
                 </p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_240px] gap-8 items-start">
-                <SectionNav
-                    items={navItems}
-                    selected={section}
-                    onSelect={handleSectionSelect}
-                    ariaLabel="Predictions and rankings sections"
-                />
+                <RankingsNav />
                 {section === 'PROJECTED_FINISH' && (
                     <>
                         <ProjectedFinishBoard
