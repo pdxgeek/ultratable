@@ -226,8 +226,34 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                         {away?.name ?? 'Away'}
                     </span>
                 </div>
+            </div>
 
-                {/* Per-row actions */}
+            {/*
+             * Meta row: timestamp + status / dirty marker on the left, per-row
+             * actions on the right. The actions used to share the main row
+             * with the teams + score inputs, which truncated long names on
+             * narrow viewports. Splitting them out gives the team labels the
+             * full width above.
+             */}
+            <div className="flex items-center justify-between gap-2 px-3 pb-2 text-[0.7rem] text-text-muted">
+                <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{formatTime(row.fixture.scheduledAt)}</span>
+                    {statusLabel && (
+                        <span className="uppercase font-semibold tracking-wider">
+                            {statusLabel}
+                        </span>
+                    )}
+                    {dirty && (
+                        <button
+                            type="button"
+                            onClick={handleClearDraft}
+                            className="underline hover:text-text-primary"
+                            title="Discard unsaved changes"
+                        >
+                            unsaved · discard
+                        </button>
+                    )}
+                </span>
                 <div className="flex items-center gap-1.5 shrink-0">
                     <button
                         type="button"
@@ -264,28 +290,6 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                         {row.isLocking ? '…' : 'Lock'}
                     </Button>
                 </div>
-            </div>
-
-            {/* Status badge + dirty marker + timestamp row */}
-            <div className="flex items-center justify-between px-3 pb-1 text-[0.7rem] text-text-muted">
-                <span>{formatTime(row.fixture.scheduledAt)}</span>
-                <span className="flex items-center gap-2">
-                    {statusLabel && (
-                        <span className="uppercase font-semibold tracking-wider">
-                            {statusLabel}
-                        </span>
-                    )}
-                    {dirty && (
-                        <button
-                            type="button"
-                            onClick={handleClearDraft}
-                            className="underline hover:text-text-primary"
-                            title="Discard unsaved changes"
-                        >
-                            unsaved · discard
-                        </button>
-                    )}
-                </span>
             </div>
 
             {/* Note textarea (expands inline) */}
