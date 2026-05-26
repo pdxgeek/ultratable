@@ -1,4 +1,4 @@
-CREATE TYPE "public"."prediction_event_kind" AS ENUM('created', 'locked', 'unlocked', 'edited_post_lockin', 'deleted');--> statement-breakpoint
+CREATE TYPE "public"."prediction_event_kind" AS ENUM('created', 'locked', 'unlocked', 'edited', 'deleted');--> statement-breakpoint
 CREATE TABLE "prediction_match_picks" (
 	"snapshot_id" uuid NOT NULL,
 	"fixture_id" uuid NOT NULL,

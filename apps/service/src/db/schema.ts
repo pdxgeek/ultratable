@@ -41,7 +41,7 @@ export const predictionEventKindEnum = pgEnum('prediction_event_kind', [
     'created',
     'locked',
     'unlocked',
-    'edited_post_lockin',
+    'edited',
     'deleted',
 ]);
 

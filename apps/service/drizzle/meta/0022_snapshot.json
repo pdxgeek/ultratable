@@ -1,5 +1,5 @@
 {
-  "id": "97c93ed5-d9f2-4686-91e0-59a4812a78bd",
+  "id": "3f1de9f5-75c2-497c-a0e6-ddcad1a5b9f9",
   "prevId": "9b40c1a2-0a3e-4f3c-9c5d-2a1f3e000021",
   "version": "7",
   "dialect": "postgresql",
@@ -3292,7 +3292,7 @@
         "created",
         "locked",
         "unlocked",
-        "edited_post_lockin",
+        "edited",
         "deleted"
       ]
     }
