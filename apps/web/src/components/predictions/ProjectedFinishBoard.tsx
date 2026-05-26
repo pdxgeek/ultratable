@@ -273,7 +273,24 @@ const ProjectedFinishBoard: React.FC<ProjectedFinishBoardProps> = ({
             {!readOnly && (
                 <Pool teamIds={poolTeamIds} teamsMap={teamsMap} readOnly={readOnly} />
             )}
-            <div className="flex flex-col gap-1">{renderSlots()}</div>
+            {/*
+             * Two-column layout for the position slots at lg+ (1024px), one
+             * column below. CSS columns flow top-to-bottom then left-to-right,
+             * so positions 1-10 fill the left column and 11-20 the right,
+             * which is the natural reading order for ranked lists.
+             *
+             * `gap-x-3` is the inter-column gutter (CSS `gap` doesn't apply
+             * inside multi-column the way it does in grid/flex). Per-slot
+             * vertical spacing comes from `[&>*]:mb-1`. `break-inside-avoid`
+             * keeps a slot from splitting across columns at the boundary.
+             *
+             * dnd-kit reads pointer position rather than DOM order, so the
+             * column layout is invisible to the drag system — drops still
+             * land on whichever slot is under the cursor.
+             */}
+            <div className="columns-1 lg:columns-2 gap-x-3 [&>*]:mb-1 [&>*]:break-inside-avoid">
+                {renderSlots()}
+            </div>
         </div>
     );
 
