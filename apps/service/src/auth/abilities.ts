@@ -73,6 +73,7 @@ export type AppSubject =
     | 'League'
     | 'OwnedResource'
     | 'Prediction'
+    | 'GameweekPrediction'
     | 'TierList'
     | 'all';
 
@@ -117,6 +118,14 @@ export function buildAbility(viewer: ViewerCtx | undefined, grants: GrantRow[] =
     if (viewer.roles.includes('predictions')) {
         can('create', 'Prediction');
         can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+        // Gameweek predictions (#144) — same role, separate subject because
+        // the entity is its own table + GraphQL type (the shared-table
+        // approach was explored in #145 and rejected). Picks are part of
+        // the GameweekPrediction aggregate, so `create` covers both
+        // container creation and pick inserts; the entity has no mutable
+        // state past insert, so there's no `update`.
+        can('create', 'GameweekPrediction');
+        can(['read', 'delete'], 'GameweekPrediction', { userId: viewer.id });
     }
 
     // Tier Lists. Same shape as Predictions: `create` is unconditional for

@@ -39,6 +39,7 @@ import './schema/account';
 import './schema/catalog';
 import './schema/config';
 import './schema/football';
+import './schema/gameweek-predictions';
 import './schema/graphics';
 import './schema/predictions';
 import './schema/tier-lists';

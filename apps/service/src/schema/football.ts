@@ -8,7 +8,7 @@ import { builder, requireAdmin } from './builder';
 export const LeagueRef = builder.objectRef<typeof schema.leagues.$inferSelect>('League');
 export const TeamRef = builder.objectRef<typeof schema.teams.$inferSelect>('Team');
 export const SeasonRef = builder.objectRef<typeof schema.seasons.$inferSelect>('Season');
-const FixtureRef = builder.objectRef<typeof schema.fixtures.$inferSelect>('Fixture');
+export const FixtureRef = builder.objectRef<typeof schema.fixtures.$inferSelect>('Fixture');
 const VenueRef = builder.objectRef<typeof schema.venues.$inferSelect>('Venue');
 const MatchEventRef =
     builder.objectRef<import('../integrations/types').IngestedEvent>('MatchEvent');
