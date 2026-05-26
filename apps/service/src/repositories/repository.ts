@@ -2,6 +2,7 @@ import { CatalogRepository } from './catalog';
 import { CoachesRepository } from './coaches';
 import { ConfigRepository } from './config';
 import { FixturesRepository } from './fixtures';
+import { GameweekPredictionsRepository } from './gameweek-predictions';
 import { GraphicsRepository } from './graphics';
 import { LeaguesRepository } from './leagues';
 import { PlayersRepository } from './players';
@@ -27,6 +28,7 @@ export interface IRepository {
     graphics: GraphicsRepository;
     users: UsersRepository;
     predictions: PredictionsRepository;
+    gameweekPredictions: GameweekPredictionsRepository;
     tierLists: TierListsRepository;
     coaches: CoachesRepository;
 }

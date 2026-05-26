@@ -1,4 +1,4 @@
-import { and, count, eq, gt, inArray, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNotNull, lte, notInArray, sql } from 'drizzle-orm';
 
 import { db } from '../../db';
 import * as schema from '../../db/schema';
@@ -742,6 +742,104 @@ export class PostgresFixturesRepository implements FixturesRepository {
             .from(schema.fixtures)
             .where(eq(schema.fixtures.seasonId, seasonId));
         return Number(res?.val ?? 0);
+    }
+
+    // --- Gameweek-predictions helpers (#144) ---
+
+    async getFixturesByGameweek(
+        seasonId: string,
+        gameweek: number,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+        if (!db) return [];
+        return db
+            .select()
+            .from(schema.fixtures)
+            .where(
+                and(
+                    eq(schema.fixtures.seasonId, seasonId),
+                    eq(schema.fixtures.gameweek, gameweek),
+                ),
+            )
+            .orderBy(asc(schema.fixtures.scheduledAt));
+    }
+
+    async getRecommendedRescheduledFixtures(
+        seasonId: string,
+        gameweek: number,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>> {
+        if (!db) return [];
+
+        // Look at the season's gameweek set to find the neighbours of
+        // `gameweek`. Cup ties or rescheduled matches with `gameweek = null`
+        // are exactly what we're trying to surface — they don't count as
+        // neighbours.
+        const gameweekRows = await db
+            .selectDistinct({ gw: schema.fixtures.gameweek })
+            .from(schema.fixtures)
+            .where(
+                and(
+                    eq(schema.fixtures.seasonId, seasonId),
+                    isNotNull(schema.fixtures.gameweek),
+                ),
+            );
+        const numberedGameweeks = gameweekRows
+            .map((r) => r.gw)
+            .filter((n): n is number => n !== null)
+            .sort((a, b) => a - b);
+        const idx = numberedGameweeks.indexOf(gameweek);
+        // First-or-last in the season has no neighbouring window — by
+        // construction there's nothing "between" two gameweeks if one of
+        // them doesn't exist.
+        if (idx <= 0 || idx >= numberedGameweeks.length - 1) return [];
+        const prevGw = numberedGameweeks[idx - 1];
+        const nextGw = numberedGameweeks[idx + 1];
+
+        // Window boundaries: max(scheduledAt) of the prev gameweek and
+        // min(scheduledAt) of the next. One round-trip via a CTE keeps
+        // both in scope without two extra Drizzle calls.
+        const recommended = await db.execute<typeof schema.fixtures.$inferSelect>(
+            sql`
+                WITH bounds AS (
+                    SELECT
+                        (SELECT MAX(scheduled_at) FROM ${schema.fixtures}
+                            WHERE season_id = ${seasonId} AND gameweek = ${prevGw}) AS prev_max,
+                        (SELECT MIN(scheduled_at) FROM ${schema.fixtures}
+                            WHERE season_id = ${seasonId} AND gameweek = ${nextGw}) AS next_min
+                )
+                SELECT f.*
+                FROM ${schema.fixtures} f, bounds
+                WHERE f.season_id = ${seasonId}
+                  AND f.status = 'scheduled'
+                  AND f.scheduled_at > bounds.prev_max
+                  AND f.scheduled_at < bounds.next_min
+                  AND (f.gameweek IS NULL OR f.gameweek <> ${gameweek})
+                ORDER BY f.scheduled_at ASC
+            `,
+        );
+        return recommended as Array<typeof schema.fixtures.$inferSelect>;
+    }
+
+    async listSelectableGameweeks(seasonId: string): Promise<number[]> {
+        if (!db) return [];
+        const rows = await db
+            .selectDistinct({ gw: schema.fixtures.gameweek })
+            .from(schema.fixtures)
+            .where(
+                and(
+                    eq(schema.fixtures.seasonId, seasonId),
+                    isNotNull(schema.fixtures.gameweek),
+                    eq(schema.fixtures.status, 'scheduled'),
+                ),
+            );
+        return rows
+            .map((r) => r.gw)
+            .filter((n): n is number => n !== null)
+            .sort((a, b) => a - b);
+    }
+
+    async getActiveGameweek(seasonId: string): Promise<number | null> {
+        const selectable = await this.listSelectableGameweeks(seasonId);
+        return selectable[0] ?? null;
     }
 
     async getMatchEvents(

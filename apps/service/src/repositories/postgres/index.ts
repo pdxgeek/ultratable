@@ -5,6 +5,7 @@ import { PostgresCatalogRepository } from './catalog.repository';
 import { PostgresCoachesRepository } from './coaches.repository';
 import { PostgresConfigRepository } from './config.repository';
 import { PostgresFixturesRepository } from './fixtures.repository';
+import { PostgresGameweekPredictionsRepository } from './gameweek-predictions.repository';
 import { PostgresGraphicsRepository } from './graphics.repository';
 import { PostgresLeaguesRepository } from './leagues.repository';
 import { PostgresPlayersRepository } from './players.repository';
@@ -25,6 +26,7 @@ export {
     PostgresGraphicsRepository,
     PostgresUsersRepository,
     PostgresPredictionsRepository,
+    PostgresGameweekPredictionsRepository,
     PostgresTierListsRepository,
     PostgresCoachesRepository,
 };
@@ -49,6 +51,7 @@ export function createPostgresRepository(providerOverride?: IFootballProvider): 
         graphics: new PostgresGraphicsRepository(),
         users: new PostgresUsersRepository(),
         predictions: new PostgresPredictionsRepository(),
+        gameweekPredictions: new PostgresGameweekPredictionsRepository(),
         tierLists: new PostgresTierListsRepository(),
         coaches: new PostgresCoachesRepository(provider),
     };
