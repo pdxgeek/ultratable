@@ -84,6 +84,32 @@ export interface PredictionDraft {
     updatedAt: string;
 }
 
+// Per-fixture draft for the Gameweek-predictions editor (#144). One row per
+// fixture the user is editing, scoped to (user, season, gameweek, fixture).
+// Stays in Dexie until the user hits the row's Lock button — committing the
+// pick to the server clears the draft.
+//
+// Why per-fixture and not a single blob per slip? Each row has its own lock
+// action, so each row's "in-progress / unsaved" state is independent. A blob
+// would force us to re-write the whole thing on every keystroke and would
+// fight with concurrent rows.
+export interface GameweekPredictionDraft {
+    // Composite key: `${userId}__${seasonId}__${gameweek}__${fixtureId}`.
+    id: string;
+    userId: string;
+    seasonId: string;
+    gameweek: number;
+    fixtureId: string;
+    homeGoals: number | null;
+    awayGoals: number | null;
+    note: string | null;
+    // Mirror of the eventual server-side `manuallyAdded` flag. Set when the
+    // draft was created via the Add-fixture popup so the lock-in submit knows
+    // to forward `manuallyAdded: true`.
+    manuallyAdded: boolean;
+    updatedAt: string;
+}
+
 export class UltraWebDB extends Dexie {
     syncState!: Table<SyncState, string>;
     leagues!: Table<League, string>;
@@ -93,6 +119,7 @@ export class UltraWebDB extends Dexie {
     venues!: Table<Venue, string>;
     graphics!: Table<Graphic, string>;
     predictionDrafts!: Table<PredictionDraft, string>;
+    gameweekPredictionDrafts!: Table<GameweekPredictionDraft, string>;
 
     constructor() {
         super('UltraWebDB');
@@ -109,6 +136,13 @@ export class UltraWebDB extends Dexie {
         });
         this.version(3).stores({
             predictionDrafts: 'id, updatedAt',
+        });
+        // v4: gameweekPredictionDrafts — per-fixture drafts for #144 editor.
+        // Compound index `[userId+seasonId+gameweek]` powers the "every draft
+        // for this slip" lookup that hydrates the editor.
+        this.version(4).stores({
+            gameweekPredictionDrafts:
+                'id, [userId+seasonId+gameweek], updatedAt',
         });
     }
 }

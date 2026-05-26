@@ -1,0 +1,417 @@
+import type { Team } from '../../../db';
+import type { GameweekFixture, GameweekPredictionPick } from './queries';
+
+import React, { useState } from 'react';
+import { format } from 'date-fns';
+import { Lock, Plus, StickyNote, X } from 'lucide-react';
+
+import { Button } from '../../ui/button';
+import PickHistoryPopover from './PickHistoryPopover';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-row state owned by the parent `GameweekSection`. The board is purely
+ * presentational — it renders, the section handles the locking + Dexie draft
+ * write-through.
+ */
+export interface RowDraft {
+    homeGoals: number | null;
+    awayGoals: number | null;
+    note: string | null;
+    manuallyAdded: boolean;
+}
+
+export interface RowState {
+    fixture: GameweekFixture;
+    /** Latest committed pick on the server, if any. */
+    currentPick: GameweekPredictionPick | null;
+    /** Every committed pick for this fixture in this slip, newest first. */
+    history: GameweekPredictionPick[];
+    /** Unsaved scratch state from the Dexie draft. Null when no draft exists. */
+    draft: RowDraft | null;
+    /** Whether the row's lock action is in-flight. */
+    isLocking: boolean;
+    /** Most-recent submit error, if any. */
+    error: string | null;
+}
+
+interface GameweekBoardProps {
+    gameweek: number;
+    /**
+     * Default-gameweek rows (everything where `fixture.gameweek === gameweek`),
+     * sorted by scheduledAt.
+     */
+    rows: RowState[];
+    /**
+     * Manually-added rows (rescheduled cup ties / midweek games), sorted by
+     * scheduledAt. Rendered in a separate section.
+     */
+    manualRows: RowState[];
+    teamsMap: Map<string, Team>;
+    /** "Add fixture" button → open the picker. Null hides the button (e.g. closed gameweek). */
+    onOpenAddDialog: (() => void) | null;
+    onDraftChange: (fixtureId: string, draft: RowDraft) => void;
+    onLockRow: (fixtureId: string) => void;
+    onClearDraft: (fixtureId: string) => void;
+    /**
+     * Remove a manually-added row from the editor. v1 just clears the draft;
+     * server-side removal is out of scope (the user leaves scores blank
+     * instead). Hidden for rows whose pick is already committed — once it's
+     * in the server-side chain the visual "remove" wouldn't actually unsave
+     * anything.
+     */
+    onRemoveManualRow: (fixtureId: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const STATUS_LABEL: Record<GameweekFixture['status'], string | null> = {
+    scheduled: null,
+    live: 'Live',
+    played: 'Played',
+    cancelled: 'Cancelled',
+    postponed: 'Postponed',
+};
+
+const isScoreable = (status: GameweekFixture['status']) => status === 'scheduled';
+
+/** Returns the effective values to display + send on lock — draft beats committed. */
+function effective(row: RowState): RowDraft {
+    if (row.draft) return row.draft;
+    if (row.currentPick) {
+        return {
+            homeGoals: row.currentPick.homeGoals,
+            awayGoals: row.currentPick.awayGoals,
+            note: row.currentPick.note,
+            manuallyAdded: row.currentPick.manuallyAdded,
+        };
+    }
+    return { homeGoals: null, awayGoals: null, note: null, manuallyAdded: false };
+}
+
+/** True when the draft differs from the latest committed pick. */
+function isDirty(row: RowState): boolean {
+    if (!row.draft) return false;
+    const c = row.currentPick;
+    if (!c) {
+        return (
+            row.draft.homeGoals != null ||
+            row.draft.awayGoals != null ||
+            (row.draft.note ?? '').length > 0
+        );
+    }
+    return (
+        row.draft.homeGoals !== c.homeGoals ||
+        row.draft.awayGoals !== c.awayGoals ||
+        (row.draft.note ?? null) !== (c.note ?? null)
+    );
+}
+
+const formatTime = (iso: string) => format(new Date(iso), 'EEE MMM d · h:mma');
+
+// ---------------------------------------------------------------------------
+// Row
+// ---------------------------------------------------------------------------
+
+interface RowProps {
+    row: RowState;
+    teamsMap: Map<string, Team>;
+    onDraftChange: (fixtureId: string, draft: RowDraft) => void;
+    onLockRow: (fixtureId: string) => void;
+    onClearDraft: (fixtureId: string) => void;
+    onRemove?: () => void;
+}
+
+const FixtureScoreRow: React.FC<RowProps> = ({
+    row,
+    teamsMap,
+    onDraftChange,
+    onLockRow,
+    onClearDraft,
+    onRemove,
+}) => {
+    const home = teamsMap.get(row.fixture.homeTeamId);
+    const away = teamsMap.get(row.fixture.awayTeamId);
+    const eff = effective(row);
+    const scoreable = isScoreable(row.fixture.status);
+    const statusLabel = STATUS_LABEL[row.fixture.status];
+    const dirty = isDirty(row);
+    const [noteOpen, setNoteOpen] = useState((eff.note ?? '').length > 0);
+
+    const handleScoreInput = (which: 'home' | 'away') => (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        // Empty → null. Otherwise clamp to a non-negative integer; ignore bad input.
+        const parsed = raw === '' ? null : Number.parseInt(raw, 10);
+        const next = parsed == null || (Number.isFinite(parsed) && parsed >= 0) ? parsed : eff[
+            which === 'home' ? 'homeGoals' : 'awayGoals'
+        ];
+        onDraftChange(row.fixture.id, {
+            ...eff,
+            [which === 'home' ? 'homeGoals' : 'awayGoals']: next,
+        });
+    };
+
+    const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onDraftChange(row.fixture.id, { ...eff, note: e.target.value || null });
+    };
+
+    const handleClearDraft = () => {
+        setNoteOpen((row.currentPick?.note ?? '').length > 0);
+        onClearDraft(row.fixture.id);
+    };
+
+    const fixtureLabel = `${home?.name ?? 'Home'} vs ${away?.name ?? 'Away'}`;
+
+    return (
+        <li
+            className={`rounded-lg border border-border bg-glass-bg/40 ${scoreable ? '' : 'opacity-60'}`}
+        >
+            <div className="flex items-center gap-3 px-3 py-2">
+                {/* Home team */}
+                <div className="flex items-center gap-2 flex-1 min-w-0 justify-end text-right">
+                    <span className="font-medium text-text-primary truncate">
+                        {home?.name ?? 'Home'}
+                    </span>
+                    {home?.logo && (
+                        <img
+                            src={home.logo}
+                            alt=""
+                            className="w-6 h-6 object-contain"
+                            onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                        />
+                    )}
+                </div>
+
+                {/* Score inputs */}
+                <div className="flex items-center gap-1">
+                    <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={eff.homeGoals ?? ''}
+                        onChange={handleScoreInput('home')}
+                        disabled={!scoreable}
+                        aria-label={`Home goals for ${fixtureLabel}`}
+                        className="w-10 h-9 text-center rounded-md border border-input bg-transparent text-sm tabular-nums disabled:cursor-not-allowed"
+                    />
+                    <span className="text-text-muted text-sm">–</span>
+                    <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={eff.awayGoals ?? ''}
+                        onChange={handleScoreInput('away')}
+                        disabled={!scoreable}
+                        aria-label={`Away goals for ${fixtureLabel}`}
+                        className="w-10 h-9 text-center rounded-md border border-input bg-transparent text-sm tabular-nums disabled:cursor-not-allowed"
+                    />
+                </div>
+
+                {/* Away team */}
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {away?.logo && (
+                        <img
+                            src={away.logo}
+                            alt=""
+                            className="w-6 h-6 object-contain"
+                            onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                        />
+                    )}
+                    <span className="font-medium text-text-primary truncate">
+                        {away?.name ?? 'Away'}
+                    </span>
+                </div>
+
+                {/* Per-row actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setNoteOpen((v) => !v)}
+                        aria-label={`Toggle note for ${fixtureLabel}`}
+                        title="Note"
+                        className={`text-text-muted hover:text-text-primary transition-colors ${
+                            (eff.note ?? '').length > 0 ? 'text-accent-purple' : ''
+                        }`}
+                    >
+                        <StickyNote className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <PickHistoryPopover history={row.history} fixtureLabel={fixtureLabel} />
+                    {onRemove && (
+                        <button
+                            type="button"
+                            onClick={onRemove}
+                            aria-label={`Remove ${fixtureLabel} from slip`}
+                            title="Remove from slip"
+                            className="text-text-muted hover:text-destructive transition-colors"
+                        >
+                            <X className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                    )}
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={!scoreable || !dirty || row.isLocking}
+                        onClick={() => onLockRow(row.fixture.id)}
+                        title={scoreable ? 'Lock this pick' : `${statusLabel ?? ''}`}
+                        className="bg-accent-purple text-white hover:brightness-110 disabled:opacity-50 h-8 px-2"
+                    >
+                        <Lock className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+                        {row.isLocking ? '…' : 'Lock'}
+                    </Button>
+                </div>
+            </div>
+
+            {/* Status badge + dirty marker + timestamp row */}
+            <div className="flex items-center justify-between px-3 pb-1 text-[0.7rem] text-text-muted">
+                <span>{formatTime(row.fixture.scheduledAt)}</span>
+                <span className="flex items-center gap-2">
+                    {statusLabel && (
+                        <span className="uppercase font-semibold tracking-wider">
+                            {statusLabel}
+                        </span>
+                    )}
+                    {dirty && (
+                        <button
+                            type="button"
+                            onClick={handleClearDraft}
+                            className="underline hover:text-text-primary"
+                            title="Discard unsaved changes"
+                        >
+                            unsaved · discard
+                        </button>
+                    )}
+                </span>
+            </div>
+
+            {/* Note textarea (expands inline) */}
+            {noteOpen && (
+                <div className="px-3 pb-3">
+                    <textarea
+                        value={eff.note ?? ''}
+                        onChange={handleNoteChange}
+                        maxLength={500}
+                        rows={2}
+                        placeholder="Add a note for this fixture (optional, ≤ 500 chars)"
+                        className="w-full text-sm rounded-md border border-input bg-transparent px-2 py-1.5 resize-y"
+                    />
+                </div>
+            )}
+
+            {/* Submit error */}
+            {row.error && (
+                <p className="px-3 pb-2 text-sm text-destructive" role="alert">
+                    {row.error}
+                </p>
+            )}
+        </li>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// Board
+// ---------------------------------------------------------------------------
+
+const GameweekBoard: React.FC<GameweekBoardProps> = ({
+    gameweek,
+    rows,
+    manualRows,
+    teamsMap,
+    onOpenAddDialog,
+    onDraftChange,
+    onLockRow,
+    onClearDraft,
+    onRemoveManualRow,
+}) => {
+    return (
+        <section className="flex flex-col gap-4">
+            <header className="flex items-baseline justify-between">
+                <h2 className="text-lg font-semibold text-text-primary">Gameweek {gameweek}</h2>
+                <span className="text-[0.75rem] text-text-muted">
+                    {rows.length} fixture{rows.length === 1 ? '' : 's'}
+                </span>
+            </header>
+
+            {rows.length === 0 ? (
+                <p className="text-sm text-text-muted">
+                    No fixtures in this gameweek.
+                </p>
+            ) : (
+                <ul className="flex flex-col gap-2">
+                    {rows.map((row) => (
+                        <FixtureScoreRow
+                            key={row.fixture.id}
+                            row={row}
+                            teamsMap={teamsMap}
+                            onDraftChange={onDraftChange}
+                            onLockRow={onLockRow}
+                            onClearDraft={onClearDraft}
+                        />
+                    ))}
+                </ul>
+            )}
+
+            {(manualRows.length > 0 || onOpenAddDialog) && (
+                <div className="flex flex-col gap-3">
+                    <header className="flex items-baseline justify-between">
+                        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
+                            Added fixtures
+                        </h3>
+                        <span className="text-[0.7rem] text-text-muted">
+                            Rescheduled cup ties / midweek games
+                        </span>
+                    </header>
+
+                    {manualRows.length === 0 ? (
+                        <p className="text-sm text-text-muted">
+                            Add a fixture that falls between this gameweek and the next.
+                        </p>
+                    ) : (
+                        <ul className="flex flex-col gap-2">
+                            {manualRows.map((row) => {
+                                // Only show the remove button when the row is a pure
+                                // draft (no committed pick yet) — once it's saved
+                                // server-side, "remove" wouldn't actually un-commit.
+                                const removable = row.currentPick == null;
+                                return (
+                                    <FixtureScoreRow
+                                        key={row.fixture.id}
+                                        row={row}
+                                        teamsMap={teamsMap}
+                                        onDraftChange={onDraftChange}
+                                        onLockRow={onLockRow}
+                                        onClearDraft={onClearDraft}
+                                        onRemove={
+                                            removable
+                                                ? () =>
+                                                      onRemoveManualRow(row.fixture.id)
+                                                : undefined
+                                        }
+                                    />
+                                );
+                            })}
+                        </ul>
+                    )}
+
+                    {onOpenAddDialog && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onOpenAddDialog}
+                            className="self-start"
+                        >
+                            <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                            Add fixture
+                        </Button>
+                    )}
+                </div>
+            )}
+        </section>
+    );
+};
+
+export default GameweekBoard;

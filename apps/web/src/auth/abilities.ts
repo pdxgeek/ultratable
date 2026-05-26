@@ -35,6 +35,7 @@ export type AppSubject =
     | 'League'
     | 'OwnedResource'
     | 'Prediction'
+    | 'GameweekPrediction'
     | 'TierList'
     | 'all';
 
@@ -59,6 +60,10 @@ export function buildAbility(viewer: AbilityViewer | null | undefined): AppAbili
     if (viewer.roles.includes('predictions')) {
         can('create', 'Prediction');
         can(['read', 'delete'], 'Prediction', { userId: viewer.id });
+        // Gameweek predictions (#144) — same role, separate subject. See the
+        // server-side mirror in apps/service/src/auth/abilities.ts.
+        can('create', 'GameweekPrediction');
+        can(['read', 'delete'], 'GameweekPrediction', { userId: viewer.id });
     }
 
     if (viewer.roles.includes('tier-lists')) {
