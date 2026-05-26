@@ -17,6 +17,7 @@
 import type { CatalogRepository } from '../catalog';
 import type { ConfigRepository } from '../config';
 import type { FixturesRepository } from '../fixtures';
+import type { GameweekPredictionsRepository } from '../gameweek-predictions';
 import type { GraphicsRepository } from '../graphics';
 import type { LeaguesRepository } from '../leagues';
 import type { PlayersRepository } from '../players';
@@ -77,6 +78,10 @@ export function buildMockFixtures(overrides: Partial<FixturesRepository> = {}): 
         getFixtureById: vi.fn().mockResolvedValue(null),
         getFixturesBySeasonId: vi.fn().mockResolvedValue([]),
         countFixturesInSeason: vi.fn().mockResolvedValue(0),
+        getFixturesByGameweek: vi.fn().mockResolvedValue([]),
+        getRecommendedRescheduledFixtures: vi.fn().mockResolvedValue([]),
+        listSelectableGameweeks: vi.fn().mockResolvedValue([]),
+        getActiveGameweek: vi.fn().mockResolvedValue(null),
         syncFixtures: vi
             .fn()
             .mockResolvedValue({ data: [], stats: { processedCount: 0, apiCallsCount: 0 } }),
@@ -184,6 +189,45 @@ export function buildMockPredictions(
     };
 }
 
+export function buildMockGameweekPredictions(
+    overrides: Partial<GameweekPredictionsRepository> = {},
+): GameweekPredictionsRepository {
+    const now = new Date();
+    const predictionStub = {
+        id: 'gw-pred-1',
+        userId: 'user-1',
+        seasonId: 'season-1',
+        gameweek: 1,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+    };
+    const pickStub = {
+        id: 'gw-pick-1',
+        predictionId: 'gw-pred-1',
+        fixtureId: 'fix-1',
+        homeGoals: null,
+        awayGoals: null,
+        note: null,
+        manuallyAdded: false,
+        createdAt: now,
+    };
+    return {
+        submitPick: vi
+            .fn()
+            .mockResolvedValue({ prediction: predictionStub, pick: pickStub, deduped: false }),
+        listPredictionsForUser: vi.fn().mockResolvedValue([]),
+        getPredictionForWeek: vi.fn().mockResolvedValue(null),
+        getPredictionById: vi.fn().mockResolvedValue(null),
+        softDeletePrediction: vi.fn().mockResolvedValue(null),
+        listCurrentPicks: vi.fn().mockResolvedValue([]),
+        listPickHistory: vi.fn().mockResolvedValue([]),
+        listCurrentPicksByPredictionIds: vi.fn().mockResolvedValue(new Map()),
+        listPickHistoryByPredictionIds: vi.fn().mockResolvedValue(new Map()),
+        ...overrides,
+    };
+}
+
 export function buildMockTierLists(
     overrides: Partial<TierListsRepository> = {},
 ): TierListsRepository {
@@ -272,6 +316,7 @@ export function buildMockRepository(overrides: RepositoryOverrides = {}): IRepos
         workers: buildMockWorkers(overrides.workers),
         users: buildMockUsers(overrides.users),
         predictions: buildMockPredictions(overrides.predictions),
+        gameweekPredictions: buildMockGameweekPredictions(overrides.gameweekPredictions),
         tierLists: buildMockTierLists(overrides.tierLists),
         coaches: buildMockCoaches(overrides.coaches),
     };

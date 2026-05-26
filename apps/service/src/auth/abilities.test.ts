@@ -101,6 +101,45 @@ describe('abilityFor — predictions role', () => {
     });
 });
 
+describe('abilityFor — gameweek-predictions (same role, separate subject)', () => {
+    it('predictions role grants create on GameweekPrediction', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user', 'predictions'] });
+        expect(ability.can('create', 'GameweekPrediction')).toBe(true);
+    });
+
+    it('predictions role scopes read/delete to the owner', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user', 'predictions'] });
+        expect(
+            ability.can('read', subject('GameweekPrediction', { userId: 'user-1' })),
+        ).toBe(true);
+        expect(
+            ability.can('delete', subject('GameweekPrediction', { userId: 'user-1' })),
+        ).toBe(true);
+        expect(
+            ability.can('read', subject('GameweekPrediction', { userId: 'someone-else' })),
+        ).toBe(false);
+        expect(
+            ability.can('delete', subject('GameweekPrediction', { userId: 'someone-else' })),
+        ).toBe(false);
+    });
+
+    it('viewer without predictions role gets nothing on GameweekPrediction', () => {
+        const ability = buildAbility({ id: 'user-1', roles: ['user'] });
+        expect(ability.can('create', 'GameweekPrediction')).toBe(false);
+        expect(
+            ability.can('read', subject('GameweekPrediction', { userId: 'user-1' })),
+        ).toBe(false);
+    });
+
+    it('admin bypasses gameweek-prediction ownership via manage all', () => {
+        const ability = buildAbility({ id: 'admin-1', roles: ['admin'] });
+        expect(ability.can('create', 'GameweekPrediction')).toBe(true);
+        expect(
+            ability.can('delete', subject('GameweekPrediction', { userId: 'someone-else' })),
+        ).toBe(true);
+    });
+});
+
 describe('abilityFor — tier-lists role', () => {
     it('viewer with tier-lists role can create tier lists', () => {
         const ability = buildAbility({ id: 'user-1', roles: ['user', 'tier-lists'] });

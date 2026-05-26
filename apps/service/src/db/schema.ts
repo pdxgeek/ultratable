@@ -12,6 +12,7 @@ import {
     text,
     timestamp,
     unique,
+    uniqueIndex,
     uuid,
     varchar,
 } from 'drizzle-orm/pg-core';
@@ -531,6 +532,113 @@ export const predictionSnapshotEntries = pgTable(
         // One team per position within a snapshot; pairs with the (snapshot,
         // team) PK to enforce the bijection required by `lockInPrediction`.
         uniqueSnapshotPosition: unique().on(table.snapshotId, table.position),
+    }),
+);
+
+// --- Gameweek Predictions (#144) ---
+// Per-(user, season, gameweek) score picks. A separate entity from the
+// Projected-Finish snapshot family above — they share only the `'predictions'`
+// role and live in this file because they're related, not because they're
+// the same shape. See issue #144 for the design rationale (and PR #145 for
+// the shared-table approach we explicitly rejected).
+//
+// Two pieces:
+//
+//   1. `gameweek_predictions` — a thin container. One live row per
+//      (user, season, gameweek) — enforced by a partial unique. Created
+//      lazily on the user's first pick commit for that week. Soft-delete
+//      flips `deleted_at`; subsequent submits create a fresh container,
+//      no auto un-soft-delete.
+//
+//   2. `gameweek_prediction_picks` — an append-only ledger. Every commit
+//      inserts a new row; the "current" pick for a fixture is the most
+//      recent row in the chain. `created_at` doubles as `locked_at`
+//      (committing == locking). The pick chain is the audit trail —
+//      there is no separate events table.
+//
+// Removing a manually-added fixture from a slip is out of scope for v1
+// (the user just leaves scores blank). The `manually_added` flag stays
+// a plain `bool` with no DB-side rescheduled-window constraint; that
+// rule is resolver-enforced so the entity can absorb a broader add story
+// later without a migration.
+export const gameweekPredictions = pgTable(
+    'gameweek_predictions',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        userId: uuid('user_id')
+            .references(() => users.id, { onDelete: 'cascade' })
+            .notNull(),
+        seasonId: uuid('season_id')
+            .references(() => seasons.id, { onDelete: 'cascade' })
+            .notNull(),
+        gameweek: integer('gameweek').notNull(),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        // Bumped on every appended pick — drives the history-panel sort
+        // ("newest activity first") without a sub-query.
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+        // Soft-delete marker. Null = live. Picks are intentionally NOT
+        // cascade-deleted by setting this — the chain stays for any
+        // future admin tooling.
+        deletedAt: utcTimestamp('deleted_at'),
+    },
+    (table) => ({
+        // Hard rule: one live slip per (user, season, gameweek). The
+        // partial filter lets the user soft-delete and resubmit (creating
+        // a fresh container) without conflict.
+        oneLivePerGameweek: uniqueIndex('gameweek_predictions_one_live_per_gameweek_idx')
+            .on(table.userId, table.seasonId, table.gameweek)
+            .where(sql`${table.deletedAt} IS NULL`),
+        // History-panel listing path.
+        liveByUserSeasonIdx: index('gameweek_predictions_live_by_user_season_idx')
+            .on(table.userId, table.seasonId)
+            .where(sql`${table.deletedAt} IS NULL`),
+    }),
+);
+
+export const gameweekPredictionPicks = pgTable(
+    'gameweek_prediction_picks',
+    {
+        // Surrogate PK — every commit is its own row, so (prediction, fixture)
+        // is no longer unique. Also gives the GraphQL `id` a stable handle
+        // for the per-fixture history popover.
+        id: uuid('id').primaryKey().defaultRandom(),
+        predictionId: uuid('prediction_id')
+            .references(() => gameweekPredictions.id, { onDelete: 'cascade' })
+            .notNull(),
+        fixtureId: uuid('fixture_id')
+            .references(() => fixtures.id)
+            .notNull(),
+        homeGoals: integer('home_goals'),
+        awayGoals: integer('away_goals'),
+        // Free-text per-fixture note. Soft cap (≤ 500 chars) enforced in
+        // the resolver — a CHECK here would push the limit into migrations
+        // any time we want to retune it.
+        note: text('note'),
+        // True = pulled in via the Add-fixture popup (rescheduled cup /
+        // midweek game in the between-gameweek window). Rescheduled-window
+        // validation is resolver-enforced.
+        manuallyAdded: boolean('manually_added').notNull().default(false),
+        // Commit time. Doubles as `locked_at` — there is no separate lock
+        // column. Rows are immutable; no `updated_at`.
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        // Hot read path: latest pick per fixture for a slip.
+        latestPerFixtureIdx: index('gameweek_prediction_picks_latest_per_fixture_idx').on(
+            table.predictionId,
+            table.fixtureId,
+            table.createdAt,
+        ),
+        // Whole-slip timeline (per-fixture history popover, audit views).
+        slipTimelineIdx: index('gameweek_prediction_picks_slip_timeline_idx').on(
+            table.predictionId,
+            table.createdAt,
+        ),
+        nonNegativeGoals: check(
+            'gameweek_prediction_picks_non_negative_goals_check',
+            sql`(${table.homeGoals} IS NULL OR ${table.homeGoals} >= 0)
+                AND (${table.awayGoals} IS NULL OR ${table.awayGoals} >= 0)`,
+        ),
     }),
 );
 

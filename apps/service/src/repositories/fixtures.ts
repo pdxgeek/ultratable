@@ -18,6 +18,41 @@ export interface FixturesRepository {
         forceRefresh?: boolean,
     ): Promise<Array<typeof schema.fixtures.$inferSelect>>;
     countFixturesInSeason(seasonId: string): Promise<number>;
+
+    /**
+     * Every fixture in a (season, gameweek), any status. Powers the Gameweek
+     * editor — the UI greys out non-`scheduled` rows but needs the full set
+     * so users can see what's already played.
+     */
+    getFixturesByGameweek(
+        seasonId: string,
+        gameweek: number,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>>;
+
+    /**
+     * Rescheduled-window fixtures around a gameweek: `status='scheduled'`
+     * fixtures whose `scheduledAt` sits **after the latest fixture of the
+     * previous gameweek** and **before the earliest fixture of the next
+     * gameweek**, excluding the gameweek's own fixtures. Returns `[]` for
+     * the first/last gameweek (no neighbouring window exists).
+     */
+    getRecommendedRescheduledFixtures(
+        seasonId: string,
+        gameweek: number,
+    ): Promise<Array<typeof schema.fixtures.$inferSelect>>;
+
+    /**
+     * Gameweeks in the season with at least one `status='scheduled'` fixture
+     * remaining. Powers the Gameweek picker — the set shrinks as kickoffs
+     * happen. Sorted ascending.
+     */
+    listSelectableGameweeks(seasonId: string): Promise<number[]>;
+
+    /**
+     * Default landing gameweek for the editor: the earliest selectable
+     * gameweek. Returns `null` once the season is fully played.
+     */
+    getActiveGameweek(seasonId: string): Promise<number | null>;
     syncFixtures(
         leagueSourceId: number,
         season: number,

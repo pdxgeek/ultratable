@@ -25,6 +25,7 @@ export default defineConfig({
                 'src/repositories/catalog.ts',
                 'src/repositories/config.ts',
                 'src/repositories/fixtures.ts',
+                'src/repositories/gameweek-predictions.ts',
                 'src/repositories/graphics.ts',
                 'src/repositories/leagues.ts',
                 'src/repositories/players.ts',
