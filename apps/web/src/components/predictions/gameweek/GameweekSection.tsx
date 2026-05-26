@@ -20,11 +20,13 @@ import type {
     GameweekFixturesPayload,
     GameweekPrediction,
     GameweekPredictionPick,
+    SelectableGameweek,
 } from './queries';
 
 import React, { useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Plus } from 'lucide-react';
 import { useMutation, useQuery } from 'urql';
 
 import { useAbility } from '../../../auth/abilities';
@@ -35,16 +37,17 @@ import {
     saveGameweekDraft,
 } from '../../../db/gameweekPredictionDrafts';
 import { useViewer } from '../../../hooks/useViewer';
+import { Button } from '../../ui/button';
 import GameweekBoard from './GameweekBoard';
 import AddFixtureDialog from './AddFixtureDialog';
+import AddGameweekDialog from './AddGameweekDialog';
 import GameweekHistoryPanel from './GameweekHistoryPanel';
 import {
-    ACTIVE_GAMEWEEK_QUERY,
     DELETE_GAMEWEEK_PREDICTION_MUTATION,
     GAMEWEEK_FIXTURES_FOR_PREDICTIONS_QUERY,
     GAMEWEEK_PREDICTION_FOR_WEEK_QUERY,
     MY_GAMEWEEK_PREDICTIONS_QUERY,
-    SELECTABLE_GAMEWEEKS_QUERY,
+    SELECTABLE_GAMEWEEKS_BY_KICKOFF_QUERY,
     SUBMIT_GAMEWEEK_PICK_MUTATION,
     type SubmitGameweekPickInput,
 } from './queries';
@@ -57,8 +60,13 @@ interface GameweekSectionProps {
 const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap }) => {
     const { viewer } = useViewer();
     const ability = useAbility<AppAbility>();
+    // The editor is empty until the user explicitly picks a gameweek via the
+    // Add-gameweek dialog (or clicks an existing slip in the history panel).
+    // We intentionally do NOT default to the server's `activeGameweek` —
+    // see #144 review thread for the rationale (MLS straggler gameweeks).
     const [gameweek, setGameweek] = useState<number | null>(null);
-    const [addDialogOpen, setAddDialogOpen] = useState(false);
+    const [addGameweekDialogOpen, setAddGameweekDialogOpen] = useState(false);
+    const [addFixtureDialogOpen, setAddFixtureDialogOpen] = useState(false);
     // Per-row UI state — keyed by fixtureId. Mutation in-flight + last error.
     const [rowMeta, setRowMeta] = useState<
         Record<string, { isLocking: boolean; error: string | null }>
@@ -69,14 +77,10 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
     // Server data
     // -----------------------------------------------------------------------
 
-    const [activeGameweekResult] = useQuery<{ activeGameweek: number | null }>({
-        query: ACTIVE_GAMEWEEK_QUERY,
-        variables: { seasonId },
-        pause: !seasonId,
-    });
-
-    const [selectableResult, refetchSelectable] = useQuery<{ selectableGameweeks: number[] }>({
-        query: SELECTABLE_GAMEWEEKS_QUERY,
+    const [selectableByKickoffResult, refetchSelectable] = useQuery<{
+        selectableGameweeksByKickoff: SelectableGameweek[];
+    }>({
+        query: SELECTABLE_GAMEWEEKS_BY_KICKOFF_QUERY,
         variables: { seasonId },
         pause: !seasonId,
     });
@@ -89,15 +93,6 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
         pause: !seasonId || !viewer,
         requestPolicy: 'cache-and-network',
     });
-
-    // Default the editor to the server-suggested active gameweek the first
-    // time it arrives. After that, the user owns the choice. Set-state-
-    // during-render pattern (instead of useEffect) — preferred in this
-    // codebase to avoid the extra render the effect would force.
-    const suggestedActive = activeGameweekResult.data?.activeGameweek;
-    if (gameweek == null && suggestedActive != null) {
-        setGameweek(suggestedActive);
-    }
 
     const [fixturesResult] = useQuery<{
         gameweekFixturesForPredictions: GameweekFixturesPayload;
@@ -351,12 +346,25 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
         slip && ability.can('delete', subject('GameweekPrediction', { userId: slip.userId }))
     );
 
-    const selectableGameweeks = selectableResult.data?.selectableGameweeks ?? [];
-    const isCurrentSelectable = gameweek != null && selectableGameweeks.includes(gameweek);
-    const isLoading =
-        activeGameweekResult.fetching ||
-        selectableResult.fetching ||
-        (gameweek != null && (fixturesResult.fetching || slipResult.fetching));
+    const selectableCandidates = selectableByKickoffResult.data?.selectableGameweeksByKickoff ?? [];
+    // Derive the plain-number list from the kickoff-sorted query so we don't
+    // need a second round-trip just for the gating check below.
+    const selectableGameweekNumbers = new Set(selectableCandidates.map((c) => c.gameweek));
+    const isCurrentSelectable = gameweek != null && selectableGameweekNumbers.has(gameweek);
+
+    // Memo against the raw query result rather than the `?? []` fallback, so
+    // the empty-array identity doesn't change on every render and re-trigger
+    // downstream Sets.
+    const existingSlipGameweeks = useMemo(
+        () =>
+            new Set(
+                (myPredictionsResult.data?.myGameweekPredictions ?? []).map(
+                    (s) => s.gameweek,
+                ),
+            ),
+        [myPredictionsResult.data?.myGameweekPredictions],
+    );
+    const existingSlips = myPredictionsResult.data?.myGameweekPredictions ?? [];
 
     // -----------------------------------------------------------------------
     // Render
@@ -368,46 +376,61 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
         );
     }
 
-    if (gameweek == null && !isLoading) {
-        return (
-            <p className="text-sm text-text-muted">
-                No gameweeks available. Once fixtures are scheduled the editor will open here.
-            </p>
-        );
-    }
-
-    if (gameweek == null) {
-        return <p className="text-sm text-text-muted">Loading gameweek…</p>;
-    }
-
     return (
         <>
-            <GameweekBoard
-                gameweek={gameweek}
-                rows={defaultRows}
-                manualRows={manualRows}
-                teamsMap={teamsMap}
-                onOpenAddDialog={isCurrentSelectable ? () => setAddDialogOpen(true) : null}
-                onDraftChange={handleDraftChange}
-                onLockRow={(id) => void handleLockRow(id)}
-                onClearDraft={handleClearDraft}
-                onRemoveManualRow={handleRemoveManualRow}
-            />
+            {gameweek == null ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-glass-bg/20 p-10 text-center">
+                    <p className="text-sm text-text-muted">
+                        Pick a gameweek to start predicting, or open an existing slip from the
+                        list on the right.
+                    </p>
+                    <Button
+                        type="button"
+                        onClick={() => setAddGameweekDialogOpen(true)}
+                        className="bg-accent-purple text-white hover:brightness-110"
+                    >
+                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                        Add a gameweek
+                    </Button>
+                </div>
+            ) : (
+                <GameweekBoard
+                    gameweek={gameweek}
+                    rows={defaultRows}
+                    manualRows={manualRows}
+                    teamsMap={teamsMap}
+                    onOpenAddDialog={
+                        isCurrentSelectable ? () => setAddFixtureDialogOpen(true) : null
+                    }
+                    onDraftChange={handleDraftChange}
+                    onLockRow={(id) => void handleLockRow(id)}
+                    onClearDraft={handleClearDraft}
+                    onRemoveManualRow={handleRemoveManualRow}
+                />
+            )}
 
             <AddFixtureDialog
-                open={addDialogOpen}
-                onClose={() => setAddDialogOpen(false)}
+                open={addFixtureDialogOpen}
+                onClose={() => setAddFixtureDialogOpen(false)}
                 candidates={dialogCandidates}
                 teamsMap={teamsMap}
-                gameweek={gameweek}
+                gameweek={gameweek ?? 0}
                 onAdd={handleAddManualFixture}
             />
 
+            <AddGameweekDialog
+                open={addGameweekDialogOpen}
+                onClose={() => setAddGameweekDialogOpen(false)}
+                candidates={selectableCandidates}
+                existingSlipGameweeks={existingSlipGameweeks}
+                onSelect={(gw) => setGameweek(gw)}
+            />
+
             <GameweekHistoryPanel
-                slips={myPredictionsResult.data?.myGameweekPredictions ?? []}
+                slips={existingSlips}
                 activeGameweek={gameweek}
-                selectableGameweeks={selectableGameweeks}
                 onSelectGameweek={(gw) => setGameweek(gw)}
+                onOpenAddGameweekDialog={() => setAddGameweekDialogOpen(true)}
                 canDeleteCurrent={canDeleteCurrent}
                 isDeleting={deleteState.fetching}
                 deleteError={deleteError}

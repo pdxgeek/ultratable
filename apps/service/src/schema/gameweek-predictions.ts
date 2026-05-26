@@ -298,6 +298,34 @@ builder.queryField('selectableGameweeks', (t) =>
     }),
 );
 
+interface SelectableGameweekShape {
+    gameweek: number;
+    nextKickoff: Date;
+}
+
+const SelectableGameweekRef = builder.simpleObject('SelectableGameweek', {
+    description:
+        'A gameweek the user can still pick (has at least one `scheduled` fixture remaining), paired with the earliest scheduled kickoff in that gameweek.',
+    fields: (t) => ({
+        gameweek: t.int({ description: 'Gameweek number.' }),
+        nextKickoff: t.field({
+            type: 'DateTime',
+            description: "Earliest `scheduledAt` among the gameweek's scheduled fixtures.",
+        }),
+    }),
+});
+
+builder.queryField('selectableGameweeksByKickoff', (t) =>
+    t.field({
+        type: [SelectableGameweekRef],
+        description:
+            "Selectable gameweeks sorted by next scheduled kickoff (soonest first). Used by the Add-gameweek dialog so the slip the user is most likely to want — \"what's playing soon?\" — is on top. A gameweek with all matches played except one rescheduled stray sorts to where that stray sits in the calendar, not near the top by gameweek number.",
+        args: { seasonId: t.arg.id({ required: true }) },
+        resolve: async (_root, { seasonId }): Promise<SelectableGameweekShape[]> =>
+            repository.fixtures.listSelectableGameweeksByNextKickoff(seasonId as string),
+    }),
+);
+
 builder.queryField('gameweekFixturesForPredictions', (t) =>
     t.field({
         type: GameweekFixturesPayloadRef,

@@ -526,6 +526,35 @@ describe('Fixture-side queries', () => {
         expect(result.data?.selectableGameweeks).toEqual([3, 4, 5]);
     });
 
+    it('selectableGameweeksByKickoff exposes gameweek + nextKickoff in repo order', async () => {
+        const aug = new Date('2024-08-17T15:00:00.000Z');
+        const sep = new Date('2024-09-01T12:00:00.000Z');
+        vi.mocked(
+            repository.fixtures.listSelectableGameweeksByNextKickoff,
+        ).mockResolvedValue([
+            { gameweek: 2, nextKickoff: aug },
+            { gameweek: 5, nextKickoff: sep },
+        ]);
+        const yoga = createTestYoga(PREDICTIONS_USER);
+        const result = await gql(
+            yoga,
+            `
+                query($seasonId: ID!) {
+                    selectableGameweeksByKickoff(seasonId: $seasonId) {
+                        gameweek
+                        nextKickoff
+                    }
+                }
+            `,
+            { seasonId: SEASON_ID },
+        );
+        expect(result.errors).toBeUndefined();
+        expect(result.data?.selectableGameweeksByKickoff).toEqual([
+            { gameweek: 2, nextKickoff: aug.toISOString() },
+            { gameweek: 5, nextKickoff: sep.toISOString() },
+        ]);
+    });
+
     it('activeGameweek returns null when the season is fully played', async () => {
         vi.mocked(repository.fixtures.getActiveGameweek).mockResolvedValue(null);
         const yoga = createTestYoga(PREDICTIONS_USER);

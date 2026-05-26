@@ -43,10 +43,27 @@ export interface FixturesRepository {
 
     /**
      * Gameweeks in the season with at least one `status='scheduled'` fixture
-     * remaining. Powers the Gameweek picker — the set shrinks as kickoffs
-     * happen. Sorted ascending.
+     * remaining. Sorted by gameweek number ascending.
+     *
+     * Used server-side by the `submitGameweekPick` GAMEWEEK_CLOSED guard.
+     * The frontend Add-gameweek dialog uses
+     * `listSelectableGameweeksByNextKickoff` instead so MLS-style
+     * straggler-gameweeks (mostly played, one rescheduled match months in
+     * the future) sort to the bottom of the picker.
      */
     listSelectableGameweeks(seasonId: string): Promise<number[]>;
+
+    /**
+     * Selectable gameweeks paired with their next scheduled kickoff
+     * (`min(scheduledAt) WHERE status='scheduled'`). Sorted by that kickoff
+     * ascending so the soonest fixture is on top — the natural order for a
+     * "what's playing soon?" picker (#144). A gameweek with all played
+     * fixtures except one rescheduled stray sorts to wherever that stray
+     * sits in the calendar, rather than near the top by gameweek number.
+     */
+    listSelectableGameweeksByNextKickoff(seasonId: string): Promise<
+        Array<{ gameweek: number; nextKickoff: Date }>
+    >;
 
     /**
      * Default landing gameweek for the editor: the earliest selectable

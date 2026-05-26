@@ -2,7 +2,7 @@ import type { GameweekPrediction } from './queries';
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 import {
     AlertDialog,
@@ -14,6 +14,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '../../ui/alert-dialog';
+import { Button } from '../../ui/button';
 
 interface GameweekHistoryPanelProps {
     /**
@@ -23,11 +24,12 @@ interface GameweekHistoryPanelProps {
     slips: GameweekPrediction[];
     /**
      * Gameweek the editor is currently showing. Used to highlight the matching
-     * row + decide what the soft-delete affordance applies to.
+     * row + decide what the soft-delete affordance applies to. Null when the
+     * editor is in its empty state (no gameweek selected).
      */
     activeGameweek: number | null;
-    selectableGameweeks: number[];
     onSelectGameweek: (gameweek: number) => void;
+    onOpenAddGameweekDialog: () => void;
     canDeleteCurrent: boolean;
     isDeleting: boolean;
     deleteError: string | null;
@@ -42,20 +44,19 @@ interface GameweekHistoryPanelProps {
 const formatRelative = (iso: string) => format(new Date(iso), 'MMM d · h:mma');
 
 /**
- * Right column of the Gameweek section: gameweek picker + activity-sorted
- * history. Each entry shows which gameweek the slip is for and when the
- * user last touched it (the server-side `updatedAt` bumps on every committed
- * pick). Gameweeks that have no slip but are still selectable also show as
- * empty rows so the user can navigate forward.
+ * Right column of the Gameweek section: an "+ Add a gameweek" CTA and a
+ * sorted list of the viewer's existing slips. Click a slip to load it into
+ * the editor; click the CTA to open the picker.
  *
- * Soft-delete affordance applies to the currently-viewed slip — confirm
- * dialog gates it.
+ * Gameweeks the user hasn't touched yet do NOT show here — they live in
+ * the Add-gameweek dialog. Slips are listed in ascending gameweek order so
+ * the season reads top-down.
  */
 const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
     slips,
     activeGameweek,
-    selectableGameweeks,
     onSelectGameweek,
+    onOpenAddGameweekDialog,
     canDeleteCurrent,
     isDeleting,
     deleteError,
@@ -63,36 +64,38 @@ const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
     activeSlipId,
 }) => {
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const slipsByGameweek = new Map(slips.map((s) => [s.gameweek, s] as const));
-
-    // Union of "weeks the user has touched" + "weeks still selectable" so the
-    // picker stays useful both for revisiting a past slip and for jumping
-    // ahead to a future gameweek the user hasn't opened yet.
-    const allWeeks = new Set<number>([
-        ...slips.map((s) => s.gameweek),
-        ...selectableGameweeks,
-    ]);
-    const sortedWeeks = [...allWeeks].sort((a, b) => a - b);
+    const sortedSlips = [...slips].sort((a, b) => a.gameweek - b.gameweek);
 
     return (
         <aside className="flex flex-col gap-3">
+            <Button
+                type="button"
+                variant="outline"
+                onClick={onOpenAddGameweekDialog}
+                className="self-stretch justify-start"
+            >
+                <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                Add a gameweek
+            </Button>
+
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-glass-bg/40 p-3">
                 <h3 className="text-[0.75rem] uppercase tracking-wider text-text-muted font-semibold">
-                    Your gameweeks
+                    Your slips
                 </h3>
-                {sortedWeeks.length === 0 ? (
-                    <p className="text-sm text-text-muted">No gameweeks available.</p>
+                {sortedSlips.length === 0 ? (
+                    <p className="text-sm text-text-muted">
+                        No slips yet. Click <span className="font-medium">Add a gameweek</span>{' '}
+                        to start.
+                    </p>
                 ) : (
                     <ul className="flex flex-col gap-1 max-h-[480px] overflow-y-auto pr-1">
-                        {sortedWeeks.map((gw) => {
-                            const slip = slipsByGameweek.get(gw);
-                            const isActive = gw === activeGameweek;
-                            const isSelectable = selectableGameweeks.includes(gw);
+                        {sortedSlips.map((slip) => {
+                            const isActive = slip.gameweek === activeGameweek;
                             return (
-                                <li key={gw}>
+                                <li key={slip.id}>
                                     <button
                                         type="button"
-                                        onClick={() => onSelectGameweek(gw)}
+                                        onClick={() => onSelectGameweek(slip.gameweek)}
                                         className={`w-full text-left text-sm px-2 py-1.5 rounded-md transition-colors ${
                                             isActive
                                                 ? 'bg-white/[0.06] text-text-primary'
@@ -100,22 +103,10 @@ const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
                                         }`}
                                     >
                                         <span className="flex items-center justify-between gap-2">
-                                            <span className="font-medium">GW {gw}</span>
-                                            {!isSelectable && (
-                                                <span className="text-[0.65rem] uppercase tracking-wider text-text-muted">
-                                                    closed
-                                                </span>
-                                            )}
-                                            {slip && (
-                                                <span className="text-[0.7rem] text-text-muted whitespace-nowrap">
-                                                    {formatRelative(slip.updatedAt)}
-                                                </span>
-                                            )}
-                                            {!slip && isSelectable && (
-                                                <span className="text-[0.7rem] text-text-muted">
-                                                    no picks yet
-                                                </span>
-                                            )}
+                                            <span className="font-medium">GW {slip.gameweek}</span>
+                                            <span className="text-[0.7rem] text-text-muted whitespace-nowrap">
+                                                {formatRelative(slip.updatedAt)}
+                                            </span>
                                         </span>
                                     </button>
                                 </li>

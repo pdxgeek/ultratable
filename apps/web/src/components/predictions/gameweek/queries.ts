@@ -123,6 +123,27 @@ export const SELECTABLE_GAMEWEEKS_QUERY = gql`
     }
 `;
 
+export interface SelectableGameweek {
+    gameweek: number;
+    /** ISO timestamp of the earliest scheduled fixture in this gameweek. */
+    nextKickoff: string;
+}
+
+/**
+ * Add-gameweek dialog source. Server sorts by nextKickoff ascending so the
+ * soonest match is on top — the natural order for "what's playing soon?".
+ * MLS-style straggler gameweeks (mostly played, one rescheduled match months
+ * in the future) sort to the bottom rather than near the top by number.
+ */
+export const SELECTABLE_GAMEWEEKS_BY_KICKOFF_QUERY = gql`
+    query SelectableGameweeksByKickoff($seasonId: ID!) {
+        selectableGameweeksByKickoff(seasonId: $seasonId) {
+            gameweek
+            nextKickoff
+        }
+    }
+`;
+
 export const GAMEWEEK_FIXTURES_FOR_PREDICTIONS_QUERY = gql`
     query GameweekFixturesForPredictions($seasonId: ID!, $gameweek: Int!) {
         gameweekFixturesForPredictions(seasonId: $seasonId, gameweek: $gameweek) {

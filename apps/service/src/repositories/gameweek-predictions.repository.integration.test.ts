@@ -575,5 +575,29 @@ describe('PostgresGameweekPredictionsRepository — integration', () => {
             );
             expect(recommended).toEqual([]);
         });
+
+        it('listSelectableGameweeksByNextKickoff sorts by earliest scheduled fixture, not gameweek number', async () => {
+            const s = await buildScaffold(16);
+            // Scaffold: GW1=Aug 10 (scheduled), GW2=Aug 17 (scheduled),
+            // GW3=Aug 24 (played → not selectable).
+            // To verify sort-by-kickoff vs sort-by-number, push GW1 to LATE
+            // September — now GW2 (Aug 17) is the soonest, even though
+            // gameweek number is higher.
+            await db
+                .update(schema.fixtures)
+                .set({ scheduledAt: new Date('2024-09-30T15:00:00Z') })
+                .where(eq(schema.fixtures.id, s.fixtures.gw1.id));
+
+            const result =
+                await repository.fixtures.listSelectableGameweeksByNextKickoff(s.season.id);
+            expect(result.map((r) => r.gameweek)).toEqual([2, 1]);
+            // GW3 is fully played → excluded.
+            expect(result.map((r) => r.gameweek)).not.toContain(3);
+
+            // Spot-check the kickoff timestamps round-trip as Dates.
+            const gw2 = result.find((r) => r.gameweek === 2);
+            expect(gw2?.nextKickoff).toBeInstanceOf(Date);
+            expect(gw2?.nextKickoff.toISOString()).toBe('2024-08-17T15:00:00.000Z');
+        });
     });
 });
