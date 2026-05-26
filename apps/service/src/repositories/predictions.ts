@@ -28,7 +28,12 @@ export interface PredictionSnapshotRow {
     userId: string;
     seasonId: string;
     type: PredictionType;
-    lockedAt: Date;
+    /**
+     * Non-null for `projected_finish` (immutable; set at create and never
+     * cleared). Nullable for `gameweek` — null while unlocked, set on each
+     * `lock`/`relock`. See #144 for the lifecycle.
+     */
+    lockedAt: Date | null;
     deletedAt: Date | null;
 }
 

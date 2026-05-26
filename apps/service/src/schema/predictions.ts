@@ -84,7 +84,9 @@ builder.objectType(PredictionSnapshotRef, {
         }),
         lockedAt: t.expose('lockedAt', {
             type: 'DateTime',
-            description: 'When the snapshot was locked in.',
+            nullable: true,
+            description:
+                "When the snapshot was locked in. Non-null for `PROJECTED_FINISH` (immutable). Null on `GAMEWEEK` snapshots while unlocked; set on each lock/re-lock.",
         }),
         deletedAt: t.expose('deletedAt', {
             type: 'DateTime',

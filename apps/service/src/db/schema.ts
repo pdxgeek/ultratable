@@ -12,6 +12,7 @@ import {
     text,
     timestamp,
     unique,
+    uniqueIndex,
     uuid,
     varchar,
 } from 'drizzle-orm/pg-core';
@@ -31,6 +32,18 @@ export const fixtureStatusEnum = pgEnum('fixture_status', [
 ]);
 
 export const jobStatusEnum = pgEnum('job_status', ['running', 'success', 'failed']);
+
+// Audit-log discriminator for `prediction_snapshot_events`. The snapshot
+// itself is mutable (unlock / re-lock / edit-after-lock-in are all allowed
+// for the gameweek type), so this table is how we keep the user-visible
+// history. See issue #144.
+export const predictionEventKindEnum = pgEnum('prediction_event_kind', [
+    'created',
+    'locked',
+    'unlocked',
+    'edited_post_lockin',
+    'deleted',
+]);
 
 // --- Domain User Schema ---
 export const users = pgTable('user', {
@@ -474,11 +487,20 @@ export const playerSourceMappings = pgTable(
 );
 
 // --- Predictions ---
-// Snapshot of a viewer's ordered prediction for a season (e.g. projected
-// final-standings finish). Snapshots are immutable: new predictions create
-// new rows. Deletions are soft (`deletedAt`) so the per-season cap can count
-// deleted rows too — preventing create/delete loops from bypassing the limit.
-// See issue #105 for the full contract.
+// One row per prediction. Two flavours live here, discriminated by `type`:
+//
+//   `projected_finish` (#105) — immutable snapshot of an ordered finish
+//   prediction. `lockedAt` is set at create and never changes. Picks live
+//   in `prediction_snapshot_entries`. Cap = `max(50, gameweekCount)`.
+//
+//   `gameweek` (#144) — per-(user, season, gameweek) score picks. Mutable:
+//   the user can unlock, edit, re-lock. `lockedAt` is nullable to model
+//   the unlocked state. Picks live in `prediction_match_picks`. Optional
+//   `title` becomes required when a second live snapshot exists in the
+//   same `(user, season, gameweek)` scope. Cap = 250 across the type.
+//
+// Both flavours soft-delete via `deletedAt` so caps count create/delete
+// loops too.
 export const predictionSnapshots = pgTable(
     'prediction_snapshots',
     {
@@ -493,7 +515,20 @@ export const predictionSnapshots = pgTable(
             .references(() => seasons.id, { onDelete: 'cascade' })
             .notNull(),
         type: varchar('type', { length: 50 }).notNull(),
-        lockedAt: utcTimestamp('locked_at').defaultNow().notNull(),
+        // Set on every lock-in; null while a `gameweek` snapshot is unlocked.
+        // `projected_finish` rows have it set at create and never null it —
+        // the `lockedAt IS NOT NULL` guard for that type lives in the
+        // resolver, not the DB.
+        lockedAt: utcTimestamp('locked_at').defaultNow(),
+        // Required when `type = 'gameweek'`, null otherwise. The CHECK
+        // constraint enforces the pairing so a malformed insert is rejected
+        // at the DB layer.
+        gameweek: integer('gameweek'),
+        // Optional display label. Required by the resolver when another
+        // live snapshot exists in the same `(user, season, gameweek)`
+        // scope; the partial unique index below enforces distinctness when
+        // present.
+        title: text('title'),
         // Soft-delete marker. Null = live; set to now() on delete. Rows are
         // never physically removed in normal operation. The cap counts both
         // live and soft-deleted rows on purpose.
@@ -505,12 +540,32 @@ export const predictionSnapshots = pgTable(
         livePerScopeIdx: index('prediction_snapshots_live_per_scope_idx')
             .on(table.userId, table.seasonId, table.type)
             .where(sql`${table.deletedAt} IS NULL`),
+        // Gameweek read path: list a viewer's live snapshots for one
+        // gameweek, newest first. Used by the history panel.
+        liveByGameweekIdx: index('prediction_snapshots_live_by_gameweek_idx')
+            .on(table.userId, table.seasonId, table.type, table.gameweek)
+            .where(sql`${table.deletedAt} IS NULL`),
         // Cap-count path: counts every row including soft-deleted ones, so
         // the index intentionally has no partial filter.
         scopeIdx: index('prediction_snapshots_scope_idx').on(
             table.userId,
             table.seasonId,
             table.type,
+        ),
+        // Disambiguates multiple live gameweek snapshots in the same
+        // scope by title. Partial (`WHERE deleted_at IS NULL`) so that
+        //   (a) the first untitled row in a scope doesn't burn the NULL
+        //       slot for future titled rows, and
+        //   (b) a soft-deleted "Optimistic" doesn't block creating a new
+        //       "Optimistic" for the same gameweek later.
+        // The resolver guards the "second live row → title required" rule.
+        uniqueTitlePerScope: uniqueIndex('prediction_snapshots_title_per_scope_unique')
+            .on(table.userId, table.seasonId, table.type, table.gameweek, table.title)
+            .where(sql`${table.deletedAt} IS NULL`),
+        // Type / gameweek must agree: `gameweek` set iff `type='gameweek'`.
+        gameweekShapeCheck: check(
+            'prediction_snapshots_gameweek_shape_check',
+            sql`(${table.type} = 'gameweek') = (${table.gameweek} IS NOT NULL)`,
         ),
     }),
 );
@@ -531,6 +586,71 @@ export const predictionSnapshotEntries = pgTable(
         // One team per position within a snapshot; pairs with the (snapshot,
         // team) PK to enforce the bijection required by `lockInPrediction`.
         uniqueSnapshotPosition: unique().on(table.snapshotId, table.position),
+    }),
+);
+
+// Score picks for a `type='gameweek'` snapshot. One row per fixture the
+// user has scored OR added a note to. Cancelled fixtures may still have
+// a row (note-only); the resolver clears `homeGoals`/`awayGoals` for
+// `cancelled`/`postponed` fixtures rather than rejecting.
+//
+// `manuallyAdded = true` marks a fixture pulled in via the "Add fixture"
+// popup (typically a cup tie or mid-week catch-up in the between-gameweek
+// window) rather than one of the default gameweek fixtures.
+export const predictionMatchPicks = pgTable(
+    'prediction_match_picks',
+    {
+        snapshotId: uuid('snapshot_id')
+            .references(() => predictionSnapshots.id, { onDelete: 'cascade' })
+            .notNull(),
+        fixtureId: uuid('fixture_id')
+            .references(() => fixtures.id)
+            .notNull(),
+        homeGoals: integer('home_goals'),
+        awayGoals: integer('away_goals'),
+        // Free-text per-fixture note. Soft cap (≤ 500 chars) enforced in
+        // the resolver — a CHECK here would push the limit into migrations
+        // any time we want to retune it.
+        note: text('note'),
+        manuallyAdded: boolean('manually_added').notNull().default(false),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+        updatedAt: utcTimestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.snapshotId, table.fixtureId] }),
+        snapshotIdx: index('prediction_match_picks_snapshot_idx').on(table.snapshotId),
+        nonNegativeGoals: check(
+            'prediction_match_picks_non_negative_goals_check',
+            sql`(${table.homeGoals} IS NULL OR ${table.homeGoals} >= 0)
+                AND (${table.awayGoals} IS NULL OR ${table.awayGoals} >= 0)`,
+        ),
+    }),
+);
+
+// Append-only audit log for the gameweek snapshot lifecycle. Populated
+// from within the mutation transactions so a snapshot's history is
+// inseparable from its data.
+export const predictionSnapshotEvents = pgTable(
+    'prediction_snapshot_events',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        snapshotId: uuid('snapshot_id')
+            .references(() => predictionSnapshots.id, { onDelete: 'cascade' })
+            .notNull(),
+        actorId: uuid('actor_id')
+            .references(() => users.id)
+            .notNull(),
+        kind: predictionEventKindEnum('kind').notNull(),
+        // Reserved for future detail (e.g. which fields changed in an
+        // edit). Resolvers may leave it null.
+        metadata: jsonb('metadata'),
+        createdAt: utcTimestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => ({
+        snapshotIdx: index('prediction_snapshot_events_snapshot_idx').on(
+            table.snapshotId,
+            table.createdAt,
+        ),
     }),
 );
 
