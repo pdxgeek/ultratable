@@ -26,7 +26,6 @@ import type {
 import React, { useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus } from 'lucide-react';
 import { useMutation, useQuery } from 'urql';
 
 import { useAbility } from '../../../auth/abilities';
@@ -37,7 +36,6 @@ import {
     saveGameweekDraft,
 } from '../../../db/gameweekPredictionDrafts';
 import { useViewer } from '../../../hooks/useViewer';
-import { Button } from '../../ui/button';
 import GameweekBoard from './GameweekBoard';
 import { isReadyToLockIn } from './rowState';
 import AddFixtureDialog from './AddFixtureDialog';
@@ -413,19 +411,11 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
     return (
         <>
             {gameweek == null ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-glass-bg/20 p-10 text-center">
+                <div className="flex items-center justify-center rounded-lg border border-dashed border-border bg-glass-bg/20 p-10 text-center">
                     <p className="text-sm text-text-muted">
                         Pick a gameweek to start predicting, or open a saved gameweek from the
                         list on the right.
                     </p>
-                    <Button
-                        type="button"
-                        onClick={() => setAddGameweekDialogOpen(true)}
-                        className="bg-accent-purple text-white hover:brightness-110"
-                    >
-                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-                        Add a gameweek
-                    </Button>
                 </div>
             ) : (
                 <GameweekBoard
