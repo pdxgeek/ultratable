@@ -54,9 +54,21 @@ import {
 interface GameweekSectionProps {
     seasonId: string;
     teamsMap: Map<string, Team>;
+    /**
+     * `teamId → current standings position` from `useStandings(seasonId)`,
+     * computed by the parent page. Forwarded to the board so each row can
+     * show "8th plays 14th" context next to the team names. Optional and
+     * tolerant of misses (manually-added cup fixtures might involve teams
+     * not in this season's standings).
+     */
+    currentPositions: Map<string, number>;
 }
 
-const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap }) => {
+const GameweekSection: React.FC<GameweekSectionProps> = ({
+    seasonId,
+    teamsMap,
+    currentPositions,
+}) => {
     const { viewer } = useViewer();
     const ability = useAbility<AppAbility>();
     // The editor is empty until the user explicitly picks a gameweek via the
@@ -423,6 +435,7 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                     rows={defaultRows}
                     manualRows={manualRows}
                     teamsMap={teamsMap}
+                    currentPositions={currentPositions}
                     onOpenAddDialog={
                         isCurrentSelectable ? () => setAddFixtureDialogOpen(true) : null
                     }

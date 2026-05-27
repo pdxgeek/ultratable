@@ -330,7 +330,11 @@ const PredictionsPage: React.FC = () => {
                     </>
                 )}
                 {section === 'GAMEWEEK' && (
-                    <GameweekSection seasonId={seasonId} teamsMap={teamsMap} />
+                    <GameweekSection
+                        seasonId={seasonId}
+                        teamsMap={teamsMap}
+                        currentPositions={currentPositions}
+                    />
                 )}
             </div>
         </div>

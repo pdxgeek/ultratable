@@ -48,6 +48,13 @@ interface GameweekBoardProps {
      */
     manualRows: RowState[];
     teamsMap: Map<string, Team>;
+    /**
+     * `teamId → current standings position` for the active season. Looked up
+     * per-row to render a small number next to each team name ("8th plays
+     * 14th" context). A missing teamId (manually-added cup fixture against a
+     * team not in this season's table) just renders without the badge.
+     */
+    currentPositions: Map<string, number>;
     /** "Add fixture" button → open the picker. Null hides the button (e.g. closed gameweek). */
     onOpenAddDialog: (() => void) | null;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
@@ -102,6 +109,7 @@ const formatTime = (iso: string) => format(new Date(iso), 'EEE MMM d · h:mma');
 interface RowProps {
     row: RowState;
     teamsMap: Map<string, Team>;
+    currentPositions: Map<string, number>;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
     onClearDraft: (fixtureId: string) => void;
     onRemove?: () => void;
@@ -110,12 +118,15 @@ interface RowProps {
 const FixtureScoreRow: React.FC<RowProps> = ({
     row,
     teamsMap,
+    currentPositions,
     onDraftChange,
     onClearDraft,
     onRemove,
 }) => {
     const home = teamsMap.get(row.fixture.homeTeamId);
     const away = teamsMap.get(row.fixture.awayTeamId);
+    const homePosition = currentPositions.get(row.fixture.homeTeamId);
+    const awayPosition = currentPositions.get(row.fixture.awayTeamId);
     const eff = effective(row);
     const scoreable = isScoreable(row.fixture.status);
     const statusLabel = STATUS_LABEL[row.fixture.status];
@@ -151,6 +162,19 @@ const FixtureScoreRow: React.FC<RowProps> = ({
             <div className="flex items-center gap-3 px-3 py-2">
                 {/* Home team */}
                 <div className="flex items-center gap-2 flex-1 min-w-0 justify-end text-right">
+                    {/*
+                     * Position is on the OUTSIDE of the row (away from the
+                     * score) for each team — small muted number so it reads
+                     * as secondary context, not as a competing label.
+                     */}
+                    {homePosition != null && (
+                        <span
+                            className="text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0"
+                            title={`Currently ${homePosition} in the table`}
+                        >
+                            {homePosition}
+                        </span>
+                    )}
                     <span className="font-medium text-text-primary truncate">
                         {home?.name ?? 'Home'}
                     </span>
@@ -212,6 +236,14 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                     <span className="font-medium text-text-primary truncate">
                         {away?.name ?? 'Away'}
                     </span>
+                    {awayPosition != null && (
+                        <span
+                            className="text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0"
+                            title={`Currently ${awayPosition} in the table`}
+                        >
+                            {awayPosition}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -294,6 +326,7 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
     rows,
     manualRows,
     teamsMap,
+    currentPositions,
     onOpenAddDialog,
     onDraftChange,
     onClearDraft,
@@ -319,6 +352,7 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                             key={row.fixture.id}
                             row={row}
                             teamsMap={teamsMap}
+                            currentPositions={currentPositions}
                             onDraftChange={onDraftChange}
                             onClearDraft={onClearDraft}
                         />
@@ -353,6 +387,7 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                                         key={row.fixture.id}
                                         row={row}
                                         teamsMap={teamsMap}
+                                        currentPositions={currentPositions}
                                         onDraftChange={onDraftChange}
                                         onClearDraft={onClearDraft}
                                         onRemove={
