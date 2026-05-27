@@ -47,8 +47,13 @@ interface GameweekHistoryPanelProps {
     onLockAll: () => void;
     isLocking: boolean;
     lockError: string | null;
-    /** Count of fixture rows whose draft differs from their committed pick. */
-    dirtyCount: number;
+    /**
+     * Count of fixture rows that are ready to commit — dirty AND have both
+     * scores filled in. Partial drafts (one score missing) stay visible in
+     * the editor with the per-row "unsaved" indicator but don't count here
+     * and don't get submitted on Lock-In.
+     */
+    readyCount: number;
 }
 
 const formatRelative = (iso: string) => format(new Date(iso), 'MMM d · h:mma');
@@ -74,7 +79,7 @@ const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
     onLockAll,
     isLocking,
     lockError,
-    dirtyCount,
+    readyCount,
 }) => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const sortedSaved = [...savedGameweeks].sort((a, b) => a.gameweek - b.gameweek);
@@ -143,13 +148,13 @@ const GameweekHistoryPanel: React.FC<GameweekHistoryPanelProps> = ({
             {/* Lock-In footer — moved here from the board (#144 review feedback). */}
             <div className="flex flex-col gap-2 border-t border-border pt-3 mt-2">
                 <p className="text-[0.75rem] text-text-muted">
-                    {dirtyCount === 0
-                        ? 'No unsaved changes.'
-                        : `${dirtyCount} unsaved change${dirtyCount === 1 ? '' : 's'}.`}
+                    {readyCount === 0
+                        ? 'Nothing ready to lock in.'
+                        : `${readyCount} pick${readyCount === 1 ? '' : 's'} ready to lock in.`}
                 </p>
                 <Button
                     type="button"
-                    disabled={dirtyCount === 0 || isLocking}
+                    disabled={readyCount === 0 || isLocking}
                     onClick={onLockAll}
                     className="bg-accent-purple text-white hover:brightness-110 disabled:opacity-50"
                 >

@@ -39,7 +39,7 @@ import {
 import { useViewer } from '../../../hooks/useViewer';
 import { Button } from '../../ui/button';
 import GameweekBoard from './GameweekBoard';
-import { isDirty } from './rowState';
+import { isReadyToLockIn } from './rowState';
 import AddFixtureDialog from './AddFixtureDialog';
 import AddGameweekDialog from './AddGameweekDialog';
 import GameweekHistoryPanel from './GameweekHistoryPanel';
@@ -289,16 +289,17 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
      */
     const handleLockAll = async () => {
         if (gameweek == null) return;
-        const dirtyRows = [...defaultRows, ...manualRows].filter(
-            (r) => r.draft && isDirty(r),
-        );
-        if (dirtyRows.length === 0) return;
+        // Only commit rows that have BOTH scores set — a partial draft
+        // stays in Dexie as a visible "unsaved" row until the user finishes
+        // it, but doesn't get submitted.
+        const readyRows = [...defaultRows, ...manualRows].filter(isReadyToLockIn);
+        if (readyRows.length === 0) return;
 
         setLockState({ isLocking: true, error: null });
         let failureCount = 0;
         let firstError: string | null = null;
 
-        for (const row of dirtyRows) {
+        for (const row of readyRows) {
             if (!row.draft) continue; // narrows TS; the filter already excludes null drafts
             const result = await submitPick({
                 input: {
@@ -333,16 +334,16 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 // act on. Successful rows already had their drafts cleared,
                 // so retrying Lock In only re-submits the still-failing ones.
                 error:
-                    failureCount === dirtyRows.length
+                    failureCount === readyRows.length
                         ? `Lock in failed: ${firstError}`
-                        : `Locked in ${dirtyRows.length - failureCount} of ${dirtyRows.length} picks. First failure: ${firstError}`,
+                        : `Locked in ${readyRows.length - failureCount} of ${readyRows.length} picks. First failure: ${firstError}`,
             });
         } else {
             setLockState({ isLocking: false, error: null });
         }
     };
 
-    const dirtyCount = [...defaultRows, ...manualRows].filter(isDirty).length;
+    const readyCount = [...defaultRows, ...manualRows].filter(isReadyToLockIn).length;
 
     const handleAddManualFixture = (fixture: GameweekFixture) => {
         if (!viewer || gameweek == null) return;
@@ -471,7 +472,7 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 onLockAll={() => void handleLockAll()}
                 isLocking={lockState.isLocking}
                 lockError={lockState.error}
-                dirtyCount={dirtyCount}
+                readyCount={readyCount}
             />
         </>
     );

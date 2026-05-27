@@ -33,3 +33,21 @@ export function isDirty(row: RowState): boolean {
         (row.draft.note ?? null) !== (c.note ?? null)
     );
 }
+
+/**
+ * True when the row is dirty AND has both scores filled in — i.e., it's
+ * actually committable. Separate from `isDirty` so the per-row "unsaved"
+ * indicator can still surface a half-typed score (so the user doesn't
+ * think the edit is lost) without that row counting toward the Lock-In
+ * button's "ready to lock in" tally or getting submitted.
+ *
+ * The server schema allows nullable goals, but the product rule (review
+ * thread on #144) is that a prediction isn't a prediction without both
+ * sides of the score.
+ */
+export function isReadyToLockIn(row: RowState): boolean {
+    if (!isDirty(row)) return false;
+    const eff = row.draft ?? row.currentPick;
+    if (!eff) return false;
+    return eff.homeGoals != null && eff.awayGoals != null;
+}
