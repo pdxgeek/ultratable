@@ -7,6 +7,7 @@ import { Lock, Plus, StickyNote, X } from 'lucide-react';
 
 import { Button } from '../../ui/button';
 import PickHistoryPopover from './PickHistoryPopover';
+import { isDirty } from './rowState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,10 +33,6 @@ export interface RowState {
     history: GameweekPredictionPick[];
     /** Unsaved scratch state from the Dexie draft. Null when no draft exists. */
     draft: RowDraft | null;
-    /** Whether the row's lock action is in-flight. */
-    isLocking: boolean;
-    /** Most-recent submit error, if any. */
-    error: string | null;
 }
 
 interface GameweekBoardProps {
@@ -54,7 +51,6 @@ interface GameweekBoardProps {
     /** "Add fixture" button → open the picker. Null hides the button (e.g. closed gameweek). */
     onOpenAddDialog: (() => void) | null;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
-    onLockRow: (fixtureId: string) => void;
     onClearDraft: (fixtureId: string) => void;
     /**
      * Remove a manually-added row from the editor. v1 just clears the draft;
@@ -64,6 +60,17 @@ interface GameweekBoardProps {
      * anything.
      */
     onRemoveManualRow: (fixtureId: string) => void;
+    /**
+     * Single Lock-In action at the footer that commits every dirty row in
+     * one go. The board still owns no submission logic — the section
+     * orchestrates the actual mutations.
+     */
+    onLockAll: () => void;
+    isLocking: boolean;
+    /** Aggregate error from the last lock-in attempt. */
+    lockError: string | null;
+    /** Count of rows whose draft differs from their last-committed pick. */
+    dirtyCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,23 +101,8 @@ function effective(row: RowState): RowDraft {
     return { homeGoals: null, awayGoals: null, note: null, manuallyAdded: false };
 }
 
-/** True when the draft differs from the latest committed pick. */
-function isDirty(row: RowState): boolean {
-    if (!row.draft) return false;
-    const c = row.currentPick;
-    if (!c) {
-        return (
-            row.draft.homeGoals != null ||
-            row.draft.awayGoals != null ||
-            (row.draft.note ?? '').length > 0
-        );
-    }
-    return (
-        row.draft.homeGoals !== c.homeGoals ||
-        row.draft.awayGoals !== c.awayGoals ||
-        (row.draft.note ?? null) !== (c.note ?? null)
-    );
-}
+// `isDirty` moved to ./rowState.ts so the parent section can import it
+// without tripping Vite's "only export components from component files" rule.
 
 const formatTime = (iso: string) => format(new Date(iso), 'EEE MMM d · h:mma');
 
@@ -122,7 +114,6 @@ interface RowProps {
     row: RowState;
     teamsMap: Map<string, Team>;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
-    onLockRow: (fixtureId: string) => void;
     onClearDraft: (fixtureId: string) => void;
     onRemove?: () => void;
 }
@@ -131,7 +122,6 @@ const FixtureScoreRow: React.FC<RowProps> = ({
     row,
     teamsMap,
     onDraftChange,
-    onLockRow,
     onClearDraft,
     onRemove,
 }) => {
@@ -286,17 +276,6 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                             <X className="w-4 h-4" aria-hidden="true" />
                         </button>
                     )}
-                    <Button
-                        type="button"
-                        size="sm"
-                        disabled={!scoreable || !dirty || row.isLocking}
-                        onClick={() => onLockRow(row.fixture.id)}
-                        title={scoreable ? 'Lock this pick' : `${statusLabel ?? ''}`}
-                        className="bg-accent-purple text-white hover:brightness-110 disabled:opacity-50 h-8 px-2"
-                    >
-                        <Lock className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-                        {row.isLocking ? '…' : 'Lock'}
-                    </Button>
                 </div>
             </div>
 
@@ -313,13 +292,6 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                     />
                 </div>
             )}
-
-            {/* Submit error */}
-            {row.error && (
-                <p className="px-3 pb-2 text-sm text-destructive" role="alert">
-                    {row.error}
-                </p>
-            )}
         </li>
     );
 };
@@ -335,9 +307,12 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
     teamsMap,
     onOpenAddDialog,
     onDraftChange,
-    onLockRow,
     onClearDraft,
     onRemoveManualRow,
+    onLockAll,
+    isLocking,
+    lockError,
+    dirtyCount,
 }) => {
     return (
         <section className="flex flex-col gap-4">
@@ -360,7 +335,6 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                             row={row}
                             teamsMap={teamsMap}
                             onDraftChange={onDraftChange}
-                            onLockRow={onLockRow}
                             onClearDraft={onClearDraft}
                         />
                     ))}
@@ -395,7 +369,6 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                                         row={row}
                                         teamsMap={teamsMap}
                                         onDraftChange={onDraftChange}
-                                        onLockRow={onLockRow}
                                         onClearDraft={onClearDraft}
                                         onRemove={
                                             removable
@@ -422,6 +395,39 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                     )}
                 </div>
             )}
+
+            {/*
+             * Single Lock-In affordance at the bottom — replaces the per-row
+             * Lock buttons. Disabled when there's nothing dirty to commit.
+             * The DB-side semantics are unchanged: the parent section walks
+             * the dirty rows and calls `submitGameweekPick` per row, so the
+             * append-only pick chain still gets a new entry only for rows
+             * whose values differ from the latest committed pick (server-
+             * side dedup handles identical re-submits as a no-op).
+             */}
+            <div className="flex flex-col gap-2 border-t border-border pt-4 mt-2">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-[0.75rem] text-text-muted">
+                        {dirtyCount === 0
+                            ? 'No unsaved changes.'
+                            : `${dirtyCount} unsaved change${dirtyCount === 1 ? '' : 's'}.`}
+                    </p>
+                    <Button
+                        type="button"
+                        disabled={dirtyCount === 0 || isLocking}
+                        onClick={onLockAll}
+                        className="bg-accent-purple text-white hover:brightness-110 disabled:opacity-50"
+                    >
+                        <Lock className="w-4 h-4 mr-1" aria-hidden="true" />
+                        {isLocking ? 'Locking in…' : 'Lock In'}
+                    </Button>
+                </div>
+                {lockError && (
+                    <p className="text-sm text-destructive" role="alert">
+                        {lockError}
+                    </p>
+                )}
+            </div>
         </section>
     );
 };

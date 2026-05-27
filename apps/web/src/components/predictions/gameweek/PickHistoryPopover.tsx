@@ -30,7 +30,9 @@ const formatTimestamp = (iso: string) => format(new Date(iso), 'MMM d, h:mm a');
  * values is the implementation); just don't expose the button yet.
  */
 const PickHistoryPopover: React.FC<PickHistoryPopoverProps> = ({ history, fixtureLabel }) => {
-    if (history.length === 0) return null;
+    // A single-row chain is just "current" — not worth surfacing a clock icon
+    // until the user has actually changed their pick at least once.
+    if (history.length <= 1) return null;
 
     return (
         <Popover>

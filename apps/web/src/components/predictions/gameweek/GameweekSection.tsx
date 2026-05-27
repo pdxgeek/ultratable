@@ -39,6 +39,7 @@ import {
 import { useViewer } from '../../../hooks/useViewer';
 import { Button } from '../../ui/button';
 import GameweekBoard from './GameweekBoard';
+import { isDirty } from './rowState';
 import AddFixtureDialog from './AddFixtureDialog';
 import AddGameweekDialog from './AddGameweekDialog';
 import GameweekHistoryPanel from './GameweekHistoryPanel';
@@ -67,10 +68,12 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
     const [gameweek, setGameweek] = useState<number | null>(null);
     const [addGameweekDialogOpen, setAddGameweekDialogOpen] = useState(false);
     const [addFixtureDialogOpen, setAddFixtureDialogOpen] = useState(false);
-    // Per-row UI state — keyed by fixtureId. Mutation in-flight + last error.
-    const [rowMeta, setRowMeta] = useState<
-        Record<string, { isLocking: boolean; error: string | null }>
-    >({});
+    // Aggregate Lock-In state. One state object for the whole slip rather
+    // than per-row meta — the footer button drives one orchestrated commit
+    // pass, so a single in-flight flag + summary error covers it.
+    const [lockState, setLockState] = useState<{ isLocking: boolean; error: string | null }>(
+        { isLocking: false, error: null },
+    );
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
     // -----------------------------------------------------------------------
@@ -196,8 +199,8 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 (a, b) =>
                     new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
             )
-            .map((f) => buildRowState(f, currentByFixture, historyByFixture, draftByFixture, rowMeta));
-    }, [fixturesPayload, currentByFixture, historyByFixture, draftByFixture, rowMeta]);
+            .map((f) => buildRowState(f, currentByFixture, historyByFixture, draftByFixture));
+    }, [fixturesPayload, currentByFixture, historyByFixture, draftByFixture]);
 
     /**
      * Manually-added rows: union of (a) committed manual picks from the slip
@@ -234,8 +237,8 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 (a, b) =>
                     new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
             )
-            .map((f) => buildRowState(f, currentByFixture, historyByFixture, draftByFixture, rowMeta));
-    }, [fixturesPayload, slip, drafts, currentByFixture, historyByFixture, draftByFixture, rowMeta]);
+            .map((f) => buildRowState(f, currentByFixture, historyByFixture, draftByFixture));
+    }, [fixturesPayload, slip, drafts, currentByFixture, historyByFixture, draftByFixture]);
 
     // Filter the recommended list down to "not already in the slip" for the dialog.
     const dialogCandidates = useMemo(() => {
@@ -269,47 +272,77 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
         );
     };
 
-    const handleLockRow = async (fixtureId: string) => {
+    /**
+     * One commit pass for every dirty row in the slip. The server still
+     * gets one mutation per fixture — the per-pick immutable chain is
+     * unchanged, and the server-side dedup that returns the existing pick
+     * for an identical re-submit still protects the chain from no-op
+     * inserts. Rows with no scores AND no note ("empty drafts" — typically
+     * a manually-added fixture the user added but never scored) fail the
+     * `isDirty` check and are skipped, so the DB only sees rows the user
+     * meaningfully filled in.
+     *
+     * Serial rather than parallel: the first call lazily creates the slip
+     * container, and serializing avoids the partial-unique race the
+     * repository code already handles but is still cheaper to side-step.
+     * At typical scale (5-15 dirty rows per slip) latency is negligible.
+     */
+    const handleLockAll = async () => {
         if (gameweek == null) return;
-        const row = [...defaultRows, ...manualRows].find((r) => r.fixture.id === fixtureId);
-        if (!row || !row.draft) return;
+        const dirtyRows = [...defaultRows, ...manualRows].filter(
+            (r) => r.draft && isDirty(r),
+        );
+        if (dirtyRows.length === 0) return;
 
-        setRowMeta((prev) => ({
-            ...prev,
-            [fixtureId]: { isLocking: true, error: null },
-        }));
+        setLockState({ isLocking: true, error: null });
+        let failureCount = 0;
+        let firstError: string | null = null;
 
-        const result = await submitPick({
-            input: {
-                seasonId,
-                gameweek,
-                fixtureId,
-                homeGoals: row.draft.homeGoals,
-                awayGoals: row.draft.awayGoals,
-                note: row.draft.note,
-                manuallyAdded: row.draft.manuallyAdded,
-            },
-        });
-
-        if (result.error) {
-            const msg = result.error.graphQLErrors[0]?.message ?? result.error.message;
-            setRowMeta((prev) => ({
-                ...prev,
-                [fixtureId]: { isLocking: false, error: msg },
-            }));
-            return;
+        for (const row of dirtyRows) {
+            if (!row.draft) continue; // narrows TS; the filter already excludes null drafts
+            const result = await submitPick({
+                input: {
+                    seasonId,
+                    gameweek,
+                    fixtureId: row.fixture.id,
+                    homeGoals: row.draft.homeGoals,
+                    awayGoals: row.draft.awayGoals,
+                    note: row.draft.note,
+                    manuallyAdded: row.draft.manuallyAdded,
+                },
+            });
+            if (result.error) {
+                failureCount += 1;
+                if (firstError == null) {
+                    firstError =
+                        result.error.graphQLErrors[0]?.message ?? result.error.message;
+                }
+            } else {
+                handleClearDraft(row.fixture.id);
+            }
         }
 
-        // Success: clear the draft, refresh server state, drop the row meta.
-        handleClearDraft(fixtureId);
-        setRowMeta((prev) => {
-            const next = { ...prev };
-            delete next[fixtureId];
-            return next;
-        });
         refetchSlip({ requestPolicy: 'network-only' });
         refetchMyPredictions({ requestPolicy: 'network-only' });
+
+        if (failureCount > 0) {
+            setLockState({
+                isLocking: false,
+                // Surface the first error message verbatim — usually it's a
+                // typed code like GAMEWEEK_CLOSED that's specific enough to
+                // act on. Successful rows already had their drafts cleared,
+                // so retrying Lock In only re-submits the still-failing ones.
+                error:
+                    failureCount === dirtyRows.length
+                        ? `Lock in failed: ${firstError}`
+                        : `Locked in ${dirtyRows.length - failureCount} of ${dirtyRows.length} picks. First failure: ${firstError}`,
+            });
+        } else {
+            setLockState({ isLocking: false, error: null });
+        }
     };
+
+    const dirtyCount = [...defaultRows, ...manualRows].filter(isDirty).length;
 
     const handleAddManualFixture = (fixture: GameweekFixture) => {
         if (!viewer || gameweek == null) return;
@@ -403,9 +436,12 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                         isCurrentSelectable ? () => setAddFixtureDialogOpen(true) : null
                     }
                     onDraftChange={handleDraftChange}
-                    onLockRow={(id) => void handleLockRow(id)}
                     onClearDraft={handleClearDraft}
                     onRemoveManualRow={handleRemoveManualRow}
+                    onLockAll={() => void handleLockAll()}
+                    isLocking={lockState.isLocking}
+                    lockError={lockState.error}
+                    dirtyCount={dirtyCount}
                 />
             )}
 
@@ -450,16 +486,12 @@ function buildRowState(
     currentByFixture: Map<string, GameweekPredictionPick>,
     historyByFixture: Map<string, GameweekPredictionPick[]>,
     draftByFixture: Map<string, RowDraft>,
-    rowMeta: Record<string, { isLocking: boolean; error: string | null }>,
 ): RowState {
-    const meta = rowMeta[fixture.id];
     return {
         fixture,
         currentPick: currentByFixture.get(fixture.id) ?? null,
         history: historyByFixture.get(fixture.id) ?? [],
         draft: draftByFixture.get(fixture.id) ?? null,
-        isLocking: meta?.isLocking ?? false,
-        error: meta?.error ?? null,
     };
 }
 
