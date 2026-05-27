@@ -388,7 +388,7 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
     // Memo against the raw query result rather than the `?? []` fallback, so
     // the empty-array identity doesn't change on every render and re-trigger
     // downstream Sets.
-    const existingSlipGameweeks = useMemo(
+    const existingSavedGameweeks = useMemo(
         () =>
             new Set(
                 (myPredictionsResult.data?.myGameweekPredictions ?? []).map(
@@ -397,7 +397,7 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
             ),
         [myPredictionsResult.data?.myGameweekPredictions],
     );
-    const existingSlips = myPredictionsResult.data?.myGameweekPredictions ?? [];
+    const savedGameweeks = myPredictionsResult.data?.myGameweekPredictions ?? [];
 
     // -----------------------------------------------------------------------
     // Render
@@ -414,7 +414,7 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
             {gameweek == null ? (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-glass-bg/20 p-10 text-center">
                     <p className="text-sm text-text-muted">
-                        Pick a gameweek to start predicting, or open an existing slip from the
+                        Pick a gameweek to start predicting, or open a saved gameweek from the
                         list on the right.
                     </p>
                     <Button
@@ -438,10 +438,6 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                     onDraftChange={handleDraftChange}
                     onClearDraft={handleClearDraft}
                     onRemoveManualRow={handleRemoveManualRow}
-                    onLockAll={() => void handleLockAll()}
-                    isLocking={lockState.isLocking}
-                    lockError={lockState.error}
-                    dirtyCount={dirtyCount}
                 />
             )}
 
@@ -458,12 +454,12 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 open={addGameweekDialogOpen}
                 onClose={() => setAddGameweekDialogOpen(false)}
                 candidates={selectableCandidates}
-                existingSlipGameweeks={existingSlipGameweeks}
+                existingSavedGameweeks={existingSavedGameweeks}
                 onSelect={(gw) => setGameweek(gw)}
             />
 
             <GameweekHistoryPanel
-                slips={existingSlips}
+                savedGameweeks={savedGameweeks}
                 activeGameweek={gameweek}
                 onSelectGameweek={(gw) => setGameweek(gw)}
                 onOpenAddGameweekDialog={() => setAddGameweekDialogOpen(true)}
@@ -471,7 +467,11 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({ seasonId, teamsMap })
                 isDeleting={deleteState.fetching}
                 deleteError={deleteError}
                 onConfirmDelete={handleConfirmDelete}
-                activeSlipId={slip?.id ?? null}
+                activeSavedGameweekId={slip?.id ?? null}
+                onLockAll={() => void handleLockAll()}
+                isLocking={lockState.isLocking}
+                lockError={lockState.error}
+                dirtyCount={dirtyCount}
             />
         </>
     );

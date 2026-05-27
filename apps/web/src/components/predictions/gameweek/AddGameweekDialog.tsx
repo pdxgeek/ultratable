@@ -23,11 +23,11 @@ interface AddGameweekDialogProps {
      */
     candidates: SelectableGameweek[];
     /**
-     * Gameweeks the user already has a live slip for — rendered with a
-     * subtle disabled style so the user doesn't accidentally start a second
-     * one (the server-side partial unique would reject it anyway).
+     * Gameweeks the user has already saved — rendered with a subtle dimmed
+     * style so they don't accidentally start a second one (the server-side
+     * partial unique would reject it anyway).
      */
-    existingSlipGameweeks: Set<number>;
+    existingSavedGameweeks: Set<number>;
     onSelect: (gameweek: number) => void;
 }
 
@@ -44,7 +44,7 @@ const AddGameweekDialog: React.FC<AddGameweekDialogProps> = ({
     open,
     onClose,
     candidates,
-    existingSlipGameweeks,
+    existingSavedGameweeks,
     onSelect,
 }) => {
     return (
@@ -54,7 +54,7 @@ const AddGameweekDialog: React.FC<AddGameweekDialogProps> = ({
                     <DialogTitle>Pick a gameweek to predict</DialogTitle>
                     <DialogDescription>
                         Gameweeks with at least one match still to be played, sorted by the
-                        soonest kickoff. Gameweeks you already have a slip for are dimmed.
+                        soonest kickoff. Gameweeks you&apos;ve already saved are dimmed.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -65,7 +65,7 @@ const AddGameweekDialog: React.FC<AddGameweekDialogProps> = ({
                 ) : (
                     <ul className="flex flex-col gap-1 max-h-80 overflow-y-auto">
                         {candidates.map((c) => {
-                            const existing = existingSlipGameweeks.has(c.gameweek);
+                            const existing = existingSavedGameweeks.has(c.gameweek);
                             return (
                                 <li key={c.gameweek}>
                                     <button
@@ -90,7 +90,7 @@ const AddGameweekDialog: React.FC<AddGameweekDialogProps> = ({
                                         </span>
                                         {existing && (
                                             <span className="text-[0.65rem] uppercase tracking-wider text-text-muted">
-                                                slip exists
+                                                saved
                                             </span>
                                         )}
                                     </button>

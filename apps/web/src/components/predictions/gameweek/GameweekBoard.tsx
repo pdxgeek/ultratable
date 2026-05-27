@@ -3,7 +3,7 @@ import type { GameweekFixture, GameweekPredictionPick } from './queries';
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Lock, Plus, StickyNote, X } from 'lucide-react';
+import { Plus, StickyNote, X } from 'lucide-react';
 
 import { Button } from '../../ui/button';
 import PickHistoryPopover from './PickHistoryPopover';
@@ -60,17 +60,6 @@ interface GameweekBoardProps {
      * anything.
      */
     onRemoveManualRow: (fixtureId: string) => void;
-    /**
-     * Single Lock-In action at the footer that commits every dirty row in
-     * one go. The board still owns no submission logic — the section
-     * orchestrates the actual mutations.
-     */
-    onLockAll: () => void;
-    isLocking: boolean;
-    /** Aggregate error from the last lock-in attempt. */
-    lockError: string | null;
-    /** Count of rows whose draft differs from their last-committed pick. */
-    dirtyCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,10 +298,6 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
     onDraftChange,
     onClearDraft,
     onRemoveManualRow,
-    onLockAll,
-    isLocking,
-    lockError,
-    dirtyCount,
 }) => {
     return (
         <section className="flex flex-col gap-4">
@@ -395,39 +380,6 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                     )}
                 </div>
             )}
-
-            {/*
-             * Single Lock-In affordance at the bottom — replaces the per-row
-             * Lock buttons. Disabled when there's nothing dirty to commit.
-             * The DB-side semantics are unchanged: the parent section walks
-             * the dirty rows and calls `submitGameweekPick` per row, so the
-             * append-only pick chain still gets a new entry only for rows
-             * whose values differ from the latest committed pick (server-
-             * side dedup handles identical re-submits as a no-op).
-             */}
-            <div className="flex flex-col gap-2 border-t border-border pt-4 mt-2">
-                <div className="flex items-center justify-between gap-3">
-                    <p className="text-[0.75rem] text-text-muted">
-                        {dirtyCount === 0
-                            ? 'No unsaved changes.'
-                            : `${dirtyCount} unsaved change${dirtyCount === 1 ? '' : 's'}.`}
-                    </p>
-                    <Button
-                        type="button"
-                        disabled={dirtyCount === 0 || isLocking}
-                        onClick={onLockAll}
-                        className="bg-accent-purple text-white hover:brightness-110 disabled:opacity-50"
-                    >
-                        <Lock className="w-4 h-4 mr-1" aria-hidden="true" />
-                        {isLocking ? 'Locking in…' : 'Lock In'}
-                    </Button>
-                </div>
-                {lockError && (
-                    <p className="text-sm text-destructive" role="alert">
-                        {lockError}
-                    </p>
-                )}
-            </div>
         </section>
     );
 };
