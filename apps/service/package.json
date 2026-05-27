@@ -7,7 +7,7 @@
         "dev": "nodemon --watch src --watch .env --ext ts --exec ts-node src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
-        "db:generate": "drizzle-kit generate",
+        "db:generate": "drizzle-kit generate && node scripts/normalize-migration-journal.mjs",
         "db:bootstrap": "ts-node src/scripts/bootstrap-migrations.ts",
         "db:migrate": "ts-node src/scripts/migrate.ts",
         "db:push": "drizzle-kit push",
