@@ -26,6 +26,7 @@ import type {
 import React, { useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
 import { useAbility } from '../../../auth/abilities';
@@ -72,10 +73,29 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
     const { viewer } = useViewer();
     const ability = useAbility<AppAbility>();
     // The editor is empty until the user explicitly picks a gameweek via the
-    // Add-gameweek dialog (or clicks an existing slip in the history panel).
+    // Add-gameweek dialog (or clicks a saved gameweek in the right column).
     // We intentionally do NOT default to the server's `activeGameweek` —
     // see #144 review thread for the rationale (MLS straggler gameweeks).
-    const [gameweek, setGameweek] = useState<number | null>(null);
+    //
+    // Gameweek lives in `?gw=N` rather than local state so reload preserves
+    // the open gameweek and a direct link to "my GW 14 picks" is shareable.
+    // Writes go through `replace: true` — every gameweek-switch is a state
+    // change within the section, not a navigation, so the back button
+    // shouldn't have to walk through every gameweek you clicked to exit.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const rawGw = searchParams.get('gw');
+    const parsedGw = rawGw != null ? Number.parseInt(rawGw, 10) : NaN;
+    const gameweek: number | null = Number.isFinite(parsedGw) ? parsedGw : null;
+    const setGameweek = (gw: number) => {
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('gw', String(gw));
+                return next;
+            },
+            { replace: true },
+        );
+    };
     const [addGameweekDialogOpen, setAddGameweekDialogOpen] = useState(false);
     const [addFixtureDialogOpen, setAddFixtureDialogOpen] = useState(false);
     // Aggregate Lock-In state. One state object for the whole slip rather
