@@ -144,12 +144,10 @@ const FixtureScoreRow: React.FC<RowProps> = ({
     const [noteOpen, setNoteOpen] = useState((eff.note ?? '').length > 0);
 
     const handleScoreInput = (which: 'home' | 'away') => (e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value;
-        // Empty → null. Otherwise clamp to a non-negative integer; ignore bad input.
-        const parsed = raw === '' ? null : Number.parseInt(raw, 10);
-        const next = parsed == null || (Number.isFinite(parsed) && parsed >= 0) ? parsed : eff[
-            which === 'home' ? 'homeGoals' : 'awayGoals'
-        ];
+        // Strip anything that isn't a digit so paste-from-clipboard, accidental
+        // letters, and minus signs all sanitize cleanly. Empty after strip → null.
+        const digits = e.target.value.replace(/\D/g, '');
+        const next = digits === '' ? null : Number.parseInt(digits, 10);
         onDraftChange(row.fixture.id, {
             ...eff,
             [which === 'home' ? 'homeGoals' : 'awayGoals']: next,
@@ -188,11 +186,20 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                 </div>
 
                 {/* Score inputs */}
+                {/*
+                 * `type="text"` (rather than `type="number"`) so the browser
+                 * doesn't render the up/down spinner buttons or apply its own
+                 * permissive number parsing (which would let "e", "+", "-"
+                 * through). `inputMode="numeric"` + `pattern="\d*"` still
+                 * surface the numeric keypad on mobile, and the onChange
+                 * handler strips any non-digits defensively.
+                 */}
                 <div className="flex items-center gap-1">
                     <input
-                        type="number"
-                        min={0}
+                        type="text"
                         inputMode="numeric"
+                        pattern="\d*"
+                        maxLength={2}
                         value={eff.homeGoals ?? ''}
                         onChange={handleScoreInput('home')}
                         disabled={!scoreable}
@@ -201,9 +208,10 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                     />
                     <span className="text-text-muted text-sm">–</span>
                     <input
-                        type="number"
-                        min={0}
+                        type="text"
                         inputMode="numeric"
+                        pattern="\d*"
+                        maxLength={2}
                         value={eff.awayGoals ?? ''}
                         onChange={handleScoreInput('away')}
                         disabled={!scoreable}
