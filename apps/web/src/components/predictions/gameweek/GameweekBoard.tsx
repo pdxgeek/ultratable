@@ -7,7 +7,7 @@ import { Plus, StickyNote, X } from 'lucide-react';
 
 import { Button } from '../../ui/button';
 import PickHistoryPopover from './PickHistoryPopover';
-import { isDirty } from './rowState';
+import { isDirty, isReadyToLockIn } from './rowState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +55,12 @@ interface GameweekBoardProps {
      * team not in this season's table) just renders without the badge.
      */
     currentPositions: Map<string, number>;
+    /**
+     * `position → zone` colorizer. Lets the row tint the position number with
+     * the same border-color treatment the Projected board uses (promo / playoff
+     * / relegation), so the two surfaces feel like the same standing.
+     */
+    zoneClassForPosition: (position: number) => string;
     /** "Add fixture" button → open the picker. Null hides the button (e.g. closed gameweek). */
     onOpenAddDialog: (() => void) | null;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
@@ -67,6 +73,12 @@ interface GameweekBoardProps {
      * anything.
      */
     onRemoveManualRow: (fixtureId: string) => void;
+    /**
+     * Fixture ids whose most recent Lock-In attempt failed. The row surfaces a
+     * red "failed to lock" marker; the parent collects per-row failures from
+     * `handleLockAll` and resets the set on the next attempt.
+     */
+    failedFixtureIds: ReadonlySet<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,18 +122,23 @@ interface RowProps {
     row: RowState;
     teamsMap: Map<string, Team>;
     currentPositions: Map<string, number>;
+    zoneClassForPosition: (position: number) => string;
     onDraftChange: (fixtureId: string, draft: RowDraft) => void;
     onClearDraft: (fixtureId: string) => void;
     onRemove?: () => void;
+    /** True when the row's last Lock-In attempt failed. */
+    failed: boolean;
 }
 
 const FixtureScoreRow: React.FC<RowProps> = ({
     row,
     teamsMap,
     currentPositions,
+    zoneClassForPosition,
     onDraftChange,
     onClearDraft,
     onRemove,
+    failed,
 }) => {
     const home = teamsMap.get(row.fixture.homeTeamId);
     const away = teamsMap.get(row.fixture.awayTeamId);
@@ -131,6 +148,7 @@ const FixtureScoreRow: React.FC<RowProps> = ({
     const scoreable = isScoreable(row.fixture.status);
     const statusLabel = STATUS_LABEL[row.fixture.status];
     const dirty = isDirty(row);
+    const ready = isReadyToLockIn(row);
     const [noteOpen, setNoteOpen] = useState((eff.note ?? '').length > 0);
 
     const handleScoreInput = (which: 'home' | 'away') => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,7 +187,7 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                      */}
                     {homePosition != null && (
                         <span
-                            className="text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0"
+                            className={`text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0 ${zoneClassForPosition(homePosition)} pl-1`}
                             title={`Currently ${homePosition} in the table`}
                         >
                             {homePosition}
@@ -238,7 +256,7 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                     </span>
                     {awayPosition != null && (
                         <span
-                            className="text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0"
+                            className={`text-[0.7rem] font-semibold text-text-muted tabular-nums shrink-0 ${zoneClassForPosition(awayPosition)} pl-1`}
                             title={`Currently ${awayPosition} in the table`}
                         >
                             {awayPosition}
@@ -266,11 +284,25 @@ const FixtureScoreRow: React.FC<RowProps> = ({
                         <button
                             type="button"
                             onClick={handleClearDraft}
-                            className="underline hover:text-text-primary"
-                            title="Discard unsaved changes"
+                            className={`underline hover:text-text-primary ${
+                                ready ? 'text-accent-green' : ''
+                            }`}
+                            title={
+                                ready
+                                    ? 'Ready to lock in — click to discard'
+                                    : 'Unsaved (fill in both scores to lock in) — click to discard'
+                            }
                         >
-                            unsaved · discard
+                            {ready ? 'ready · discard' : 'unsaved · discard'}
                         </button>
+                    )}
+                    {failed && (
+                        <span
+                            className="text-accent-red font-semibold"
+                            title="The last Lock In attempt failed for this fixture"
+                        >
+                            failed to lock
+                        </span>
                     )}
                 </span>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -327,10 +359,12 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
     manualRows,
     teamsMap,
     currentPositions,
+    zoneClassForPosition,
     onOpenAddDialog,
     onDraftChange,
     onClearDraft,
     onRemoveManualRow,
+    failedFixtureIds,
 }) => {
     return (
         <section className="flex flex-col gap-4">
@@ -353,8 +387,10 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                             row={row}
                             teamsMap={teamsMap}
                             currentPositions={currentPositions}
+                            zoneClassForPosition={zoneClassForPosition}
                             onDraftChange={onDraftChange}
                             onClearDraft={onClearDraft}
+                            failed={failedFixtureIds.has(row.fixture.id)}
                         />
                     ))}
                 </ul>
@@ -388,6 +424,7 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                                         row={row}
                                         teamsMap={teamsMap}
                                         currentPositions={currentPositions}
+                                        zoneClassForPosition={zoneClassForPosition}
                                         onDraftChange={onDraftChange}
                                         onClearDraft={onClearDraft}
                                         onRemove={
@@ -396,6 +433,7 @@ const GameweekBoard: React.FC<GameweekBoardProps> = ({
                                                       onRemoveManualRow(row.fixture.id)
                                                 : undefined
                                         }
+                                        failed={failedFixtureIds.has(row.fixture.id)}
                                     />
                                 );
                             })}

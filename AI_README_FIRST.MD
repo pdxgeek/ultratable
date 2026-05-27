@@ -37,6 +37,7 @@
     >     2. Migrations table empty AND `public.leagues` is missing → fresh DB; skip stamping and exit 0 so `setup.mjs`'s `db:bootstrap && db:migrate` chain falls through to migrate, which creates the schema.
     >     3. Migrations table empty AND `public.leagues` exists → push-style DB; stamp from the journal.
     > - **`public.leagues` is a load-bearing canary** in [`apps/service/src/scripts/bootstrap-migrations.ts`](apps/service/src/scripts/bootstrap-migrations.ts) because it's been in migration `0000` since day one. If you ever rename or drop `leagues`, swap the canary for another table that's guaranteed to exist after migration `0000`. Skipping this step silently breaks the fresh-DB path for new contributors.
+    > - **Migration journal `when` values must be strictly increasing.** Drizzle's pg migrator compares each entry's `when` against the latest `__drizzle_migrations.created_at` in the DB and silently skips anything that regresses. Entries `0017`–`0022` carry hand-mocked future timestamps (a no-op until real `Date.now()` catches up around 2026-06-01), so any migration generated before then would otherwise be silently lost. `db:generate` runs [`scripts/normalize-migration-journal.mjs`](apps/service/scripts/normalize-migration-journal.mjs) after `drizzle-kit generate` to bump the newest entry's `when` past the prior max when needed. Do **not** hand-edit `_journal.json` `when` values or seed scripts that backdate them — that re-arms the trap.
     >
     > **ID GENERATION RULES**
     >

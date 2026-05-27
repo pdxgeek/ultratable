@@ -22,14 +22,16 @@ import type {
     GameweekPredictionPick,
     SelectableGameweek,
 } from './queries';
+import type { Zone, ZoneArrays } from '../../../lib/zones';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { subject } from '@casl/ability';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 
 import { useAbility } from '../../../auth/abilities';
+import { zoneBorderClass, zoneForPosition } from '../../../lib/zones';
 import {
     clearGameweekDraft,
     gameweekDraftKey,
@@ -63,12 +65,19 @@ interface GameweekSectionProps {
      * not in this season's standings).
      */
     currentPositions: Map<string, number>;
+    /**
+     * League/season promotion/playoff/relegation rows, forwarded so each
+     * Gameweek row can tint the current position number with the same
+     * border-color treatment the Projected board uses.
+     */
+    zones: ZoneArrays;
 }
 
 const GameweekSection: React.FC<GameweekSectionProps> = ({
     seasonId,
     teamsMap,
     currentPositions,
+    zones,
 }) => {
     const { viewer } = useViewer();
     const ability = useAbility<AppAbility>();
@@ -100,10 +109,14 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
     const [addFixtureDialogOpen, setAddFixtureDialogOpen] = useState(false);
     // Aggregate Lock-In state. One state object for the whole slip rather
     // than per-row meta — the footer button drives one orchestrated commit
-    // pass, so a single in-flight flag + summary error covers it.
-    const [lockState, setLockState] = useState<{ isLocking: boolean; error: string | null }>(
-        { isLocking: false, error: null },
-    );
+    // pass, so a single in-flight flag + summary error covers it. The
+    // `failedFixtureIds` set is reset on every new attempt so per-row "failed
+    // to lock" markers don't linger.
+    const [lockState, setLockState] = useState<{
+        isLocking: boolean;
+        error: string | null;
+        failedFixtureIds: ReadonlySet<string>;
+    }>({ isLocking: false, error: null, failedFixtureIds: new Set() });
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
     // -----------------------------------------------------------------------
@@ -325,8 +338,9 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
         const readyRows = [...defaultRows, ...manualRows].filter(isReadyToLockIn);
         if (readyRows.length === 0) return;
 
-        setLockState({ isLocking: true, error: null });
-        let failureCount = 0;
+        setLockState({ isLocking: true, error: null, failedFixtureIds: new Set() });
+        const failedIds = new Set<string>();
+        const failedLabels: string[] = [];
         let firstError: string | null = null;
 
         for (const row of readyRows) {
@@ -343,7 +357,8 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
                 },
             });
             if (result.error) {
-                failureCount += 1;
+                failedIds.add(row.fixture.id);
+                failedLabels.push(fixtureLabel(row.fixture, teamsMap));
                 if (firstError == null) {
                     firstError =
                         result.error.graphQLErrors[0]?.message ?? result.error.message;
@@ -356,20 +371,25 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
         refetchSlip({ requestPolicy: 'network-only' });
         refetchMyPredictions({ requestPolicy: 'network-only' });
 
+        const failureCount = failedIds.size;
         if (failureCount > 0) {
+            // List up to three failed fixtures by name so the user can locate
+            // them; rows are also marked inline via `failedFixtureIds`. The
+            // GraphQL error message is still surfaced because typed codes
+            // (e.g. GAMEWEEK_CLOSED) are often more actionable than the names.
+            const shown = failedLabels.slice(0, 3).join('; ');
+            const trailing = failedLabels.length > 3 ? ` (+${failedLabels.length - 3} more)` : '';
+            const fixtureList = `${shown}${trailing}`;
             setLockState({
                 isLocking: false,
-                // Surface the first error message verbatim — usually it's a
-                // typed code like GAMEWEEK_CLOSED that's specific enough to
-                // act on. Successful rows already had their drafts cleared,
-                // so retrying Lock In only re-submits the still-failing ones.
                 error:
                     failureCount === readyRows.length
-                        ? `Lock in failed: ${firstError}`
-                        : `Locked in ${readyRows.length - failureCount} of ${readyRows.length} picks. First failure: ${firstError}`,
+                        ? `Lock in failed for ${fixtureList}: ${firstError}`
+                        : `Locked in ${readyRows.length - failureCount} of ${readyRows.length} picks. Failed: ${fixtureList} — ${firstError}`,
+                failedFixtureIds: failedIds,
             });
         } else {
-            setLockState({ isLocking: false, error: null });
+            setLockState({ isLocking: false, error: null, failedFixtureIds: new Set() });
         }
     };
 
@@ -410,6 +430,14 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
         slip && ability.can('delete', subject('GameweekPrediction', { userId: slip.userId }))
     );
 
+    const zoneClassForPosition = useCallback(
+        (position: number): string => {
+            const zone: Zone = zoneForPosition(position, zones);
+            return zoneBorderClass(zone);
+        },
+        [zones],
+    );
+
     const selectableCandidates = selectableByKickoffResult.data?.selectableGameweeksByKickoff ?? [];
     // Derive the plain-number list from the kickoff-sorted query so we don't
     // need a second round-trip just for the gating check below.
@@ -445,8 +473,11 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
             {gameweek == null ? (
                 <div className="flex items-center justify-center rounded-lg border border-dashed border-border bg-glass-bg/20 p-10 text-center">
                     <p className="text-sm text-text-muted">
-                        Pick a gameweek to start predicting, or open a saved gameweek from the
-                        list on the right.
+                        {selectableCandidates.length === 0 && savedGameweeks.length === 0
+                            ? "Season's done — nothing left to predict here."
+                            : selectableCandidates.length === 0
+                              ? "Season's done — open a saved gameweek from the list on the right."
+                              : 'Pick a gameweek to start predicting, or open a saved gameweek from the list on the right.'}
                     </p>
                 </div>
             ) : (
@@ -456,12 +487,14 @@ const GameweekSection: React.FC<GameweekSectionProps> = ({
                     manualRows={manualRows}
                     teamsMap={teamsMap}
                     currentPositions={currentPositions}
+                    zoneClassForPosition={zoneClassForPosition}
                     onOpenAddDialog={
                         isCurrentSelectable ? () => setAddFixtureDialogOpen(true) : null
                     }
                     onDraftChange={handleDraftChange}
                     onClearDraft={handleClearDraft}
                     onRemoveManualRow={handleRemoveManualRow}
+                    failedFixtureIds={lockState.failedFixtureIds}
                 />
             )}
 
@@ -517,6 +550,12 @@ function buildRowState(
         history: historyByFixture.get(fixture.id) ?? [],
         draft: draftByFixture.get(fixture.id) ?? null,
     };
+}
+
+function fixtureLabel(fixture: GameweekFixture, teamsMap: Map<string, Team>): string {
+    const home = teamsMap.get(fixture.homeTeamId)?.name ?? 'Home';
+    const away = teamsMap.get(fixture.awayTeamId)?.name ?? 'Away';
+    return `${home} vs ${away}`;
 }
 
 export default GameweekSection;

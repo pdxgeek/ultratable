@@ -334,6 +334,7 @@ const PredictionsPage: React.FC = () => {
                         seasonId={seasonId}
                         teamsMap={teamsMap}
                         currentPositions={currentPositions}
+                        zones={zones}
                     />
                 )}
             </div>
