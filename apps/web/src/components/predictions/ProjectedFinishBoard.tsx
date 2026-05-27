@@ -41,34 +41,53 @@ interface TeamBarProps {
     name: string;
     logo?: string;
     compact?: boolean;
+    /**
+     * When true, drop the bordered box and just render `logo + name` inline.
+     * Used by the in-slot rendering — the Slot itself shifts to a lighter
+     * background when occupied, so a nested box around the team name would
+     * just be redundant visual nesting. The boxed form stays for the pool
+     * (each pool team needs its own visible draggable shape) and the drag
+     * overlay (floating, needs a delimited card).
+     */
+    inline?: boolean;
 }
 
-const TeamBar: React.FC<TeamBarProps> = ({ name, logo, compact }) => (
-    <div
-        className={`flex items-center gap-2 rounded-md border border-border bg-bg-secondary/70 px-2 py-1 text-[0.8rem] font-medium text-text-primary shadow-sm ${
-            compact ? '' : 'min-w-[140px]'
-        }`}
-    >
-        {logo && (
-            <img
-                src={logo}
-                alt=""
-                aria-hidden="true"
-                className="w-4 h-4 object-contain drop-shadow"
-            />
-        )}
-        <span className="whitespace-nowrap">{name}</span>
-    </div>
-);
+const TeamBar: React.FC<TeamBarProps> = ({ name, logo, compact, inline }) => {
+    const baseClass = 'flex items-center gap-2 text-[0.8rem] font-medium text-text-primary';
+    const boxedClass = `rounded-md border border-border bg-bg-secondary/70 px-2 py-1 shadow-sm ${
+        compact ? '' : 'min-w-[140px]'
+    }`;
+    return (
+        <div className={`${baseClass} ${inline ? '' : boxedClass}`}>
+            {logo && (
+                <img
+                    src={logo}
+                    alt=""
+                    aria-hidden="true"
+                    className="w-4 h-4 object-contain drop-shadow"
+                />
+            )}
+            <span className="whitespace-nowrap">{name}</span>
+        </div>
+    );
+};
 
 interface DraggableTeamProps {
     teamId: string;
     name: string;
     logo?: string;
     readOnly: boolean;
+    /** Forwarded to `TeamBar` — see its prop doc for the rationale. */
+    inline?: boolean;
 }
 
-const DraggableTeam: React.FC<DraggableTeamProps> = ({ teamId, name, logo, readOnly }) => {
+const DraggableTeam: React.FC<DraggableTeamProps> = ({
+    teamId,
+    name,
+    logo,
+    readOnly,
+    inline,
+}) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: DRAG_TYPE_TEAM + teamId,
         disabled: readOnly,
@@ -79,7 +98,7 @@ const DraggableTeam: React.FC<DraggableTeamProps> = ({ teamId, name, logo, readO
             {...(readOnly ? {} : { ...attributes, ...listeners })}
             className={`${readOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${isDragging ? 'opacity-30' : ''}`}
         >
-            <TeamBar teamId={teamId} name={name} logo={logo} />
+            <TeamBar teamId={teamId} name={name} logo={logo} inline={inline} />
         </div>
     );
 };
@@ -131,11 +150,18 @@ const Slot: React.FC<SlotProps> = ({ position, teamId, teamsMap, borderClass, de
     });
     const team = teamId ? teamsMap.get(teamId) : null;
     const ringClass = isOver ? 'ring-2 ring-accent-blue' : '';
+    // Slot background communicates occupancy directly — no nested "team box"
+    // inside, so long team names get the full row width and there's no
+    // double-border visual nesting. Empty stays on the dark glass surface;
+    // occupied lifts to the lighter `bg-secondary` shade (matching what the
+    // inner TeamBar used to look like). Dragging the team out reverts the
+    // background as part of the standard re-render.
+    const occupiedBgClass = teamId && team ? 'bg-bg-secondary/70' : 'bg-glass-bg/60';
     return (
         <div
             ref={setNodeRef}
             data-testid={`slot-${position}`}
-            className={`grid grid-cols-[40px_1fr_60px] items-center gap-2 rounded-md border border-border bg-glass-bg/60 px-2 py-1.5 min-h-[44px] ${ringClass}`}
+            className={`grid grid-cols-[28px_1fr_40px] items-center gap-2 rounded-md border border-border ${occupiedBgClass} px-2 py-1.5 min-h-[44px] ${ringClass}`}
         >
             <div
                 className={`text-center font-semibold text-text-primary ${borderClass} pl-1`}
@@ -149,6 +175,7 @@ const Slot: React.FC<SlotProps> = ({ position, teamId, teamsMap, borderClass, de
                         name={team.name}
                         logo={team.logo}
                         readOnly={readOnly}
+                        inline
                     />
                 ) : (
                     <span className="text-[0.75rem] text-text-muted italic">
@@ -273,7 +300,24 @@ const ProjectedFinishBoard: React.FC<ProjectedFinishBoardProps> = ({
             {!readOnly && (
                 <Pool teamIds={poolTeamIds} teamsMap={teamsMap} readOnly={readOnly} />
             )}
-            <div className="flex flex-col gap-1">{renderSlots()}</div>
+            {/*
+             * Two-column layout for the position slots at lg+ (1024px), one
+             * column below. CSS columns flow top-to-bottom then left-to-right,
+             * so positions 1-10 fill the left column and 11-20 the right,
+             * which is the natural reading order for ranked lists.
+             *
+             * `gap-x-3` is the inter-column gutter (CSS `gap` doesn't apply
+             * inside multi-column the way it does in grid/flex). Per-slot
+             * vertical spacing comes from `[&>*]:mb-1`. `break-inside-avoid`
+             * keeps a slot from splitting across columns at the boundary.
+             *
+             * dnd-kit reads pointer position rather than DOM order, so the
+             * column layout is invisible to the drag system — drops still
+             * land on whichever slot is under the cursor.
+             */}
+            <div className="columns-1 lg:columns-2 gap-x-3 [&>*]:mb-1 [&>*]:break-inside-avoid">
+                {renderSlots()}
+            </div>
         </div>
     );
 

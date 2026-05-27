@@ -81,6 +81,7 @@ export function buildMockFixtures(overrides: Partial<FixturesRepository> = {}): 
         getFixturesByGameweek: vi.fn().mockResolvedValue([]),
         getRecommendedRescheduledFixtures: vi.fn().mockResolvedValue([]),
         listSelectableGameweeks: vi.fn().mockResolvedValue([]),
+        listSelectableGameweeksByNextKickoff: vi.fn().mockResolvedValue([]),
         getActiveGameweek: vi.fn().mockResolvedValue(null),
         syncFixtures: vi
             .fn()

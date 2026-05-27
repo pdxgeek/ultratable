@@ -86,8 +86,19 @@ const stdoutStream = IS_PRODUCTION
       });
 
 // ── Central Logger ────────────────────────────────────────────
+// `serializers.err = pino.stdSerializers.err` is what unlocks the `.cause`
+// chain on logged errors. The default object-stringifier flattens an Error
+// to `{ type, message, stack }` and stops there — which means anything
+// wrapped via `new Error(msg, { cause: original })` loses the inner detail.
+// postgres-js / Drizzle do exactly that with database errors, so without
+// the std serializer every query failure logs as a generic "Failed query"
+// with no underlying Postgres code or message. The std serializer in
+// Pino v10 walks `.cause` recursively, so the full chain ends up in the log.
 export const globalLogger = pino(
-    { level: LOG_LEVEL },
+    {
+        level: LOG_LEVEL,
+        serializers: { err: pino.stdSerializers.err },
+    },
     pino.multistream([
         { stream: stdoutStream }, // Human-readable (dev) or JSON (prod)
         { stream: drizzleStream }, // Postgres / Admin UI (info+ only)

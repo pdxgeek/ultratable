@@ -842,6 +842,35 @@ export class PostgresFixturesRepository implements FixturesRepository {
         return selectable[0] ?? null;
     }
 
+    async listSelectableGameweeksByNextKickoff(
+        seasonId: string,
+    ): Promise<Array<{ gameweek: number; nextKickoff: Date }>> {
+        if (!db) return [];
+        // Group by gameweek; take the earliest `scheduledAt` among the
+        // gameweek's `status='scheduled'` fixtures as the sort key. Drizzle's
+        // sql template handles the aliasing — Postgres returns columns lower-
+        // cased without explicit quoting, hence the `AS "nextKickoff"`.
+        const rows = await db.execute<{ gameweek: number; nextKickoff: Date }>(
+            sql`
+                SELECT
+                    gameweek AS "gameweek",
+                    MIN(scheduled_at) AS "nextKickoff"
+                FROM ${schema.fixtures}
+                WHERE season_id = ${seasonId}
+                  AND status = 'scheduled'
+                  AND gameweek IS NOT NULL
+                GROUP BY gameweek
+                ORDER BY MIN(scheduled_at) ASC
+            `,
+        );
+        // `execute` returns string timestamps from node-postgres by default;
+        // coerce so callers + DataLoader-batched paths see a `Date`.
+        return rows.map((r) => ({
+            gameweek: r.gameweek,
+            nextKickoff: new Date(r.nextKickoff),
+        }));
+    }
+
     async getMatchEvents(
         fixtureId: number,
     ): Promise<import('../../integrations/types').IngestedEvent[]> {
