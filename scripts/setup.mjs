@@ -767,6 +767,8 @@ async function main() {
             `  GraphQL playground: ${c.cyan(`http://localhost:${servicePort}/graphql`)}\n` +
             `  Admin UI:           ${c.cyan(`http://localhost:${adminPort}`)}\n` +
             `  Web UI:             ${c.cyan(`http://localhost:${webPort}`)}\n\n` +
+            `Next step — get an API-Football key and sync your first league:\n` +
+            `  ${c.cyan('docs/first-league.md')}\n\n` +
             `Re-run ${c.bold('npm run setup')} any time to change credentials.\n`,
     );
 

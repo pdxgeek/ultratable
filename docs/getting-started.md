@@ -1,6 +1,6 @@
 # Getting Started — Local Development
 
-This guide walks a fresh clone to a running three-service stack. For the production rollout, see [DEPLOYMENT.md](DEPLOYMENT.md). For architecture deep dives, see [auth-architecture.md](auth-architecture.md) and [frontend-patterns.md](frontend-patterns.md).
+This guide walks a fresh clone to a running three-service stack. Once it's up, **[first-league.md](first-league.md)** takes you from "stack is running" to a synced league with teams, fixtures, and a standings table on the web. For the production rollout, see [DEPLOYMENT.md](DEPLOYMENT.md). For architecture deep dives, see [auth-architecture.md](auth-architecture.md) and [frontend-patterns.md](frontend-patterns.md).
 
 ## Project layout
 

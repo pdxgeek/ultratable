@@ -187,6 +187,7 @@ What this enables, concretely: the [recent commit history](../../commits/master)
 ## Run it locally / deploy it
 
 - **Local development** — see [docs/getting-started.md](docs/getting-started.md). One command (`npm run setup`) provisions everything; `npm run dev` starts all three services.
+- **First league sync (after setup)** — see [docs/first-league.md](docs/first-league.md). From a fresh stack to a synced league with teams, fixtures, and a standings table on the web.
 - **Deployment to Fly.io + Vercel** — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - **Auth architecture** — see [docs/auth-architecture.md](docs/auth-architecture.md).
 - **Frontend patterns** (shadcn theme contract, vendoring rule) — see [docs/frontend-patterns.md](docs/frontend-patterns.md).
